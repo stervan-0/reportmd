@@ -182,16 +182,32 @@ reportmd build report.rmd -c setting.json
 * 4スペース以上のインデントについては、標準Markdownとの互換性を確認したうえで扱いを決める。
 * インデント量と変換対象の判定方法は、テストを通して確定する。
 
-### 6.6 強制改行
+### 6.6 図表番号
+#### 図
 
-独自構文は追加せず、Markdown標準の強制改行を利用する。
+記法案：
 
 ```markdown
-1行目\
-2行目
+    ![f1：システム構成図](images/system.png)
 ```
+* f：figure（図）
+* 1：手動で指定する図番号
+* ： 以降：タイトル・キャプションの文字列
+* 画像の代替テキストにも同じ文字列を使う
+* 段落を分ける空行とは区別する。
 
-段落を分ける空行とは区別する。
+#### 表
+```mardown
+![t1：実験結果]
+| 条件 | 結果 |
+|---|---|
+| A | 10 |
+| B | 20 |
+```
+* t：table（表）
+* 1：手動で指定する表番号
+* ： 以降：タイトル・キャプションの文字列
+* 次の Markdown 表と関連付ける
 
 ## 7. 設定ファイル
 
@@ -225,6 +241,10 @@ reportmd build report.rmd -c setting.json
   "font": {
     "main": "IPAexMincho",
     "mono": "Noto Sans Mono CJK JP"
+  }
+  "caption": {
+    "figure_position": "bottom",
+    "table_position": "top"
   }
 }
 ```
