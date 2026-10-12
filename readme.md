@@ -188,26 +188,26 @@ reportmd build report.rmd -c setting.json
 記法案：
 
 ```markdown
-    ![f1：システム構成図](images/system.png)
+![f：システム構成図](images/system.png)
 ```
 * f：figure（図）
-* 1：手動で指定する図番号
 * ： 以降：タイトル・キャプションの文字列
 * 画像の代替テキストにも同じ文字列を使う
 * 段落を分ける空行とは区別する。
 
 #### 表
 ```mardown
-![t1：実験結果]
+![t：実験結果]
 | 条件 | 結果 |
 |---|---|
 | A | 10 |
 | B | 20 |
 ```
 * t：table（表）
-* 1：手動で指定する表番号
 * ： 以降：タイトル・キャプションの文字列
 * 次の Markdown 表と関連付ける
+
+キャプションは、空行の有無にかかわらず「直後の対象要素1つ」にだけ関連付ける、といった単純なルールから始める。
 
 ## 7. 設定ファイル
 
@@ -241,7 +241,7 @@ reportmd build report.rmd -c setting.json
   "font": {
     "main": "IPAexMincho",
     "mono": "Noto Sans Mono CJK JP"
-  }
+  },
   "caption": {
     "figure_position": "bottom",
     "table_position": "top"
@@ -321,7 +321,6 @@ PDF生成時に一時ファイルを使用する場合は、正常終了・異�
 
 * 独自構文の最終的な記号と境界規則
 * 2スペース単位のインデントとMarkdownのコードブロックの厳密な区別
-* 図表キャプションの自動採番
 * 参考文献の管理方式
 * ページ番号の位置・形式
 * 表のページ分割や長い表の扱い
