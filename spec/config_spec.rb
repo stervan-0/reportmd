@@ -102,10 +102,15 @@ RSpec.describe Reportmd::Config do
       expect(config.values.dig('text')).not_to have_key('colour')
     end
 
-    it '未対応の設定（heading など）をユーザーが書いた場合は警告する' do
-      path = write_json(@dir, 's.json', { heading: { bold: false } })
+    it '未対応の設定（caption など）をユーザーが書いた場合は警告する' do
+      path = write_json(@dir, 's.json', { caption: { figure_label: 'Fig.' } })
       config = described_class.load(explicit_path: path)
-      expect(config.warnings.join).to include('heading')
+      expect(config.warnings.join).to include('caption')
+    end
+
+    it '対応済みの設定（heading）を書いても、警告しない' do
+      path = write_json(@dir, 's.json', { heading: { bold: false } })
+      expect(described_class.load(explicit_path: path).warnings).to eq([])
     end
 
     it '未対応の設定を書いていなければ、警告しない' do

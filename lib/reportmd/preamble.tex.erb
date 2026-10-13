@@ -14,3 +14,13 @@
 <% unless page_numbering -%>
 \pagestyle{empty}
 <% end -%>
+% --- 見出し（レベル1〜3：section, subsection, subsubsection） ---
+\newfontfamily\reportmdheadlatin{<%= heading_font %>}<%= heading_bold ? '[AutoFakeBold=2.5]' : '' %>
+\newCJKfontfamily\reportmdheadcjk{<%= heading_font %>}<%= heading_bold ? '[AutoFakeBold=2.5]' : '' %>
+\makeatletter
+\newcommand{\reportmdheading}[2]{\reportmdheadlatin\reportmdheadcjk<%= heading_bold ? '\bfseries' : '' %>\fontsize{#1}{#2}\selectfont}
+\renewcommand{\@seccntformat}[1]{\csname the#1\endcsname\hspace{1em}}
+<% %w[section subsection subsubsection].each_with_index do |name, i| -%>
+\renewcommand{\<%= name %>}{\@startsection{<%= name %>}{<%= i + 1 %>}{<%= heading_indents[i] %>pt}{<%= heading_before %>pt}{<%= heading_after %>pt}{\reportmdheading{<%= heading_sizes[i] %>pt}{<%= heading_leadings[i] %>pt}}}
+<% end -%>
+\makeatother

@@ -18,7 +18,7 @@ module Reportmd
 
     # まだ処理に反映されていない設定。ユーザーが書いた場合は警告する。
     # （実装が完了した項目から、この一覧を減らしていく）
-    NOT_YET_SUPPORTED = %w[heading caption].freeze
+    NOT_YET_SUPPORTED = %w[caption].freeze
 
     PAPERS = %w[a4 a5 b5 letter].freeze
     POSITIONS = %w[top bottom].freeze

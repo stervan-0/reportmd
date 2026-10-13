@@ -74,7 +74,7 @@ module Reportmd
       families = installed_font_families
       return unless families
 
-      [%w[font main], %w[font mono]].each do |path|
+      [%w[font main], %w[font mono], %w[heading font]].each do |path|
         name = @config.dig(*path)
         next if families.include?(name.downcase)
 
@@ -134,6 +134,7 @@ module Reportmd
       font_size = @config.dig('text', 'font_size').to_f
       margin = @config.dig('page', 'margin')
       {
+        **heading_variables(font_size),
         paper_option: PAPER_OPTIONS.fetch(@config.dig('document', 'paper')),
         margin_top: margin['top'], margin_bottom: margin['bottom'],
         margin_left: margin['left'], margin_right: margin['right'],
@@ -145,6 +146,22 @@ module Reportmd
         # 1字 = 本文の文字サイズ
         parindent_pt: number(@config.dig('text', 'paragraph_indent') * font_size),
         page_numbering: @config.dig('page', 'numbering')
+      }
+    end
+
+    # 見出しの書式。1字 = 本文の文字サイズ。
+    # 見出しの前後の空きは、本文1行分（行送り）を基準にする。
+    def heading_variables(font_size)
+      leading = font_size * BASELINE_RATIO * @config.dig('text', 'line_spacing')
+      sizes = @config.dig('heading', 'sizes').map(&:to_f)
+      {
+        heading_font: @config.dig('heading', 'font'),
+        heading_bold: @config.dig('heading', 'bold'),
+        heading_sizes: sizes.map { |size| number(size) },
+        heading_leadings: sizes.map { |size| number(size * BASELINE_RATIO) },
+        heading_indents: @config.dig('heading', 'indents').map { |n| number(n * font_size) },
+        heading_before: number(leading),
+        heading_after: number(leading * 0.5)
       }
     end
 
@@ -162,6 +179,7 @@ module Reportmd
         "--metadata-file=#{paths[:meta]}",
         "--include-in-header=#{paths[:preamble]}",
         '-V', 'indent=true', # Pandoc 標準の段落間隔・字下げなしの設定を無効にする
+        '--number-sections',  # 見出しの番号（標準の見出しは filter.lua で番号なしにする）
         '--pdf-engine=xelatex',
         '-o', @output_path
       ]

@@ -280,4 +280,114 @@ RSpec.describe Reportmd::Preprocessor do
       end
     end
   end
+
+  describe '番号付き見出し（#1〜#3）' do
+    NUM = '{.reportmd-num}'
+
+    it '#1〜#3 を、クラスつきの Pandoc の見出しに変換する' do
+      expect(convert("#1 はじめに\n\n#2 背景\n\n#3 詳細\n"))
+        .to eq("# はじめに #{NUM}\n\n## 背景 #{NUM}\n\n### 詳細 #{NUM}\n")
+    end
+
+    it '前後に空行がなくても、空行を補って見出しにする' do
+      expect(convert("本文\n#1 はじめに\n本文2\n"))
+        .to eq("本文\n\n# はじめに #{NUM}\n\n本文2\n")
+    end
+
+    it 'ファイルの先頭・末尾の見出しも変換する（末尾に余分な空行を残さない）' do
+      expect(convert("#1 先頭\n本文\n#1 末尾")).to eq("# 先頭 #{NUM}\n\n本文\n\n# 末尾 #{NUM}\n")
+    end
+
+    it 'スペースが複数あっても、見出し文字列の前を詰める' do
+      expect(convert("#1   はじめに\n")).to eq("# はじめに #{NUM}\n")
+    end
+
+    it '見出し文字列の末尾の空白は取り除く' do
+      expect(convert("#1 はじめに  \n")).to eq("# はじめに #{NUM}\n")
+    end
+
+    it '見出し文字列の中のインライン書式や数式は、そのまま渡す' do
+      expect(convert("#2 **太字**と$x^2$\n")).to eq("## **太字**と$x^2$ #{NUM}\n")
+    end
+
+    it '標準の # 見出しは、そのまま通す（番号なしの見出し）' do
+      source = "# 番号なし\n\n## これも番号なし\n\n### これも\n"
+      expect(convert(source)).to eq(source)
+    end
+
+    it '#1 の行に連続する見出しは、それぞれ見出しになる' do
+      expect(convert("#1 a\n#2 b\n"))
+        .to eq("# a #{NUM}\n\n## b #{NUM}\n")
+    end
+
+    describe '見出しにならない行' do
+      it '#4 以降（と #0）は、警告して通常の段落として通す' do
+        result = run("#4 未対応\n\n#0 x\n\n#9 y\n")
+        expect(result.text).to eq("#4 未対応\n\n#0 x\n\n#9 y\n")
+        expect(result.warnings.map(&:line)).to eq([1, 3, 5])
+        expect(result.warnings.first.message).to include('#4')
+      end
+
+      it '見出し文字列が空なら、警告して通常の段落として通す' do
+        result = run("#1\n\n#2   \n")
+        expect(result.text).to eq("#1\n\n#2   \n")
+        expect(result.warnings.map(&:line)).to eq([1, 3])
+        expect(result.warnings.first.message).to include('見出しの文字列がありません')
+      end
+
+      it '#12 のように数字が2桁以上の行や、#タグ のような行は、警告せず通す' do
+        source = "#12 foo\n\n#タグ\n\n#1つ目\n"
+        result = run(source)
+        expect(result.text).to eq(source)
+        expect(result.warnings).to eq([])
+      end
+
+      it '行頭以外（字下げ・リスト・引用の内側）の #1 は変換しない' do
+        source = " #1 字下げ\n\n- #1 リスト\n\n> #1 引用\n"
+        result = run(source)
+        expect(result.text).to eq(source)
+        expect(result.warnings).to eq([])
+      end
+
+      it 'コードブロック・数式ブロック・フロントマター内の #1 は変換しない' do
+        source = "```\n#1 コード\n```\n\n$$\n#1 数式\n$$\n"
+        expect(convert(source)).to eq(source)
+        front = "---\ntitle: a\n#1 b\n---\n"
+        expect(convert(front)).to eq(front)
+      end
+    end
+
+    describe 'レベルの飛び' do
+      it '#1 の次に #3 が来たら警告するが、見出しにはする' do
+        result = run("#1 a\n\n#3 b\n")
+        expect(result.text).to eq("# a #{NUM}\n\n### b #{NUM}\n")
+        expect(result.warnings.map(&:line)).to eq([3])
+        expect(result.warnings.first.message).to include('#1 の次に #3')
+      end
+
+      it '最初の見出しが #1 でなければ警告する' do
+        result = run("#2 a\n")
+        expect(result.warnings.map(&:line)).to eq([1])
+        expect(result.warnings.first.message).to include('見出しがない状態')
+      end
+
+      it '上のレベルに戻るのは、飛びではない' do
+        expect(run("#1 a\n#2 b\n#3 c\n#1 d\n#2 e\n").warnings).to eq([])
+      end
+
+      it '同じレベルが続くのも、飛びではない' do
+        expect(run("#1 a\n#1 b\n#2 c\n#2 d\n").warnings).to eq([])
+      end
+    end
+
+    it '右揃えのブロックの直後の見出しも、正しく出力する' do
+      expect(convert("--> 右\n#1 はじめに\n"))
+        .to eq("::: {.reportmd-right}\n右\n:::\n\n# はじめに #{NUM}\n")
+    end
+
+    it '見出しの後の改ページも、正しく出力する' do
+      expect(convert("#1 はじめに\n^\n本文\n"))
+        .to eq("# はじめに #{NUM}\n\n::: {.reportmd-pagebreak}\n:::\n\n本文\n")
+    end
+  end
 end

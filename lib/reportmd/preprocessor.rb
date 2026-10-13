@@ -21,6 +21,7 @@ module Reportmd
   #   - 保護領域の判定（フロントマター、コードブロック、数式ブロック）
   #   - 改ページ（行だけの ^）
   #   - 右揃え（--> ）と中央揃え（<-> ）
+  #   - 番号付き見出し（#1 #2 #3）
   #
   # 保護領域の内側は一切変更しない。
   class Preprocessor
@@ -45,6 +46,14 @@ module Reportmd
 
     PAGE_BREAK_BLOCK = ['::: {.reportmd-pagebreak}', ':::'].freeze
 
+    # 番号付き見出し。行頭（0桁目）に # と半角数字1桁、半角スペース、見出し文字列が来る。
+    # 数字が 1〜3 なら見出しにし、それ以外（#0、#4〜#9）は警告して、そのまま通す。
+    # 見出し文字列が空（空白だけ）の場合も警告して、そのまま通す。
+    NUMBERED_HEADING_LINE = /\A\#(?<level>\d)(?:[ ]+(?<text>\S.*?))?[ \t]*\z/
+    NUMBERED_HEADING_WITH_SPACE = /\A\#\d[ ]/
+    MAX_HEADING_LEVEL = 3
+    HEADING_CLASS = 'reportmd-num'
+
     def initialize(source)
       @source = normalize(source)
     end
@@ -56,6 +65,7 @@ module Reportmd
       @state = :normal
       @after_generated = false
       @align = nil
+      @last_heading_level = 0
 
       lines = split_lines(@source)
       lines.each_with_index do |line, index|
@@ -134,7 +144,9 @@ module Reportmd
       # 右揃え・中央揃えの行が途切れたので、溜めていたブロックを出力する
       flush_align
 
-      if (fence = fence_open(line))
+      if (heading = numbered_heading(line, lineno))
+        emit_block([heading])
+      elsif (fence = fence_open(line))
         @state = :fence
         @fence_char, @fence_len = fence
         @region_start = lineno
@@ -175,6 +187,42 @@ module Reportmd
       return false unless line.lstrip.start_with?('$$')
 
       line.scan('$$').length.odd?
+    end
+
+    # --- 番号付き見出し -------------------------------------------------
+
+    # 番号付き見出しの行なら、Pandoc の見出し（クラス付き）の文字列を返す。
+    # 見出しにならない行は nil を返す（必要なら警告を記録する）。
+    #   #1 はじめに  ->  # はじめに {.reportmd-num}
+    #   #2 背景      ->  ## 背景 {.reportmd-num}
+    def numbered_heading(line, lineno)
+      return nil unless line.match?(NUMBERED_HEADING_WITH_SPACE) || line.match?(/\A\#\d[ \t]*\z/)
+
+      match = NUMBERED_HEADING_LINE.match(line)
+      return nil unless match
+
+      level = match[:level].to_i
+      if level < 1 || level > MAX_HEADING_LEVEL
+        @warnings << PreprocessWarning.new(
+          lineno, "未対応の見出しレベルです（##{level} は使えません。#1〜#3 を使ってください）。通常の段落として扱います"
+        )
+        return nil
+      end
+      if match[:text].nil?
+        @warnings << PreprocessWarning.new(lineno, "見出しの文字列がありません（##{level}）。通常の段落として扱います")
+        return nil
+      end
+
+      warn_if_level_skipped(level, lineno)
+      @last_heading_level = level
+      "#{'#' * level} #{match[:text]} {.#{HEADING_CLASS}}"
+    end
+
+    def warn_if_level_skipped(level, lineno)
+      return if level <= @last_heading_level + 1
+
+      before = @last_heading_level.zero? ? '見出しがない状態' : "##{@last_heading_level}"
+      @warnings << PreprocessWarning.new(lineno, "見出しレベルが飛んでいます（#{before} の次に ##{level}）")
     end
 
     # --- 右揃え・中央揃え -----------------------------------------------

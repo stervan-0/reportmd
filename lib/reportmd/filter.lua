@@ -8,6 +8,8 @@
 --   .reportmd-right      ->  右揃え（flushright）
 --   .reportmd-center     ->  中央揃え（center）
 --   title / author       ->  PDF のメタデータにだけ使い、本文には出さない
+--   見出し               ->  #1〜#3（.reportmd-num）は番号付き、
+--                            標準の #（クラスなし）は番号なしにする
 
 local function has_class(el, name)
   for _, class in ipairs(el.classes) do
@@ -83,5 +85,19 @@ function Div(el)
       return el
     end
     return el.content -- そのほかの出力では、揃えずに内容だけを残す
+  end
+end
+
+-- 見出しの番号。
+-- 前処理が #1〜#3 を「.reportmd-num」つきの見出しに変換している。
+-- Pandoc を --number-sections で実行すると全ての見出しに番号が付くので、
+-- 標準の見出し（.reportmd-num がないもの）に .unnumbered を付けて、番号なしにする。
+function Header(el)
+  if has_class(el, 'reportmd-num') then
+    return nil
+  end
+  if not has_class(el, 'unnumbered') then
+    el.classes:insert('unnumbered')
+    return el
   end
 end
