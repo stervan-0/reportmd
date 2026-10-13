@@ -58,7 +58,7 @@ RSpec.describe Reportmd::Preprocessor do
     end
 
     it '文章中の ^ は変換しない' do
-      source = "x^2 と 2^n\n\na ^ b\n\n^上付き^\n\n  ^\n\n    ^\n"
+      source = "x^2 と 2^n\n\na ^ b\n\n^上付き^\n\n    ^\n"
       expect(convert(source)).to eq(source)
     end
   end
@@ -228,7 +228,7 @@ RSpec.describe Reportmd::Preprocessor do
     end
 
     it '文章中の --> や、記号の直後に文字が続く行は変換しない' do
-      source = "a --> b\n\n-->text\n\n---> x\n\n  --> 字下げ\n\n    --> コード\n"
+      source = "a --> b\n\n-->text\n\n---> x\n\n    --> コード\n"
       expect(convert(source)).to eq(source)
     end
 
@@ -533,6 +533,48 @@ RSpec.describe Reportmd::Preprocessor do
     it '図と表が混ざっていても、それぞれ変換する' do
       expect(convert("![f:図](a.png)\n\n![t:表]\n#{TABLE}"))
         .to eq("#{FIGURE}\n![図](a.png)\n:::\n\n#{CAPTION}\n表\n:::\n\n#{TABLE}")
+    end
+  end
+
+  describe '2スペースの字下げ' do
+    M = '[]{.reportmd-indent}'
+
+    it '空行のあと・ファイル先頭の、2スペースで始まる段落に印を付ける' do
+      expect(convert("  先頭\n\n  次の段落\n")).to eq("#{M}先頭\n\n#{M}次の段落\n")
+    end
+
+    it '段落の途中の行（継続行）は変換しない' do
+      expect(convert("  a\n  b\n")).to eq("#{M}a\n  b\n")
+    end
+
+    it '見出し・改ページ・右揃えの直後の段落も字下げする' do
+      source = "# 見出し\n  本文\n\n^\n  次\n\n--> 右\n\n  後\n"
+      expect(convert(source)).to include("# 見出し\n#{M}本文")
+      expect(convert(source)).to include("#{M}次").and include("#{M}後")
+    end
+
+    it '4スペース以上（コード）・1スペース・3スペースは変換しない' do
+      source = "    コード\n\n 一つ\n\n   三つ\n"
+      expect(convert(source)).to eq(source)
+    end
+
+    it 'リストの続き・引用の続きは変換しない' do
+      source = "- 項目\n  続き\n\n  項目の2段落目\n\n> 引用\n  続き\n"
+      expect(convert(source)).to eq(source)
+    end
+
+    it '2スペースのあとが、リスト・見出し・引用・表・水平線などの記法なら変換しない' do
+      source = "  - 項目\n\n  # 見出し\n\n  > 引用\n\n  | a | b |\n\n  ---\n"
+      expect(convert(source)).to eq(source)
+    end
+
+    it 'コードブロック・数式ブロックの中は変換しない' do
+      source = "```\n  コード\n```\n\n$$\n  x\n$$\n"
+      expect(convert(source)).to eq(source)
+    end
+
+    it '2スペースのあとが強調などの記号でも字下げする' do
+      expect(convert("  *強調* 開始\n")).to eq("#{M}*強調* 開始\n")
     end
   end
 end

@@ -246,4 +246,21 @@ RSpec.describe 'filter.lua' do
       end
     end
   end
+
+  describe '2スペースの字下げ' do
+    it 'LaTeX では、1文字分の字下げに変換する（印は残らない）' do
+      out = convert_with_pandoc("  段落です\n", 'latex')
+      expect(out).to include('\\noindent\\hspace*{\\reportmdchar}段落です')
+      expect(out).not_to include('reportmd-indent')
+    end
+
+    it 'LaTeX 以外では、印を取り除くだけにする' do
+      out = convert_with_pandoc("  段落です\n", 'plain')
+      expect(out.strip).to eq('段落です')
+    end
+
+    it '印のない段落は、そのまま' do
+      expect(convert_with_pandoc("段落です\n", 'latex').strip).to eq('段落です')
+    end
+  end
 end

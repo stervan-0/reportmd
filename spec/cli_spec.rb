@@ -343,6 +343,41 @@ RSpec.describe Reportmd::CLI do
     end
   end
 
+  describe 'PDF の生成（2スペースの字下げ）' do
+    before do
+      skip 'PDF 生成に必要なツールやフォントがありません' unless pdf_build_ready?
+      skip 'pdftotext がありません' unless system('pdftotext', '-v', out: File::NULL, err: File::NULL)
+    end
+
+    def left_of(pdf, text)
+      html = IO.popen(['pdftotext', '-bbox', pdf, '-'], &:read).force_encoding('UTF-8')
+      html.scan(%r{xMin="([\d.]+)" yMin="[\d.]+" xMax="[\d.]+" yMax="[\d.]+">(.*?)</word>}m)
+          .to_h { |x, t| [t, x.to_f] }.fetch(text)
+    end
+
+    it 'paragraph_indent が 0 でも、2スペース始まりの段落だけ1字（10.5pt）下がる' do
+      input = write_file('ind.rmd', "字下げなし\n\n  字下げあり\n")
+      write_file('setting.json', '{ "text": { "paragraph_indent": 0 } }')
+      code, = run_cli('build', input)
+      expect(code).to eq(0)
+
+      pdf = File.join(@dir, 'ind.pdf')
+      expect(left_of(pdf, '字下げなし')).to be_within(1.0).of(70.866)
+      expect(left_of(pdf, '字下げあり')).to be_within(1.0).of(70.866 + 10.5)
+    end
+
+    it 'paragraph_indent が 2 のとき、2スペース始まりの段落は1字になる（足し算しない）' do
+      input = write_file('ind.rmd', "通常段落\n\n  二スペース\n")
+      write_file('setting.json', '{ "text": { "paragraph_indent": 2 } }')
+      code, = run_cli('build', input)
+      expect(code).to eq(0)
+
+      pdf = File.join(@dir, 'ind.pdf')
+      expect(left_of(pdf, '通常段落')).to be_within(1.0).of(70.866 + 21)
+      expect(left_of(pdf, '二スペース')).to be_within(1.0).of(70.866 + 10.5)
+    end
+  end
+
   describe '図表の記法のエラー' do
     it '直後に表がない ![t:...] は、ファイル名と行番号つきでエラーにして 1 を返す' do
       input = write_file('a.rmd', "本文\n\n![t:なし]\n\n本文\n")

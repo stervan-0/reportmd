@@ -9,6 +9,7 @@
 --   .reportmd-center          ->  中央揃え（center）
 --   .reportmd-figure          ->  図（番号とキャプションを付ける）
 --   .reportmd-table-caption   ->  直後の表に、番号とキャプションを付ける
+--   2 スペース始まりの段落   ->  字下げ 1 文字分（paragraph_indent の置き換え）
 --   見出し                    ->  #1〜#3（.reportmd-num）は番号付き、
 --                                 標準の #（クラスなし）は番号なしにする
 --   title / author            ->  PDF のメタデータにだけ使い、本文には出さない
@@ -285,6 +286,21 @@ local function convert_blocks(blocks)
   end
 end
 
+-- 先頭の 2 スペース（前処理が []{.reportmd-indent} にしたもの）を、
+-- 字下げ 1 文字分の段落に変換する。paragraph_indent は使わない（置き換え）。
+local function convert_para(para)
+  local first = para.content[1]
+  if first == nil or first.t ~= 'Span' or not has_class(first, 'reportmd-indent') then
+    return nil
+  end
+  local content = pandoc.List(para.content)
+  content:remove(1)
+  if FORMAT:match('latex') then
+    content:insert(1, pandoc.RawInline('latex', '\\noindent\\hspace*{\\reportmdchar}'))
+  end
+  return pandoc.Para(content)
+end
+
 -- 設定を読む走査を先に行い、そのあとで変換の走査を行う。
 return {
   { Meta = function(meta) read_settings(meta) end },
@@ -292,6 +308,7 @@ return {
     Meta = move_title_and_author,
     Div = convert_div,
     Header = convert_header,
+    Para = convert_para,
     Blocks = convert_blocks,
   },
 }

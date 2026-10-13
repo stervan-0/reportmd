@@ -23,6 +23,7 @@ module Reportmd
   #   - 右揃え（--> ）と中央揃え（<-> ）
   #   - 番号付き見出し（#1 #2 #3）
   #   - 図（![f:タイトル](画像)）と表の見出し（![t:タイトル]）
+  #   - 2スペースで始まる段落の字下げ
   #
   # 保護領域の内側は一切変更しない。
   class Preprocessor
@@ -62,6 +63,17 @@ module Reportmd
     TABLE_START = /\A!\[t(?::|\])/
     FULLWIDTH_COLON_START = /\A!\[[ft]：/
     TABLE_CAPTION_LINE = /\A!\[t(?::(?<title>.*))?\][ \t]*\z/
+    # 段落の字下げ。段落の最初の行が、ちょうど半角スペース2個で始まる場合、
+    # 先頭に空のスパン（目印）を置く。字下げの組版は filter.lua が行う。
+    #   "  本文"  ->  "[]{.reportmd-indent}本文"
+    INDENT_LINE = /\A[ ]{2}(?<text>\S.*)\z/
+    INDENT_MARKER = '[]{.reportmd-indent}'
+    # リスト項目の行（記号のあとにスペース）。リスト項目の続きの段落と区別するために使う。
+    LIST_ITEM_LINE = /\A[ ]{0,3}(?:[-*+]|\d{1,9}[.)])(?:[ \t]|\z)/
+    # 2スペースのあとに、ほかのブロックの記法が来る行は、字下げの段落にしない
+    # （リスト、見出し、引用、コード、数式、表、脚注、水平線など）
+    BLOCK_START_AFTER_INDENT = /\A(?:[-*+](?:[ \t]|\z)|\d{1,9}[.)](?:[ \t]|\z)|\#{1,6}(?:[ \t]|\z)|>|`{3,}|~{3,}|\$\$|\||\+[-=:]|:::|\[\^[^\]]+\]:|([-*_])(?:[ \t]*\1){2,}[ \t]*\z)/
+
     FIGURE_CLASS = 'reportmd-figure'
     TABLE_CAPTION_CLASS = 'reportmd-table-caption'
 
@@ -82,12 +94,15 @@ module Reportmd
       @after_generated = false
       @align = nil
       @last_heading_level = 0
+      @in_list = false
+      @last_line_blank = true # ファイルの先頭は、空行のあとと同じに扱う
 
       lines = split_lines(@source)
       @lines = lines
       lines.each_with_index do |line, index|
         @index = index
         process_line(line, index + 1, lines, index)
+        @last_line_blank = line.strip.empty?
       end
       finish
 
@@ -170,15 +185,56 @@ module Reportmd
         @state = :fence
         @fence_char, @fence_len = fence
         @region_start = lineno
+        @in_list = false
         emit(line)
       elsif math_open?(line)
         @state = :math
         @region_start = lineno
+        @in_list = false
         emit(line)
       elsif line =~ PAGE_BREAK_LINE
         emit_block(PAGE_BREAK_BLOCK)
+      elsif (indented = indented_paragraph(line))
+        emit(indented)
       else
+        track_list(line)
         emit(line)
+      end
+    end
+
+    # --- 段落の字下げ ---------------------------------------------------
+
+    # 字下げの段落の最初の行なら、目印をつけた行を返す。違えば nil。
+    # 次の場合は字下げの段落にしない（行はそのまま通す）。
+    #   - 直前が空行ではない（段落の途中の行）
+    #   - リスト項目の続きの段落（リストの中）
+    #   - 2スペースのあとに、ほかのブロックの記法が来る
+    def indented_paragraph(line)
+      match = INDENT_LINE.match(line)
+      return nil unless match
+      return nil unless paragraph_start?
+      return nil if @in_list
+      return nil if match[:text].match?(BLOCK_START_AFTER_INDENT)
+
+      "#{INDENT_MARKER}#{match[:text]}"
+    end
+
+    # 段落の先頭か（出力の直前が空行か、まだ何も出力していない）
+    def paragraph_start?
+      @output.empty? || @output.last.strip.empty? || @output.last.match?(/\A\#{1,6}[ \t]/)
+    end
+
+    # リストの中にいるかを追う。リスト項目の行で始まり、字下げされた行や
+    # 空行は続きとして扱い、空行のあとの、字下げのない行で終わる。
+    def track_list(line)
+      return if line.strip.empty?
+
+      if line.match?(LIST_ITEM_LINE)
+        @in_list = true
+      elsif line.match?(/\A[ \t]/)
+        nil # 字下げされた行は、リスト項目の続き（状態は変えない）
+      elsif @last_line_blank
+        @in_list = false
       end
     end
 
@@ -368,6 +424,7 @@ module Reportmd
       @output << "#{indent}#{protect_list_like(align.content)}"
       @output << "#{indent}:::"
       @after_generated = false
+      @in_list = true
     end
 
     # 「2026. 10. 12」のように、日付などが番号付きリストと解釈されないようにする。
@@ -390,6 +447,7 @@ module Reportmd
     # 生成したブロックを、前後に空行を補って出力する。
     # blank は空行として使う文字列（引用の内側なら ">"）。
     def emit_block(block_lines, blank: '')
+      @in_list = false
       last = @output.last
       @output << blank unless last.nil? || last.strip.empty? || last.strip == blank.strip
       @output.concat(block_lines)
