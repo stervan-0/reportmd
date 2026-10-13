@@ -5,6 +5,8 @@
 --
 -- 現在の対応:
 --   .reportmd-pagebreak  ->  \newpage
+--   .reportmd-right      ->  右揃え（flushright）
+--   .reportmd-center     ->  中央揃え（center）
 --   title / author       ->  PDF のメタデータにだけ使い、本文には出さない
 
 local function has_class(el, name)
@@ -46,11 +48,40 @@ function Meta(meta)
   return meta
 end
 
+-- 右揃え・中央揃えの対応表
+local ALIGNMENTS = {
+  ['reportmd-right']  = { latex = 'flushright', css = 'right' },
+  ['reportmd-center'] = { latex = 'center',     css = 'center' },
+}
+
+local function alignment_of(el)
+  for _, class in ipairs(el.classes) do
+    if ALIGNMENTS[class] then
+      return ALIGNMENTS[class]
+    end
+  end
+  return nil
+end
+
 function Div(el)
   if has_class(el, 'reportmd-pagebreak') then
     if FORMAT:match('latex') then
       return pandoc.RawBlock('latex', '\\newpage')
     end
     return {} -- LaTeX 以外の出力では、改ページブロックを取り除く
+  end
+
+  local align = alignment_of(el)
+  if align then
+    if FORMAT:match('latex') then
+      local blocks = pandoc.List({ pandoc.RawBlock('latex', '\\begin{' .. align.latex .. '}') })
+      blocks:extend(el.content)
+      blocks:insert(pandoc.RawBlock('latex', '\\end{' .. align.latex .. '}'))
+      return blocks
+    elseif FORMAT:match('^html') then
+      el.attributes['style'] = 'text-align: ' .. align.css .. ';'
+      return el
+    end
+    return el.content -- そのほかの出力では、揃えずに内容だけを残す
   end
 end

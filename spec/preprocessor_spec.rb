@@ -173,4 +173,111 @@ RSpec.describe Reportmd::Preprocessor do
       expect(convert(source)).to eq(source)
     end
   end
+
+  describe '右揃え（-->）と中央揃え（<->）' do
+    RIGHT  = '::: {.reportmd-right}'
+    CENTER = '::: {.reportmd-center}'
+
+    it '--> の行を右揃えのブロックに変換する' do
+      expect(convert("前\n\n--> 2026年10月12日\n\n後\n"))
+        .to eq("前\n\n#{RIGHT}\n2026年10月12日\n:::\n\n後\n")
+    end
+
+    it '<-> の行を中央揃えのブロックに変換する' do
+      expect(convert("<-> 実験レポート\n")).to eq("#{CENTER}\n実験レポート\n:::\n")
+    end
+
+    it '連続する行をひとつのブロックにまとめ、行ごとに改行する' do
+      expect(convert("--> 2026年10月12日\n--> 大阪工業大学\n--> 山田 太郎\n"))
+        .to eq("#{RIGHT}\n2026年10月12日\\\n大阪工業大学\\\n山田 太郎\n:::\n")
+    end
+
+    it '空行で別のブロックに分かれる' do
+      expect(convert("--> a\n\n--> b\n"))
+        .to eq("#{RIGHT}\na\n:::\n\n#{RIGHT}\nb\n:::\n")
+    end
+
+    it '右揃えと中央揃えが隣り合う場合は、別のブロックにする' do
+      expect(convert("--> a\n<-> b\n"))
+        .to eq("#{RIGHT}\na\n:::\n\n#{CENTER}\nb\n:::\n")
+    end
+
+    it '前の段落に空行なしで続いても、新しいブロックを始める' do
+      expect(convert("本文\n--> 右\n")).to eq("本文\n\n#{RIGHT}\n右\n:::\n")
+    end
+
+    it '内容が空の行は読み飛ばし、前後の行は同じブロックとして続ける' do
+      expect(convert("--> a\n-->\n-->   \n--> b\n"))
+        .to eq("#{RIGHT}\na\\\nb\n:::\n")
+    end
+
+    it '内容が空の行だけなら、その行を何も出力しない（前後の空行はそのまま残る）' do
+      expect(convert("前\n\n-->\n\n後\n")).to eq("前\n\n\n後\n")
+    end
+
+    it '内容は Markdown のまま渡す（インライン書式）' do
+      expect(convert("--> **太字**と$x^2$\n")).to eq("#{RIGHT}\n**太字**と$x^2$\n:::\n")
+    end
+
+    it '内容の末尾の空白は取り除く' do
+      expect(convert("--> a  \n")).to eq("#{RIGHT}\na\n:::\n")
+    end
+
+    it '日付が番号付きリストと解釈されないように、ピリオドをエスケープする' do
+      expect(convert("--> 2026. 10. 12\n")).to eq("#{RIGHT}\n2026\\. 10. 12\n:::\n")
+    end
+
+    it '文章中の --> や、記号の直後に文字が続く行は変換しない' do
+      source = "a --> b\n\n-->text\n\n---> x\n\n  --> 字下げ\n\n    --> コード\n"
+      expect(convert(source)).to eq(source)
+    end
+
+    it 'コードブロック・数式ブロック・フロントマター内の --> は変換しない' do
+      source = "```\n--> a\n```\n\n$$\n<-> b\n$$\n"
+      expect(convert(source)).to eq(source)
+      fm = "---\ntitle: a\n--> b\n---\n"
+      expect(convert(fm)).to eq(fm)
+    end
+
+    it 'コードブロックの直前の揃え行も、ブロックとして出力する' do
+      expect(convert("--> a\n```\ncode\n```\n"))
+        .to eq("#{RIGHT}\na\n:::\n\n```\ncode\n```\n")
+    end
+
+    it 'ファイル末尾の揃え行も出力する（余分な空行は残さない）' do
+      expect(convert("本文\n\n<-> 末尾")).to eq("本文\n\n#{CENTER}\n末尾\n:::\n")
+    end
+
+    describe '引用の内側' do
+      it '接頭辞を保ち、空行は > にする' do
+        expect(convert("> 引用\n> --> 右\n> --> 2行目\n"))
+          .to eq("> 引用\n>\n> #{RIGHT}\n> 右\\\n> 2行目\n> :::\n")
+      end
+
+      it '引用の接頭辞が違う行とは、別のブロックにする' do
+        expect(convert("> --> a\n--> b\n"))
+          .to eq("> #{RIGHT}\n> a\n> :::\n>\n\n#{RIGHT}\nb\n:::\n")
+      end
+    end
+
+    describe 'リストの内側' do
+      it 'リスト記号の行に Div を置き、続く行を記号の幅だけ字下げする' do
+        expect(convert("- 項目A\n- --> 右の項目\n- 項目C\n"))
+          .to eq("- 項目A\n- #{RIGHT}\n  右の項目\n  :::\n- 項目C\n")
+      end
+
+      it '番号付きリストにも対応する' do
+        expect(convert("1. <-> 中央\n")).to eq("1. #{CENTER}\n   中央\n   :::\n")
+      end
+
+      it 'リスト記号ごとに別の項目として出力する' do
+        expect(convert("- --> a\n- --> b\n"))
+          .to eq("- #{RIGHT}\n  a\n  :::\n- #{RIGHT}\n  b\n  :::\n")
+      end
+
+      it '内容が空のリスト項目は読み飛ばす' do
+        expect(convert("- a\n- -->\n- b\n")).to eq("- a\n- b\n")
+      end
+    end
+  end
 end

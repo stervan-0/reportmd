@@ -167,4 +167,52 @@ RSpec.describe Reportmd::CLI do
       end
     end
   end
+
+  describe 'PDF の生成（右揃え・中央揃えの位置）' do
+    A4_WIDTH = 595.276
+    MARGIN_25MM = 70.866
+
+    before do
+      skip 'PDF 生成に必要なツールやフォントがありません' unless pdf_build_ready?
+      skip 'pdftotext がありません' unless system('pdftotext', '-v', out: File::NULL, err: File::NULL)
+    end
+
+    # PDF 内の単語ごとの位置 { 単語 => [xMin, xMax] } を取り出す
+    def word_positions(pdf)
+      html = IO.popen(['pdftotext', '-bbox', pdf, '-'], &:read).force_encoding('UTF-8')
+      html.scan(%r{xMin="([\d.]+)" yMin="[\d.]+" xMax="([\d.]+)" yMax="[\d.]+">(.*?)</word>}m)
+          .to_h { |x_min, x_max, text| [text, [x_min.to_f, x_max.to_f]] }
+    end
+
+    it '右揃えは右余白の位置に、中央揃えはページの中央に配置される' do
+      input = write_file('align.rmd', "<-> 実験レポート\n\n--> 大阪工業大学\n\n- 項目\n- --> 右の項目\n")
+      code, = run_cli('build', input)
+      expect(code).to eq(0)
+
+      words = word_positions(File.join(@dir, 'align.pdf'))
+      center = words.fetch('実験レポート').sum / 2
+      expect(center).to be_within(1.0).of(A4_WIDTH / 2)
+      expect(words.fetch('大阪工業大学').last).to be_within(1.0).of(A4_WIDTH - MARGIN_25MM)
+      expect(words.fetch('右の項目').last).to be_within(1.0).of(A4_WIDTH - MARGIN_25MM)
+    end
+
+    it '設定の余白を変えると、右揃えの位置も変わる' do
+      input = write_file('align.rmd', "--> 大阪工業大学\n")
+      write_file('setting.json', '{ "page": { "margin": { "right": "40mm" } } }')
+      code, = run_cli('build', input)
+      expect(code).to eq(0)
+
+      right_edge = word_positions(File.join(@dir, 'align.pdf')).fetch('大阪工業大学').last
+      expect(right_edge).to be_within(1.0).of(A4_WIDTH - 40 * 72 / 25.4)
+    end
+
+    it '段落の1行目は、paragraph_indent の分だけ字下げされる（1字 = 10.5pt）' do
+      input = write_file('align.rmd', "段落の本文です。\n")
+      code, = run_cli('build', input)
+      expect(code).to eq(0)
+
+      left = word_positions(File.join(@dir, 'align.pdf')).fetch('段落の本文です。').first
+      expect(left).to be_within(1.0).of(MARGIN_25MM + 10.5)
+    end
+  end
 end

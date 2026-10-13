@@ -20,6 +20,7 @@ module Reportmd
   # 現在の対応:
   #   - 保護領域の判定（フロントマター、コードブロック、数式ブロック）
   #   - 改ページ（行だけの ^）
+  #   - 右揃え（--> ）と中央揃え（<-> ）
   #
   # 保護領域の内側は一切変更しない。
   class Preprocessor
@@ -29,6 +30,18 @@ module Reportmd
     FENCE_OPEN_LINE   = /\A[ ]*(`{3,}|~{3,})(.*)\z/
     FRONT_MATTER_END  = /\A(---|\.\.\.)[ \t]*\z/
     FRONT_MATTER_OPEN = /\A---[ \t]*\z/
+
+    # 右揃え・中央揃えの行。行頭（または引用 > ・リスト記号の直後）に、
+    # 記号と半角スペース1個以上、続けて内容が来る。内容が空の行も一致する。
+    #   quote   : 引用の接頭辞（例："> "）
+    #   list    : リスト記号（例："- "、"1. "）
+    #   marker  : "-->"（右揃え）または "<->"（中央揃え）
+    ALIGN_LINE = /\A(?<quote>(?:[ ]{0,3}>[ ]?)*)(?<list>[ ]{0,3}(?:[-*+]|\d{1,9}[.)])[ ]+)?(?<marker>-->|<->)(?:[ ]+(?<content>.*?))?[ \t]*\z/
+    ALIGN_KINDS = { '-->' => :right, '<->' => :center }.freeze
+    ALIGN_CLASSES = { right: 'reportmd-right', center: 'reportmd-center' }.freeze
+
+    # 内容の先頭が「2026. 」のような番号付きリスト記法に見える場合に備える
+    LIST_LIKE_START = /\A(\d+)([.)])(?=[ \t]|\z)/
 
     PAGE_BREAK_BLOCK = ['::: {.reportmd-pagebreak}', ':::'].freeze
 
@@ -42,6 +55,7 @@ module Reportmd
       @output = []
       @state = :normal
       @after_generated = false
+      @align = nil
 
       lines = split_lines(@source)
       lines.each_with_index do |line, index|
@@ -112,6 +126,14 @@ module Reportmd
     end
 
     def in_normal(line, lineno)
+      if (align = align_line(line))
+        handle_align(align)
+        return
+      end
+
+      # 右揃え・中央揃えの行が途切れたので、溜めていたブロックを出力する
+      flush_align
+
       if (fence = fence_open(line))
         @state = :fence
         @fence_char, @fence_len = fence
@@ -155,6 +177,73 @@ module Reportmd
       line.scan('$$').length.odd?
     end
 
+    # --- 右揃え・中央揃え -----------------------------------------------
+
+    AlignLine = Struct.new(:kind, :quote, :list, :content)
+
+    # 右揃え・中央揃えの行なら AlignLine を返す。違えば nil。
+    def align_line(line)
+      match = ALIGN_LINE.match(line)
+      return nil unless match
+
+      AlignLine.new(ALIGN_KINDS.fetch(match[:marker]), match[:quote].to_s,
+                    match[:list].to_s, match[:content].to_s)
+    end
+
+    # 同じ種類・同じ引用の接頭辞で連続する行を、ひとつのブロックにまとめる。
+    # 内容が空の行は読み飛ばす（ブロックは途切れない）。
+    # リスト記号つきの行は、記号ごとに別の項目なので、まとめずに単独で出力する。
+    def handle_align(align)
+      unless align.list.empty?
+        flush_align
+        emit_list_align(align) unless align.content.empty?
+        return
+      end
+
+      if @align && @align[:kind] == align.kind && @align[:key] == quote_key(align.quote)
+        @align[:lines] << align.content unless align.content.empty?
+      else
+        flush_align
+        @align = { kind: align.kind, quote: align.quote, key: quote_key(align.quote),
+                   lines: align.content.empty? ? [] : [align.content] }
+      end
+    end
+
+    def quote_key(quote)
+      quote.delete(' ')
+    end
+
+    def flush_align
+      return unless @align
+
+      emit_align_block(@align) unless @align[:lines].empty?
+      @align = nil
+    end
+
+    # 引用の内側なら、接頭辞をすべての行に付け、空行も `>` にする。
+    def emit_align_block(block)
+      quote = block[:quote]
+      lines = block[:lines].map { |content| protect_list_like(content) }
+      lines = lines.each_with_index.map { |content, i| i < lines.length - 1 ? "#{content}\\" : content }
+      body = ["::: {.#{ALIGN_CLASSES.fetch(block[:kind])}}", *lines, ':::']
+      emit_block(body.map { |l| "#{quote}#{l}" }, blank: quote.rstrip)
+    end
+
+    # リスト項目の中では、Div の開始行をリスト記号と同じ行に置き、
+    # 続く行を記号の幅だけ字下げする。前後に空行は入れない（リストが緩くなるため）。
+    def emit_list_align(align)
+      indent = "#{align.quote}#{' ' * align.list.length}"
+      @output << "#{align.quote}#{align.list}::: {.#{ALIGN_CLASSES.fetch(align.kind)}}"
+      @output << "#{indent}#{protect_list_like(align.content)}"
+      @output << "#{indent}:::"
+      @after_generated = false
+    end
+
+    # 「2026. 10. 12」のように、日付などが番号付きリストと解釈されないようにする。
+    def protect_list_like(content)
+      content.sub(LIST_LIKE_START, '\1\\\\\2')
+    end
+
     # --- 出力 -----------------------------------------------------------
 
     # 通常の行を出力する。生成ブロックの直後の空行は、重複するので捨てる。
@@ -168,16 +257,19 @@ module Reportmd
     end
 
     # 生成したブロックを、前後に空行を補って出力する。
-    def emit_block(block_lines)
-      @output << '' unless @output.empty? || @output.last.empty?
+    # blank は空行として使う文字列（引用の内側なら ">"）。
+    def emit_block(block_lines, blank: '')
+      last = @output.last
+      @output << blank unless last.nil? || last.strip.empty? || last.strip == blank.strip
       @output.concat(block_lines)
-      @output << ''
+      @output << blank
       @after_generated = true
     end
 
     # --- 終了処理 -------------------------------------------------------
 
     def finish
+      flush_align
       case @state
       when :front_matter
         raise PreprocessError.new('YAMLフロントマターが閉じられていません（--- または ... が必要です）',
@@ -189,7 +281,7 @@ module Reportmd
                                            'コードブロックが閉じられていません（ファイル末尾までコードとして扱います）')
       end
       # 生成ブロックが最後なら、末尾に余分な空行を残さない
-      @output.pop if @after_generated && @output.last == ''
+      @output.pop if @after_generated && @output.last.to_s.delete('> ').empty?
     end
 
     def build_text
