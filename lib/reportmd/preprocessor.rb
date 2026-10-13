@@ -22,6 +22,7 @@ module Reportmd
   #   - 改ページ（行だけの ^）
   #   - 右揃え（--> ）と中央揃え（<-> ）
   #   - 番号付き見出し（#1 #2 #3）
+  #   - 図（![f:タイトル](画像)）と表の見出し（![t:タイトル]）
   #
   # 保護領域の内側は一切変更しない。
   class Preprocessor
@@ -54,6 +55,21 @@ module Reportmd
     MAX_HEADING_LEVEL = 3
     HEADING_CLASS = 'reportmd-num'
 
+    # 図表。行頭に ![f ... または ![t ... が来る。区切りは半角コロンのみ。
+    #   図 : ![f:タイトル](画像のパス)   ![f](...)   ![f:](...)
+    #   表 : ![t:タイトル]               ![t]        ![t:]      （直後に表を置く）
+    FIGURE_START = /\A!\[f(?::|\])/
+    TABLE_START = /\A!\[t(?::|\])/
+    FULLWIDTH_COLON_START = /\A!\[[ft]：/
+    TABLE_CAPTION_LINE = /\A!\[t(?::(?<title>.*))?\][ \t]*\z/
+    FIGURE_CLASS = 'reportmd-figure'
+    TABLE_CAPTION_CLASS = 'reportmd-table-caption'
+
+    # 表の直後の行の判定（パイプ表・グリッド表・単純表）
+    PIPE_SEPARATOR_ROW = /\A[ ]{0,3}\|?[ ]*:?-+:?[ ]*(?:\|[ ]*:?-+:?[ ]*)*\|?[ ]*\z/
+    GRID_BORDER_ROW = /\A[ ]{0,3}\+[-=:]+(?:\+[-=:]+)*\+[ ]*\z/
+    SIMPLE_SEPARATOR_ROW = /\A[ ]{0,3}-+(?:[ ]+-+)+[ ]*\z/
+
     def initialize(source)
       @source = normalize(source)
     end
@@ -68,7 +84,9 @@ module Reportmd
       @last_heading_level = 0
 
       lines = split_lines(@source)
+      @lines = lines
       lines.each_with_index do |line, index|
+        @index = index
         process_line(line, index + 1, lines, index)
       end
       finish
@@ -146,6 +164,8 @@ module Reportmd
 
       if (heading = numbered_heading(line, lineno))
         emit_block([heading])
+      elsif (block = figure_table_block(line, lineno))
+        emit_block(block)
       elsif (fence = fence_open(line))
         @state = :fence
         @fence_char, @fence_len = fence
@@ -223,6 +243,69 @@ module Reportmd
 
       before = @last_heading_level.zero? ? '見出しがない状態' : "##{@last_heading_level}"
       @warnings << PreprocessWarning.new(lineno, "見出しレベルが飛んでいます（#{before} の次に ##{level}）")
+    end
+
+    # --- 図と表 ---------------------------------------------------------
+
+    # 図・表の行なら、Pandoc のブロック（行の配列）を返す。違えば nil。
+    #   ![f:タイトル](画像)  ->  ::: {.reportmd-figure}
+    #                            ![タイトル](画像)
+    #                            :::
+    #   ![t:タイトル]        ->  ::: {.reportmd-table-caption}
+    #                            タイトル
+    #                            :::
+    # 番号とキャプションの組版は filter.lua が行う。
+    def figure_table_block(line, lineno)
+      if line.match?(FULLWIDTH_COLON_START)
+        @warnings << PreprocessWarning.new(
+          lineno, '図表の記法の区切りは半角コロン : を使ってください（全角コロン：は図表として扱いません）'
+        )
+        return nil
+      end
+      return figure_block(line, lineno) if line.match?(FIGURE_START)
+      return table_caption_block(line, lineno) if line.match?(TABLE_START)
+
+      nil
+    end
+
+    def figure_block(line, lineno)
+      unless line.include?('](')
+        raise PreprocessError.new('図には画像のパスが必要です（例: ![f:タイトル](images/a.png)）', line: lineno)
+      end
+
+      image = line.sub(/\A!\[f:?/, '![').rstrip
+      ["::: {.#{FIGURE_CLASS}}", image, ':::']
+    end
+
+    def table_caption_block(line, lineno)
+      match = TABLE_CAPTION_LINE.match(line)
+      unless match
+        raise PreprocessError.new(
+          '![t:...] は表の見出し行です。後ろに (...) などは付けられません（画像には ![f:...](...) を使ってください）',
+          line: lineno
+        )
+      end
+      unless table_follows?
+        raise PreprocessError.new('![t:...] の直後に表がありません（空行は1つまで、直後に表を書いてください）',
+                                  line: lineno)
+      end
+
+      title = match[:title].to_s.strip
+      ["::: {.#{TABLE_CAPTION_CLASS}}", *(title.empty? ? [] : [title]), ':::']
+    end
+
+    # 現在の行の直後（空行は1つまで）に、表が始まっているか。
+    def table_follows?
+      first_index = @index + 1
+      first_index += 1 if @lines[first_index] && @lines[first_index].strip.empty?
+      first = @lines[first_index]
+      return false if first.nil? || first.strip.empty?
+
+      second = @lines[first_index + 1].to_s
+      return true if first.match?(GRID_BORDER_ROW)
+      return true if first.include?('|') && second.include?('|') && second.match?(PIPE_SEPARATOR_ROW)
+
+      first.match?(SIMPLE_SEPARATOR_ROW) || second.match?(SIMPLE_SEPARATOR_ROW)
     end
 
     # --- 右揃え・中央揃え -----------------------------------------------

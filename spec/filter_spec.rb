@@ -1,12 +1,15 @@
 # frozen_string_literal: true
 
+require 'json'
 require 'open3'
+require 'tempfile'
 require_relative '../lib/reportmd/preprocessor'
 
 # 前処理 → Pandoc（filter.lua）を通した結果を確認するテスト。
 # Pandoc が入っていない環境では、このファイルのテストを飛ばす。
 RSpec.describe 'filter.lua' do
   filter_path = File.expand_path('../lib/reportmd/filter.lua', __dir__)
+  define_method(:filter_path) { filter_path }
 
   define_method(:pandoc_available?) do
     system('pandoc', '--version', out: File::NULL, err: File::NULL)
@@ -128,6 +131,119 @@ RSpec.describe 'filter.lua' do
       latex = convert_with_pandoc("#1 **太字**と$x^2$\n", 'latex', numbered_args)
       expect(latex).to include('\\textbf{太字}')
       expect(latex).to include('\\(x^2\\)')
+    end
+  end
+
+  describe '図表の番号とキャプション' do
+    let(:table) { "| 条件 | 結果 |\n|---|---|\n| A | 10 |\n" }
+
+    # 設定（metadata の reportmd）を渡して変換する
+    def convert_with_settings(rmd, format, settings)
+      Tempfile.create(['settings', '.json']) do |file|
+        file.write(JSON.generate('reportmd' => settings))
+        file.flush
+        convert_with_pandoc(rmd, format, ["--metadata-file=#{file.path}"])
+      end
+    end
+
+    describe 'HTML での確認（番号とタイトル）' do
+      it '図は、出現順に 図1、図2 と採番する' do
+        html = convert_with_pandoc("![f:一つ目](a.png)\n\n![f:二つ目](b.png)\n", 'html')
+        expect(html).to match(%r{<figcaption[^>]*>図1 一つ目</figcaption>})
+        expect(html).to match(%r{<figcaption[^>]*>図2 二つ目</figcaption>})
+      end
+
+      it '表は、図とは別の連番（表1、表2）で採番する' do
+        rmd = "![f:図](a.png)\n\n![t:一つ目]\n#{table}\n![f:図](b.png)\n\n![t:二つ目]\n#{table}"
+        html = convert_with_pandoc(rmd, 'html')
+        expect(html).to include('<caption>表1 一つ目</caption>')
+        expect(html).to include('<caption>表2 二つ目</caption>')
+        expect(html).to match(%r{<figcaption[^>]*>図2 図</figcaption>})
+      end
+
+      it 'タイトルが空なら、番号だけを表示する' do
+        html = convert_with_pandoc("![f](a.png)\n\n![t]\n#{table}", 'html')
+        expect(html).to match(%r{<figcaption[^>]*>図1</figcaption>})
+        expect(html).to include('<caption>表1</caption>')
+      end
+
+      it 'タイトルのインライン書式が使える' do
+        html = convert_with_pandoc("![f:**太字**の図](a.png)\n\n![t:$x^2$ の表]\n#{table}", 'html')
+        expect(html).to include('<strong>太字</strong>の図')
+        expect(html).to match(/<caption>表1 .*<sup>2<\/sup>.*の表<\/caption>/m)
+      end
+
+      it '画像の属性（width）が残る' do
+        html = convert_with_pandoc("![f:図](a.png){width=50%}\n", 'html')
+        expect(html).to include('width:50')
+      end
+
+      it '番号を付けない通常の画像は、図として扱わない' do
+        html = convert_with_pandoc("![図](a.png)\n", 'html')
+        expect(html).not_to include('図1')
+      end
+
+      it '設定でラベルを変えられる' do
+        html = convert_with_settings("![f:A](a.png)\n\n![t:B]\n#{table}", 'html',
+                                     'figure_label' => 'Fig.', 'table_label' => 'Table')
+        expect(html).to match(%r{<figcaption[^>]*>Fig\.1 A</figcaption>})
+        expect(html).to include('<caption>Table1 B</caption>')
+      end
+
+      it '見出し用の Div は、出力に残らない' do
+        html = convert_with_pandoc("![f:図](a.png)\n\n![t:表]\n#{table}", 'html')
+        expect(html).not_to include('reportmd-')
+      end
+    end
+
+    describe 'LaTeX での確認（固定配置・位置）' do
+      it '図は浮動体（figure 環境）にせず、samepage と center で、書いた位置に置く' do
+        latex = convert_with_pandoc("![f:システム構成図](a.png)\n", 'latex')
+        expect(latex).not_to include('\\begin{figure}')
+        expect(latex).not_to include('\\caption')
+        expect(latex).to include('\\begin{samepage}\\begin{center}')
+        expect(latex).to include('\\end{center}\\end{samepage}')
+        expect(latex).to include('図1 システム構成図')
+      end
+
+      it '図のキャプションは、既定では画像の下（bottom）に置く' do
+        latex = convert_with_pandoc("![f:図](a.png)\n", 'latex')
+        expect(latex.index('\\includegraphics')).to be < latex.index('図1 図')
+      end
+
+      it 'figure_position が top なら、図のキャプションを画像の上に置く' do
+        latex = convert_with_settings("![f:図](a.png)\n", 'latex', 'figure_position' => 'top')
+        expect(latex.index('図1 図')).to be < latex.index('\\includegraphics')
+      end
+
+      it '表のキャプションは、既定では表の上（top）に置く' do
+        latex = convert_with_pandoc("![t:実験結果]\n#{table}", 'latex')
+        expect(latex).not_to include('\\caption')
+        expect(latex.index('表1 実験結果')).to be < latex.index('\\begin{longtable}')
+        expect(latex).to include('\\nopagebreak')
+      end
+
+      it 'table_position が bottom なら、表のキャプションを表の下に置く' do
+        latex = convert_with_settings("![t:実験結果]\n#{table}", 'latex', 'table_position' => 'bottom')
+        expect(latex.index('\\end{longtable}')).to be < latex.index('表1 実験結果')
+      end
+
+      it '画像の属性（width）が \\includegraphics に渡る' do
+        latex = convert_with_pandoc("![f:図](a.png){width=50%}\n", 'latex')
+        expect(latex).to match(/\\includegraphics\[[^\]]*width=0\.5\\textwidth/)
+      end
+    end
+
+    describe '想定外の入力' do
+      it '図の行に画像以外の文字があれば、警告して番号を付けず、内容は残す' do
+        markdown = Reportmd::Preprocessor.new("![f:図](a.png) 説明\n").call.text
+        out, err, status = Open3.capture3('pandoc', '-f', 'markdown-raw_html-raw_tex',
+                                          "--lua-filter=#{filter_path}", '-t', 'html', stdin_data: markdown)
+        expect(status.success?).to be(true)
+        expect(err).to include('warning')
+        expect(out).to include('説明')
+        expect(out).not_to include('図1')
+      end
     end
   end
 end

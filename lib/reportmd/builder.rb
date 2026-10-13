@@ -24,6 +24,7 @@ module Reportmd
     # 行送りは、文字サイズのこの倍率を標準とする（LaTeX の標準に近い値）
     BASELINE_RATIO = 1.2
     PANDOC_READER = 'markdown-raw_html-raw_tex'
+    CAPTION_KEYS = %w[figure_label table_label figure_position table_position].freeze
     PANDOC_ERROR_LINES = 25
 
     Result = Struct.new(:output_path, :warnings, :tool_output, :temp_dir)
@@ -116,13 +117,16 @@ module Reportmd
       paths
     end
 
-    # 文書のメタデータ。空の項目は渡さない。
+    # 文書のメタデータ。title と author は、空の項目を渡さない。
     # （本文中の YAML フロントマターの値が、これより優先される）
+    # reportmd は、filter.lua が図表のキャプションの組版に使う設定。
     def metadata
-      %w[title author].each_with_object({}) do |key, meta|
+      meta = %w[title author].each_with_object({}) do |key, result|
         value = @config.dig('document', key)
-        meta[key] = value unless value.to_s.strip.empty?
+        result[key] = value unless value.to_s.strip.empty?
       end
+      meta['reportmd'] = CAPTION_KEYS.to_h { |key| [key, @config.dig('caption', key)] }
+      meta
     end
 
     def render_preamble

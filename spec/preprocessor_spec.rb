@@ -390,4 +390,149 @@ RSpec.describe Reportmd::Preprocessor do
         .to eq("# はじめに #{NUM}\n\n::: {.reportmd-pagebreak}\n:::\n\n本文\n")
     end
   end
+
+  describe '図（![f:...]）' do
+    FIGURE = '::: {.reportmd-figure}'
+
+    it '![f:タイトル](画像) を、図のブロックに変換し、画像の代替テキストをタイトルにする' do
+      expect(convert("![f:システム構成図](images/a.png)\n"))
+        .to eq("#{FIGURE}\n![システム構成図](images/a.png)\n:::\n")
+    end
+
+    it '画像の属性（{width=50%} など）はそのまま残す' do
+      expect(convert("![f:図](a.png){width=50%}\n"))
+        .to eq("#{FIGURE}\n![図](a.png){width=50%}\n:::\n")
+    end
+
+    it 'タイトルが空（![f] / ![f:]）なら、代替テキストを空にする' do
+      expect(convert("![f](a.png)\n\n![f:](b.png)\n"))
+        .to eq("#{FIGURE}\n![](a.png)\n:::\n\n#{FIGURE}\n![](b.png)\n:::\n")
+    end
+
+    it 'タイトルの中のインライン書式やコロンは、そのまま渡す' do
+      expect(convert("![f:**太字**と$x^2$、比率 1:2](a.png)\n"))
+        .to eq("#{FIGURE}\n![**太字**と$x^2$、比率 1:2](a.png)\n:::\n")
+    end
+
+    it '前後に空行がなくても、空行を補って変換する' do
+      expect(convert("本文\n![f:図](a.png)\n続き\n"))
+        .to eq("本文\n\n#{FIGURE}\n![図](a.png)\n:::\n\n続き\n")
+    end
+
+    it '行末の空白は取り除く' do
+      expect(convert("![f:図](a.png)  \n")).to eq("#{FIGURE}\n![図](a.png)\n:::\n")
+    end
+
+    it '画像のパスがなければ、行番号つきでエラーにする' do
+      expect { run("本文\n\n![f:パスなし]\n") }.to raise_error(Reportmd::PreprocessError) { |e|
+        expect(e.line).to eq(3)
+        expect(e.message).to include('画像のパス')
+      }
+    end
+
+    it '全角コロンは図表として扱わず、警告してそのまま通す' do
+      result = run("![f：全角](a.png)\n")
+      expect(result.text).to eq("![f：全角](a.png)\n")
+      expect(result.warnings.map(&:line)).to eq([1])
+      expect(result.warnings.first.message).to include('半角コロン')
+    end
+
+    it '通常の画像（f: で始まらない）や、行の途中・リスト・引用の中の ![f: は変換しない' do
+      source = "![図](a.png)\n\n本文 ![f:行中](a.png)\n\n- ![f:リスト](a.png)\n\n> ![f:引用](a.png)\n\n![fig:x](a.png)\n"
+      result = run(source)
+      expect(result.text).to eq(source)
+      expect(result.warnings).to eq([])
+    end
+
+    it 'コードブロック・数式ブロック・フロントマター内の記法は変換しない' do
+      source = "```\n![f:図](a.png)\n![t:表]\n```\n\n$$\n![f:図](a.png)\n$$\n"
+      expect(convert(source)).to eq(source)
+      front = "---\ntitle: a\n![f:図](a.png)\n---\n"
+      expect(convert(front)).to eq(front)
+    end
+
+    it '右揃えのブロックの直後の図も、正しく出力する' do
+      expect(convert("--> 右\n![f:図](a.png)\n"))
+        .to eq("::: {.reportmd-right}\n右\n:::\n\n#{FIGURE}\n![図](a.png)\n:::\n")
+    end
+  end
+
+  describe '表の見出し（![t:...]）' do
+    CAPTION = '::: {.reportmd-table-caption}'
+    TABLE = "| 条件 | 結果 |\n|---|---|\n| A | 10 |\n"
+
+    it '![t:タイトル] を、表の見出しのブロックに変換し、表はそのまま通す' do
+      expect(convert("![t:実験結果]\n#{TABLE}"))
+        .to eq("#{CAPTION}\n実験結果\n:::\n\n#{TABLE}")
+    end
+
+    it '見出し行と表の間に、空行が1つあってもよい' do
+      expect(convert("![t:実験結果]\n\n#{TABLE}"))
+        .to eq("#{CAPTION}\n実験結果\n:::\n\n#{TABLE}")
+    end
+
+    it 'タイトルが空（![t] / ![t:]）なら、中身のない見出しブロックにする' do
+      expect(convert("![t]\n#{TABLE}\n![t:]\n#{TABLE}"))
+        .to eq("#{CAPTION}\n:::\n\n#{TABLE}\n#{CAPTION}\n:::\n\n#{TABLE}")
+    end
+
+    it 'タイトルの中のインライン書式は、そのまま渡す' do
+      expect(convert("![t:**太字**と$x^2$]\n#{TABLE}"))
+        .to eq("#{CAPTION}\n**太字**と$x^2$\n:::\n\n#{TABLE}")
+    end
+
+    it '行末の空白があっても、見出しとして扱う' do
+      expect(convert("![t:実験結果]  \n#{TABLE}"))
+        .to eq("#{CAPTION}\n実験結果\n:::\n\n#{TABLE}")
+    end
+
+    it '先頭の | がないパイプ表の前でも使える' do
+      table = "条件 | 結果\n-----|-----\nA | 10\n"
+      expect(convert("![t:表]\n#{table}")).to eq("#{CAPTION}\n表\n:::\n\n#{table}")
+    end
+
+    it 'グリッド表の前でも使える' do
+      table = "+---+---+\n| a | b |\n+---+---+\n"
+      expect(convert("![t:表]\n#{table}")).to eq("#{CAPTION}\n表\n:::\n\n#{table}")
+    end
+
+    it '単純な表（ハイフンの区切り行）の前でも使える' do
+      table = "条件  結果\n----  ----\nA     10\n"
+      expect(convert("![t:表]\n#{table}")).to eq("#{CAPTION}\n表\n:::\n\n#{table}")
+    end
+
+    it '直後に表がなければ、見出し行の行番号つきでエラーにする' do
+      expect { run("本文\n\n![t:なし]\n\n本文\n") }.to raise_error(Reportmd::PreprocessError) { |e|
+        expect(e.line).to eq(3)
+        expect(e.message).to include('直後に表がありません')
+      }
+    end
+
+    it '空行が2つ以上あれば、エラーにする' do
+      expect { run("![t:x]\n\n\n#{TABLE}") }
+        .to raise_error(Reportmd::PreprocessError, /直後に表がありません/)
+    end
+
+    it 'ファイルの末尾にある見出し行は、エラーにする' do
+      expect { run("![t:x]") }.to raise_error(Reportmd::PreprocessError, /直後に表がありません/)
+    end
+
+    it '後ろに (...) がある行は、表の見出しではないのでエラーにして、図の記法を案内する' do
+      expect { run("![t:x](a.png)\n") }.to raise_error(Reportmd::PreprocessError) { |e|
+        expect(e.line).to eq(1)
+        expect(e.message).to include('![f:')
+      }
+    end
+
+    it '全角コロンは表の見出しとして扱わず、警告してそのまま通す' do
+      result = run("![t：全角]\n#{TABLE}")
+      expect(result.text).to eq("![t：全角]\n#{TABLE}")
+      expect(result.warnings.map(&:line)).to eq([1])
+    end
+
+    it '図と表が混ざっていても、それぞれ変換する' do
+      expect(convert("![f:図](a.png)\n\n![t:表]\n#{TABLE}"))
+        .to eq("#{FIGURE}\n![図](a.png)\n:::\n\n#{CAPTION}\n表\n:::\n\n#{TABLE}")
+    end
+  end
 end

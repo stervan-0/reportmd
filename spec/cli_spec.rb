@@ -1,8 +1,10 @@
 # frozen_string_literal: true
 
+require 'base64'
 require 'fileutils'
 require 'stringio'
 require 'tmpdir'
+require 'zlib'
 require_relative '../lib/reportmd/cli'
 
 RSpec.describe Reportmd::CLI do
@@ -139,9 +141,9 @@ RSpec.describe Reportmd::CLI do
       expect(err).to include('NoSuchFontXYZ')
     end
 
-    it '未対応の設定は警告するが、PDF は出力する' do
+    it '未知の設定キーは警告するが、PDF は出力する' do
       input = write_file('report.rmd', source)
-      write_file('setting.json', '{ "caption": { "figure_label": "Fig." } }')
+      write_file('setting.json', '{ "unknown_key": 1 }')
       code, _out, err = run_cli('build', input)
       expect(code).to eq(0)
       expect(err).to include('warning')
@@ -338,6 +340,151 @@ RSpec.describe Reportmd::CLI do
       expect(code).to eq(0)
       expect(err).to include("#{input}:3: warning: 見出しレベルが飛んでいます")
       expect(File.exist?(File.join(@dir, 'h.pdf'))).to be(true)
+    end
+  end
+
+  describe '図表の記法のエラー' do
+    it '直後に表がない ![t:...] は、ファイル名と行番号つきでエラーにして 1 を返す' do
+      input = write_file('a.rmd', "本文\n\n![t:なし]\n\n本文\n")
+      code, _out, err = run_cli('build', input)
+      expect(code).to eq(1)
+      expect(err).to include("#{input}:3: error: ![t:...] の直後に表がありません")
+    end
+
+    it '画像のパスがない ![f:...] は、行番号つきでエラーにして 1 を返す' do
+      input = write_file('a.rmd', "![f:パスなし]\n")
+      code, _out, err = run_cli('build', input)
+      expect(code).to eq(1)
+      expect(err).to include("#{input}:1: error: 図には画像のパスが必要です")
+    end
+  end
+
+  describe 'PDF の生成（図表の番号とキャプション）' do
+    PNG_1PX = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+    PAGE_WIDTH = 595.276 unless defined?(PAGE_WIDTH)
+    TEXT_WIDTH_PT = 453.544 # A4 の幅から左右の余白 25mm を引いた本文幅
+
+    before do
+      skip 'PDF 生成に必要なツールやフォントがありません' unless pdf_build_ready?
+      skip 'pdftotext がありません' unless system('pdftotext', '-v', out: File::NULL, err: File::NULL)
+      File.binwrite(File.join(@dir, 'img.png'), Base64.decode64(PNG_1PX))
+    end
+
+    # PDF 内の単語の { text:, x_min:, x_max:, y_min:, y_max: } を、出現順に取り出す
+    def pdf_words(pdf)
+      html = IO.popen(['pdftotext', '-bbox', pdf, '-'], &:read).force_encoding('UTF-8')
+      html.scan(%r{xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="([\d.]+)">(.*?)</word>}m)
+          .map { |x0, y0, x1, y1, text| { text: text, x_min: x0.to_f, y_min: y0.to_f, x_max: x1.to_f, y_max: y1.to_f } }
+    end
+
+    def pdf_word(words, text)
+      words.find { |w| w[:text] == text } || raise("PDF に #{text.inspect} が見つかりません")
+    end
+
+    def build_pdf(rmd, setting: nil)
+      write_file('setting.json', setting) if setting
+      input = write_file('fig.rmd', rmd)
+      code, _out, err = run_cli('build', input)
+      expect(code).to eq(0), err
+      File.join(@dir, 'fig.pdf')
+    end
+
+    let(:table) { "| 条件 | 結果 |\n|---|---|\n| A | 10 |\n" }
+    let(:figure_doc) { "前の段落です。\n\n![f:システム構成図](img.png){width=40%}\n\n次の段落です。\n" }
+
+    it '図と表は別々に、出現順に 図1、図2、表1、表2 と採番され、タイトルが付く' do
+      rmd = "![f:一つ目](img.png){width=20%}\n\n![t:表の一つ目]\n#{table}\n" \
+            "![f:二つ目](img.png){width=20%}\n\n![t:表の二つ目]\n#{table}"
+      text = `pdftotext -layout #{build_pdf(rmd)} -`.force_encoding('UTF-8')
+      expect(text).to match(/図\s*1\s*一つ目/)
+      expect(text).to match(/図\s*2\s*二つ目/)
+      expect(text).to match(/表\s*1\s*表の一つ目/)
+      expect(text).to match(/表\s*2\s*表の二つ目/)
+    end
+
+    it 'タイトルが空なら、番号だけが表示される' do
+      rmd = "![f](img.png){width=20%}\n\n![t]\n#{table}"
+      text = `pdftotext -layout #{build_pdf(rmd)} -`.force_encoding('UTF-8')
+      expect(text).to match(/図\s*1\s*$/)
+      expect(text).to match(/表\s*1\s*$/)
+    end
+
+    it '図のキャプションは、既定では画像の下に、ページの中央に置かれる' do
+      words = pdf_words(build_pdf(figure_doc))
+      before = pdf_word(words, '前の段落です。')
+      caption = pdf_word(words, 'システム構成図')
+      after = pdf_word(words, '次の段落です。')
+
+      image_height = 0.4 * TEXT_WIDTH_PT
+      expect(caption[:y_min] - before[:y_max]).to be > image_height
+      expect(after[:y_min] - caption[:y_max]).to be < 30
+
+      line = words.select { |w| (w[:y_min] - caption[:y_min]).abs < 1 }
+      center = (line.map { |w| w[:x_min] }.min + line.map { |w| w[:x_max] }.max) / 2
+      expect(center).to be_within(1.5).of(PAGE_WIDTH / 2)
+    end
+
+    it 'figure_position を top にすると、図のキャプションが画像の上に置かれる' do
+      words = pdf_words(build_pdf(figure_doc, setting: '{ "caption": { "figure_position": "top" } }'))
+      before = pdf_word(words, '前の段落です。')
+      caption = pdf_word(words, 'システム構成図')
+      after = pdf_word(words, '次の段落です。')
+
+      expect(caption[:y_min] - before[:y_max]).to be < 40
+      expect(after[:y_min] - caption[:y_max]).to be > 0.4 * TEXT_WIDTH_PT
+    end
+
+    it '表のキャプションは、既定では表の上に置かれる' do
+      words = pdf_words(build_pdf("![t:実験結果]\n#{table}"))
+      expect(pdf_word(words, '実験結果')[:y_max]).to be < pdf_word(words, '条件')[:y_min]
+    end
+
+    it 'table_position を bottom にすると、表のキャプションが表の下に置かれる' do
+      words = pdf_words(build_pdf("![t:実験結果]\n#{table}", setting: '{ "caption": { "table_position": "bottom" } }'))
+      expect(pdf_word(words, '実験結果')[:y_min]).to be > pdf_word(words, '10')[:y_max]
+    end
+
+    it '設定でラベルを変えられる' do
+      setting = '{ "caption": { "figure_label": "Fig.", "table_label": "Table" } }'
+      rmd = "![f:図の例](img.png){width=20%}\n\n![t:表の例]\n#{table}"
+      text = `pdftotext -layout #{build_pdf(rmd, setting: setting)} -`.force_encoding('UTF-8')
+      expect(text).to match(/Fig\.\s*1\s*図の例/)
+      expect(text).to match(/Table\s*1\s*表の例/)
+    end
+
+    it '全角コロンの記法は、図表として扱わず、警告を出す（PDF は出力する）' do
+      input = write_file('fig.rmd', "![f：全角](img.png){width=20%}\n")
+      code, _out, err = run_cli('build', input)
+      expect(code).to eq(0)
+      expect(err).to include("#{input}:1: warning:")
+      expect(`pdftotext -layout #{File.join(@dir, 'fig.pdf')} -`.force_encoding('UTF-8')).not_to match(/図\s*1/)
+    end
+
+    # 幅 width、高さ height の、真っ白な PNG（グレースケール 8bit）を作る
+    def blank_png(width, height)
+      chunk = lambda do |type, data|
+        [data.bytesize].pack('N') + type + data + [Zlib.crc32(type + data)].pack('N')
+      end
+      raw = ("\x00".b + ("\xFF".b * width)) * height
+      "\x89PNG\r\n\x1a\n".b +
+        chunk.call('IHDR', [width, height, 8, 0, 0, 0, 0].pack('NNCCCCC')) +
+        chunk.call('IDAT', Zlib::Deflate.deflate(raw)) +
+        chunk.call('IEND', ''.b)
+    end
+
+    it '幅を指定していない大きな画像は、本文幅に収まるよう縮小される' do
+      skip 'pdfimages がありません' unless system('pdfimages', '-v', out: File::NULL, err: File::NULL)
+      File.binwrite(File.join(@dir, 'big.png'), blank_png(2000, 40))
+      pdf = build_pdf("![f:大きい図](big.png)\n\n本文\n")
+
+      # pdfimages -list の x-ppi 列から、PDF 上の画像の幅（pt）を求める
+      row = `pdfimages -list #{pdf}`.lines.grep(/\A\s*1\s+0\s+image/).first
+      columns = row.split
+      width_px = columns[3].to_f
+      ppi = columns[12].to_f
+      displayed_pt = width_px / ppi * 72
+      expect(displayed_pt).to be <= TEXT_WIDTH_PT + 1
+      expect(displayed_pt).to be > TEXT_WIDTH_PT - 5 # 本文幅いっぱいまで縮小される
     end
   end
 end
