@@ -324,7 +324,7 @@ module Reportmd
     # --- 図と表 ---------------------------------------------------------
 
     # 図・表の行なら、Pandoc のブロック（行の配列）を返す。違えば nil。
-    #   ![f:タイトル](画像)  ->  ::: {.reportmd-figure}
+    #   ![f:タイトル](画像)  ->  ::: {.reportmd-figure line="行番号"}
     #                            ![タイトル](画像)
     #                            :::
     #   ![t:タイトル]        ->  ::: {.reportmd-table-caption}
@@ -350,7 +350,8 @@ module Reportmd
       end
 
       image = line.sub(/\A!\[f:?/, '![').rstrip
-      ["::: {.#{FIGURE_CLASS}}", image, ':::']
+      # line は、filter.lua が警告に元の行番号を表示するために使う
+      ["::: {.#{FIGURE_CLASS} line=\"#{lineno}\"}", image, ':::']
     end
 
     def table_caption_block(line, lineno)

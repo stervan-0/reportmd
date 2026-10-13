@@ -11,6 +11,11 @@ RSpec.describe Reportmd::Preprocessor do
     run(source).text
   end
 
+  # 図のブロックの開始行。line は元の行番号（filter.lua の警告に使う）
+  def figure(line = 1)
+    "::: {.reportmd-figure line=\"#{line}\"}"
+  end
+
   PAGEBREAK = "::: {.reportmd-pagebreak}\n:::"
 
   describe '前準備' do
@@ -413,35 +418,34 @@ RSpec.describe Reportmd::Preprocessor do
   end
 
   describe '図（![f:...]）' do
-    FIGURE = '::: {.reportmd-figure}'
 
     it '![f:タイトル](画像) を、図のブロックに変換し、画像の代替テキストをタイトルにする' do
       expect(convert("![f:システム構成図](images/a.png)\n"))
-        .to eq("#{FIGURE}\n![システム構成図](images/a.png)\n:::\n")
+        .to eq("#{figure}\n![システム構成図](images/a.png)\n:::\n")
     end
 
     it '画像の属性（{width=50%} など）はそのまま残す' do
       expect(convert("![f:図](a.png){width=50%}\n"))
-        .to eq("#{FIGURE}\n![図](a.png){width=50%}\n:::\n")
+        .to eq("#{figure}\n![図](a.png){width=50%}\n:::\n")
     end
 
     it 'タイトルが空（![f] / ![f:]）なら、代替テキストを空にする' do
       expect(convert("![f](a.png)\n\n![f:](b.png)\n"))
-        .to eq("#{FIGURE}\n![](a.png)\n:::\n\n#{FIGURE}\n![](b.png)\n:::\n")
+        .to eq("#{figure}\n![](a.png)\n:::\n\n#{figure(3)}\n![](b.png)\n:::\n")
     end
 
     it 'タイトルの中のインライン書式やコロンは、そのまま渡す' do
       expect(convert("![f:**太字**と$x^2$、比率 1:2](a.png)\n"))
-        .to eq("#{FIGURE}\n![**太字**と$x^2$、比率 1:2](a.png)\n:::\n")
+        .to eq("#{figure}\n![**太字**と$x^2$、比率 1:2](a.png)\n:::\n")
     end
 
     it '前後に空行がなくても、空行を補って変換する' do
       expect(convert("本文\n![f:図](a.png)\n続き\n"))
-        .to eq("本文\n\n#{FIGURE}\n![図](a.png)\n:::\n\n続き\n")
+        .to eq("本文\n\n#{figure(2)}\n![図](a.png)\n:::\n\n続き\n")
     end
 
     it '行末の空白は取り除く' do
-      expect(convert("![f:図](a.png)  \n")).to eq("#{FIGURE}\n![図](a.png)\n:::\n")
+      expect(convert("![f:図](a.png)  \n")).to eq("#{figure}\n![図](a.png)\n:::\n")
     end
 
     it '画像のパスがなければ、行番号つきでエラーにする' do
@@ -474,7 +478,7 @@ RSpec.describe Reportmd::Preprocessor do
 
     it '右揃えのブロックの直後の図も、正しく出力する' do
       expect(convert("--> 右\n![f:図](a.png)\n"))
-        .to eq("::: {.reportmd-right}\n右\n:::\n\n#{FIGURE}\n![図](a.png)\n:::\n")
+        .to eq("::: {.reportmd-right}\n右\n:::\n\n#{figure(2)}\n![図](a.png)\n:::\n")
     end
   end
 
@@ -553,7 +557,7 @@ RSpec.describe Reportmd::Preprocessor do
 
     it '図と表が混ざっていても、それぞれ変換する' do
       expect(convert("![f:図](a.png)\n\n![t:表]\n#{TABLE}"))
-        .to eq("#{FIGURE}\n![図](a.png)\n:::\n\n#{CAPTION}\n表\n:::\n\n#{TABLE}")
+        .to eq("#{figure}\n![図](a.png)\n:::\n\n#{CAPTION}\n表\n:::\n\n#{TABLE}")
     end
   end
 

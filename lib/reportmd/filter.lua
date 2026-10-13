@@ -18,6 +18,7 @@
 -- 設定（builder.rb が metadata の reportmd に入れて渡す）:
 --   figure_label / table_label       図・表のラベル文字列（既定：図・表）
 --   figure_position / table_position キャプションの位置 top / bottom
+--   source                           警告に表示する入力ファイル名
 
 local function has_class(el, name)
   for _, class in ipairs(el.classes) do
@@ -28,8 +29,17 @@ local function has_class(el, name)
   return false
 end
 
-local function warn(message)
-  io.stderr:write('reportmd(filter): warning: ' .. message .. '\n')
+-- 警告に表示する入力ファイル名（builder.rb が metadata の reportmd.source に入れて渡す）
+local source_name = nil
+
+-- 仕様 9.3 の形式「ファイル名:行番号: warning: メッセージ」で表示する。
+-- line は前処理が Div の属性に入れた、元の入力ファイルの行番号。
+local function warn(message, line)
+  local location = source_name or 'reportmd'
+  if line ~= nil and line ~= '' then
+    location = location .. ':' .. line
+  end
+  io.stderr:write(location .. ': warning: ' .. message .. '\n')
 end
 
 -- ---------------------------------------------------------------------
@@ -47,6 +57,9 @@ local function read_settings(meta)
   local given = meta.reportmd
   if given == nil then
     return
+  end
+  if given.source ~= nil then
+    source_name = pandoc.utils.stringify(given.source)
   end
   for key, _ in pairs(settings) do
     if given[key] ~= nil then
@@ -220,7 +233,7 @@ end
 local function convert_figure(div)
   local image, title = figure_parts(div)
   if image == nil then
-    warn('図の行には、画像だけを書いてください（番号は付けません）')
+    warn('図の行には、画像だけを書いてください（番号は付けません）', div.attributes['line'])
     return div.content
   end
 

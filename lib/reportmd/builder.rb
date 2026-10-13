@@ -10,7 +10,16 @@ require_relative 'config'
 
 module Reportmd
   # PDF 生成の途中で起きたエラー（外部ツールがない、PDF 生成に失敗した、など）。
-  class BuildError < StandardError; end
+  # file にはエラーの原因のファイル（フォントなら設定ファイル）が入る。
+  # 省略した場合は、入力ファイルの問題として表示する。
+  class BuildError < StandardError
+    attr_reader :file
+
+    def initialize(message, file: nil)
+      super(message)
+      @file = file
+    end
+  end
 
   # .rmd を読み、前処理 → Pandoc → XeLaTeX の順に実行して PDF を作る。
   class Builder
@@ -30,6 +39,7 @@ module Reportmd
     Result = Struct.new(:output_path, :warnings, :tool_output, :temp_dir)
 
     def initialize(input_path:, output_path:, config:, keep_temp: false)
+      @input_name = input_path # 警告に表示する名前（指定されたとおり）
       @input_path = File.expand_path(input_path)
       @output_path = File.expand_path(output_path)
       @config = config
@@ -79,9 +89,11 @@ module Reportmd
         name = @config.dig(*path)
         next if families.include?(name.downcase)
 
-        raise BuildError,
-              "フォント「#{name}」が見つかりません（設定: #{path.join('.')}）。" \
-              "`fc-list : family` で使えるフォント名を確認してください"
+        raise BuildError.new(
+          "フォント「#{name}」が見つかりません（設定: #{path.join('.')}）。" \
+          '`fc-list : family` で使えるフォント名を確認してください',
+          file: @config.source || Config::DEFAULT_PATH
+        )
       end
     end
 
@@ -126,6 +138,7 @@ module Reportmd
         result[key] = value unless value.to_s.strip.empty?
       end
       meta['reportmd'] = CAPTION_KEYS.to_h { |key| [key, @config.dig('caption', key)] }
+      meta['reportmd']['source'] = @input_name # filter.lua の警告に表示するファイル名
       meta
     end
 

@@ -86,10 +86,33 @@ RSpec.describe Reportmd::CLI do
 
     it '不正な設定は、項目名つきのエラーにして 1 を返す' do
       input = write_file('a.rmd', "本文\n")
-      write_file('setting.json', '{ "text": { "font_size": "99pt" } }')
+      setting = write_file('setting.json', '{ "text": { "font_size": "99pt" } }')
       code, _out, err = run_cli('build', input)
       expect(code).to eq(1)
-      expect(err).to include('text.font_size')
+      expect(err).to start_with("#{setting}: error: 設定 text.font_size の値が不正です")
+    end
+
+    it 'JSON の構文エラーは、設定ファイル名と行番号つきで表示する' do
+      input = write_file('a.rmd', "本文\n")
+      setting = write_file('setting.json', "{\n  \"text\": {\n    \"font_size\": \"12pt\",\n  }\n}\n")
+      code, _out, err = run_cli('build', input)
+      expect(code).to eq(1)
+      expect(err).to start_with("#{setting}:4: error: 設定ファイルがJSONとして不正です")
+    end
+
+    it '-c で指定した設定ファイルがなければ、そのファイル名つきで表示する' do
+      input = write_file('a.rmd', "本文\n")
+      missing = File.join(@dir, 'none.json')
+      code, _out, err = run_cli('build', input, '-c', missing)
+      expect(code).to eq(1)
+      expect(err).to start_with("#{missing}: error: 設定ファイルが見つかりません")
+    end
+
+    it '入力ファイルがなければ、そのファイル名つきで表示する' do
+      missing = File.join(@dir, 'none.rmd')
+      code, _out, err = run_cli('build', missing)
+      expect(code).to eq(1)
+      expect(err).to start_with("#{missing}: error: 入力ファイルが見つかりません")
     end
 
     it '独自構文のエラーは、ファイル名と行番号つきで表示する' do
@@ -135,18 +158,19 @@ RSpec.describe Reportmd::CLI do
 
     it '存在しないフォントを指定したら、フォント名を示して 1 を返す' do
       input = write_file('report.rmd', source)
-      write_file('setting.json', '{ "font": { "main": "NoSuchFontXYZ" } }')
+      setting = write_file('setting.json', '{ "font": { "main": "NoSuchFontXYZ" } }')
       code, _out, err = run_cli('build', input)
       expect(code).to eq(1)
-      expect(err).to include('NoSuchFontXYZ')
+      # フォントは設定ファイルの問題なので、設定ファイル名を示す
+      expect(err).to start_with("#{setting}: error: フォント「NoSuchFontXYZ」が見つかりません")
     end
 
     it '未知の設定キーは警告するが、PDF は出力する' do
       input = write_file('report.rmd', source)
-      write_file('setting.json', '{ "unknown_key": 1 }')
+      setting = write_file('setting.json', '{ "unknown_key": 1 }')
       code, _out, err = run_cli('build', input)
       expect(code).to eq(0)
-      expect(err).to include('warning')
+      expect(err).to include("#{setting}: warning: 未知の設定キーを無視します: unknown_key")
       expect(File.exist?(File.join(@dir, 'report.pdf'))).to be(true)
     end
 

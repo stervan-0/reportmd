@@ -60,23 +60,32 @@ module Reportmd
       return options if options.is_a?(Integer)
 
       input = options[:input]
-      return fail_with("#{input}: error: 入力ファイルが見つかりません") unless File.file?(input)
+      return fail_with(diagnostic(input, nil, 'error', '入力ファイルが見つかりません')) unless File.file?(input)
 
       output = options[:output] || default_output_path(input)
       config = Config.load(explicit_path: options[:config], input_path: input)
-      config.warnings.each { |message| @stderr.puts "#{config.source || '設定'}: warning: #{message}" }
+      config.warnings.each { |message| @stderr.puts diagnostic(config.source, nil, 'warning', message) }
 
       result = Builder.new(input_path: input, output_path: output, config: config,
                            keep_temp: options[:keep_temp]).call
       report_success(input, result)
     rescue PreprocessError => e
-      fail_with("#{input}:#{e.line ? "#{e.line}:" : ''} error: #{e.message}")
-    rescue ConfigError, BuildError => e
-      fail_with("error: #{e.message}")
+      fail_with(diagnostic(input, e.line, 'error', e.message))
+    rescue ConfigError => e
+      fail_with(diagnostic(e.file, e.line, 'error', e.message))
+    rescue BuildError => e
+      fail_with(diagnostic(e.file || input, nil, 'error', e.message))
+    end
+
+    # エラー・警告の表示形式（仕様 9.3）: 「ファイル名:行番号: 種類: メッセージ」。
+    # 行番号がわからなければ「ファイル名: 種類: メッセージ」にする。
+    def diagnostic(file, line, kind, message)
+      location = [file, line].compact.join(':')
+      location.empty? ? "#{kind}: #{message}" : "#{location}: #{kind}: #{message}"
     end
 
     def report_success(input, result)
-      result.warnings.each { |w| @stderr.puts "#{input}:#{w.line}: warning: #{w.message}" }
+      result.warnings.each { |w| @stderr.puts diagnostic(input, w.line, 'warning', w.message) }
       @stderr.puts result.tool_output unless result.tool_output.to_s.empty?
       @stderr.puts "一時ファイルを残しました: #{result.temp_dir}" if result.temp_dir
       @stdout.puts "#{result.output_path} を出力しました"

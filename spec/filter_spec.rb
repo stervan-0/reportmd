@@ -246,11 +246,16 @@ RSpec.describe 'filter.lua' do
 
     describe '想定外の入力' do
       it '図の行に画像以外の文字があれば、警告して番号を付けず、内容は残す' do
-        markdown = Reportmd::Preprocessor.new("![f:図](a.png) 説明\n").call.text
-        out, err, status = Open3.capture3('pandoc', '-f', 'markdown-raw_html-raw_tex',
-                                          "--lua-filter=#{filter_path}", '-t', 'html', stdin_data: markdown)
+        markdown = Reportmd::Preprocessor.new("本文\n\n![f:図](a.png) 説明\n").call.text
+        out, err, status = Tempfile.create(['settings', '.json']) do |file|
+          file.write(JSON.generate('reportmd' => { 'source' => 'a.rmd' }))
+          file.flush
+          Open3.capture3('pandoc', '-f', 'markdown-raw_html-raw_tex', "--lua-filter=#{filter_path}",
+                         "--metadata-file=#{file.path}", '-t', 'html', stdin_data: markdown)
+        end
         expect(status.success?).to be(true)
-        expect(err).to include('warning')
+        # 仕様 9.3 の形式（ファイル名:行番号: 種類: メッセージ）。行番号は元の入力ファイルのもの
+        expect(err).to include('a.rmd:3: warning: 図の行には、画像だけを書いてください')
         expect(out).to include('説明')
         expect(out).not_to include('図1')
       end

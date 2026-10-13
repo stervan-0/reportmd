@@ -83,7 +83,27 @@ RSpec.describe Reportmd::Config do
     it 'JSONとして不正なファイルはエラーにする' do
       path = write_json(@dir, 's.json', '{ "text": { "font_size": "12pt" } "x": 1 }')
       expect { described_class.load(explicit_path: path) }
-        .to raise_error(Reportmd::ConfigError, /JSON/)
+        .to raise_error(Reportmd::ConfigError, /JSON/) { |e| expect(e.file).to eq(path) }
+    end
+
+    {
+      'カンマの抜け' => ["{\n  \"text\": {\n    \"font_size\": \"12pt\"\n    \"line_spacing\": 1.5\n  }\n}", 4],
+      '末尾の余分なカンマ' => ["{\n  \"a\": 1,\n  \"b\": 2,\n}\n", 4],
+      'クォートのないキー' => ["{\n  \"a\": {\n    b: 1\n  }\n}", 3],
+      '閉じ括弧の抜け' => ["{\n  \"a\": [1, 2\n}\n", 3],
+      '後ろの余分な文字' => ["{\n  \"a\": 1\n}\n}\n", 4]
+    }.each do |name, (text, line)|
+      it "JSON の構文エラー（#{name}）は、崩れた位置の行番号を示す" do
+        path = write_json(@dir, 's.json', text)
+        expect { described_class.load(explicit_path: path) }
+          .to raise_error(Reportmd::ConfigError) { |e| expect(e.line).to eq(line) }
+      end
+    end
+
+    it '値が不正なときは、設定ファイルのパスを示す' do
+      path = write_json(@dir, 's.json', { text: { font_size: '30pt' } })
+      expect { described_class.load(explicit_path: path) }
+        .to raise_error(Reportmd::ConfigError) { |e| expect(e.file).to eq(path) }
     end
 
     it '最上位がオブジェクトでなければエラーにする' do
