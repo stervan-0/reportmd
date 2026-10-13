@@ -29,6 +29,10 @@ RSpec.describe Reportmd::Config do
       expect(rules).to eq('top' => '0.8pt', 'header' => '1.2pt', 'bottom' => '0.8pt',
                           'rows' => false, 'vertical' => false, 'sides' => false)
     end
+
+    it '数式には既定で番号を付け、参照のラベルは「式」' do
+      expect(described_class.load.dig('equation')).to eq('numbering' => true, 'label' => '式')
+    end
   end
 
   describe '表の設定' do
@@ -101,7 +105,9 @@ RSpec.describe Reportmd::Config do
       '表の見出しの太字' => [{ table: { header: { bold: 'yes' } } }, /table\.header\.bold/],
       '表の見出しの揃え' => [{ table: { header: { align: 'middle' } } }, /table\.header\.align/],
       '罫線の太さ' => [{ table: { rules: { top: '1' } } }, /table\.rules\.top/],
-      '罫線に true' => [{ table: { rules: { vertical: true } } }, /table\.rules\.vertical/]
+      '罫線に true' => [{ table: { rules: { vertical: true } } }, /table\.rules\.vertical/],
+      '数式の番号の型' => [{ equation: { numbering: 'yes' } }, /equation\.numbering/],
+      '数式のラベルの型' => [{ equation: { label: 1 } }, /equation\.label/]
     }.each do |name, (data, pattern)|
       it "#{name}が不正ならエラーにし、項目名を示す" do
         path = write_json(@dir, 's.json', data)

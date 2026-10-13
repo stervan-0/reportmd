@@ -411,7 +411,7 @@ RSpec.describe 'filter.lua' do
                          "--metadata-file=#{file.path}", '-t', 'plain', stdin_data: markdown)
         end
         expect(status.success?).to be(true)
-        expect(err).to include('a.rmd: warning: 参照先の図表が見つかりません: @nothing')
+        expect(err).to include('a.rmd: warning: 参照先の図表・数式が見つかりません: @nothing')
         expect(out).to include('@nothing を参照。')
       end
 
@@ -425,6 +425,63 @@ RSpec.describe 'filter.lua' do
       it 'LaTeX でも置き換える' do
         latex = convert_with_pandoc("#{doc}@sys に示す。\n", 'latex')
         expect(latex).to include('図1 に示す。')
+      end
+    end
+
+    describe '数式の番号' do
+      let(:doc) do
+        "次の式\n$$\nK = \\frac{1}{2} m v^2 % 運動エネルギー\n$$ {#kinetic}\nとなる。\n\n" \
+          "$$ a + b $$ {-}\n\n$$ E = mc^2 $$ {#energy}\n\n"
+      end
+
+      it '独立した数式に、通し番号を \tag で付ける（番号なしの {-} は数えない）' do
+        latex = convert_with_pandoc(doc, 'latex')
+        expect(latex).to include("\\[\nK = \\frac{1}{2} m v^2 % 運動エネルギー\n\\tag{1}\\]")
+        expect(latex).to include('\[ a + b \]')
+        expect(latex).to include("\\[ E = mc^2\n\\tag{2}\\]")
+        expect(latex).not_to include('reportmd-equation')
+      end
+
+      it '数式の前後の文は、同じ段落のまま' do
+        latex = convert_with_pandoc(doc, 'latex')
+        expect(latex).to match(/次の式 \\\[.*\\tag\{1\}\\\] となる。/m)
+      end
+
+      it '@名前 を「式(番号)」に置き換え、ラベルは equation_label に従う' do
+        out = convert_with_settings("#{doc}@kineticと @energy\n", 'plain', {})
+        expect(out).to include('式(1)と 式(2)')
+        out = convert_with_settings("#{doc}@energy\n", 'plain', 'equation_label' => 'Eq.')
+        expect(out).to include('Eq.(2)')
+      end
+
+      it '番号は文書の順に付ける（強調の中や脚注の数式も数える）' do
+        rmd = "*強調 $$a$$* と $$b$$ 注[^1]\n$$c$$ {#c}\n\n[^1]: $$n$$\n\n@c\n"
+        latex = convert_with_pandoc(rmd, 'latex')
+        expect(latex.scan(/\\\[(\w)\n\s*\\tag\{(\d)\}/)).to eq([%w[a 1], %w[b 2], %w[n 3], %w[c 4]])
+      end
+
+      it '図表の番号とは別に数える' do
+        out = convert_with_settings("![f:図](a.png){#fig}\n\n#{doc}@fig @energy\n", 'plain', {})
+        expect(out).to include('図1 式(2)')
+      end
+
+      it 'equation_numbering が false なら番号を付けず、名前を付けた数式は警告する' do
+        latex = convert_with_settings(doc, 'latex', 'equation_numbering' => false)
+        expect(latex).not_to include('\tag')
+        markdown = Reportmd::Preprocessor.new(doc).call.text
+        _out, err, = Tempfile.create(['settings', '.json']) do |file|
+          file.write(JSON.generate('reportmd' => { 'source' => 'a.rmd', 'equation_numbering' => false }))
+          file.flush
+          Open3.capture3('pandoc', '-f', 'markdown-raw_html-raw_tex', "--lua-filter=#{filter_path}",
+                         "--metadata-file=#{file.path}", '-t', 'latex', stdin_data: markdown)
+        end
+        expect(err).to include('a.rmd:4: warning: 数式に番号を付けない設定')
+      end
+
+      it 'インラインの数式（$...$）には番号を付けない' do
+        latex = convert_with_pandoc("本文 $x^2$ の式\n", 'latex')
+        expect(latex).to include('\(x^2\)')
+        expect(latex).not_to include('\tag')
       end
     end
   end

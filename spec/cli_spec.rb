@@ -534,13 +534,25 @@ RSpec.describe Reportmd::CLI do
       expect(text).to match(/図\s*1\s*に示すように、結果は表\s*1\s*にまとめた。/)
     end
 
+    it '独立した数式の右端に (1) が付き、@名前 の参照が「式(1)」になる' do
+      rmd = "次の式\n$$\nE = mc^2\n$$ {#energy}\nを @energyとする。\n\n$$\nx\n$$ {-}\n\n$$ y $$\n"
+      pdf = build_pdf(rmd)
+      text = `pdftotext #{pdf} -`.force_encoding('UTF-8')
+      expect(text).to match(/を式\s*\(1\)\s*とする。/)
+      expect(text).to include('(2)')
+      expect(text).not_to include('(3)')
+      # 番号は本文の右端（A4・右余白 25mm なら、x = 約 524pt）に置かれる
+      tag = pdf_words(pdf).select { |w| w[:text] == '(1)' }.max_by { |w| w[:x_max] }
+      expect(tag[:x_max]).to be_within(3).of(595.28 - 70.87)
+    end
+
     it '参照先がない名前と、重複した名前は警告するが、PDF は出力する' do
       rmd = "@nothing を参照。\n\n![f:a](img.png){#dup width=20%}\n\n![f:b](img.png){#dup width=20%}\n"
       input = write_file('fig.rmd', rmd)
       code, _out, err = run_cli('build', input)
       expect(code).to eq(0)
-      expect(err).to include("#{input}:5: warning: 図表の名前 #dup は、3 行目でも使われています")
-      expect(err).to include("#{input}: warning: 参照先の図表が見つかりません: @nothing")
+      expect(err).to include("#{input}:5: warning: 図表・数式の名前 #dup は、3 行目でも使われています")
+      expect(err).to include("#{input}: warning: 参照先の図表・数式が見つかりません: @nothing")
     end
 
     # 幅 width、高さ height の、真っ白な PNG（グレースケール 8bit）を作る

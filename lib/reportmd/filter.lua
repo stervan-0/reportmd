@@ -10,7 +10,9 @@
 --   .reportmd-figure          ->  図（番号とキャプションを付ける）
 --   .reportmd-table-caption   ->  直後の表に、番号とキャプションを付ける
 --   表（LaTeX）               ->  tabular に組む（書式はプリアンブルの命令で決める）
---   @名前（引用）             ->  名前を付けた図表の「図1」「表2」
+--   独立した数式（$$）        ->  右端に通し番号 (1) を付ける（.reportmd-equation の目印で
+--                                 参照用の名前・番号なしを指定）
+--   @名前（引用）             ->  名前を付けた図表・数式の「図1」「表2」「式(1)」
 --   2 スペース始まりの段落   ->  字下げ 1 文字分（paragraph_indent の置き換え）
 --   見出し                    ->  #1〜#3（.reportmd-num）は番号付き、
 --                                 標準の #（クラスなし）は番号なしにする
@@ -22,6 +24,7 @@
 --   figure_position / table_position キャプションの位置 top / bottom
 --   source                           警告に表示する入力ファイル名
 --   table_width / table_header_align 表の幅（auto / full）と見出し行の揃え
+--   equation_numbering / equation_label 数式の番号の有無と、参照のラベル（既定：式）
 
 local function has_class(el, name)
   for _, class in ipairs(el.classes) do
@@ -56,6 +59,8 @@ local settings = {
   table_position = 'top',
   table_width = 'auto',          -- auto（内容に合わせる）/ full（本文幅いっぱい）
   table_header_align = 'center', -- center / left / right / column（列の揃えに従う）
+  equation_numbering = 'true',   -- false なら数式に番号を付けない
+  equation_label = '式',         -- 参照のラベル（@名前 -> 式(1)）
 }
 
 local function read_settings(meta)
@@ -625,7 +630,7 @@ local function convert_cite(cite)
     end
     local label, rest = resolve_label(citation.id)
     if label == nil then
-      warn('参照先の図表が見つかりません: @' .. citation.id .. '（{#' .. citation.id .. '} で名前を付けてください）')
+      warn('参照先の図表・数式が見つかりません: @' .. citation.id .. '（{#' .. citation.id .. '} で名前を付けてください）')
       result:insert(pandoc.Str('@' .. citation.id))
     else
       result:insert(pandoc.Str(label .. rest))
@@ -634,17 +639,106 @@ local function convert_cite(cite)
   return result
 end
 
--- 設定を読み、図表の名前と番号の対応を作る走査を先に行い、そのあとで変換の走査を行う。
+-- ---------------------------------------------------------------------
+-- 数式の番号（$$ 〜 $$ -> 右端に (1)）
+-- ---------------------------------------------------------------------
+--
+-- 独立した数式（DisplayMath）には、文書全体の通し番号を付ける。
+-- 前処理は、閉じの $$ の後ろの {#名前} / {-} を、数式の直後の空のスパン
+-- []{.reportmd-equation #名前 line="行番号"}（{-} なら .unnumbered）に変換している。
+--
+-- Pandoc の Inlines の走査は、入れ子の内側から先に進むので、文書の順になるとは
+-- 限らない。そこで、文書の順に呼ばれる Math の走査で、数式を通し番号（index）つきの
+-- スパンに包み、そのあとで目印のスパンを読み、番号を決める。
+
+local EQUATION_CLASS = 'reportmd-math'
+local equation_numbers = {} -- index -> 番号（番号なしの数式は入らない）
+
+local function is_marker(el)
+  return el ~= nil and el.t == 'Span' and has_class(el, 'reportmd-equation')
+end
+
+local function number_equations(doc)
+  local count = 0
+  doc = doc:walk({
+    Math = function(math)
+      if math.mathtype == 'DisplayMath' then
+        count = count + 1
+        return pandoc.Span({ math }, { class = EQUATION_CLASS, index = tostring(count) })
+      end
+    end,
+  })
+
+  -- 数式の直後の目印を読み、取り除く（数式のない目印も取り除く）
+  local marks = {} -- index -> 目印のスパン
+  doc = doc:walk({
+    Inlines = function(inlines)
+      local result = pandoc.List({})
+      for i, el in ipairs(inlines) do
+        if is_marker(el) then
+          local before = inlines[i - 1]
+          if before ~= nil and before.t == 'Span' and has_class(before, EQUATION_CLASS) then
+            marks[before.attributes.index] = el
+          end
+        else
+          result:insert(el)
+        end
+      end
+      return result
+    end,
+  })
+
+  local number = 0
+  for index = 1, count do
+    local mark = marks[tostring(index)]
+    if settings.equation_numbering ~= 'false' and not (mark and has_class(mark, 'unnumbered')) then
+      number = number + 1
+      equation_numbers[tostring(index)] = number
+      if mark and mark.identifier ~= '' and labels[mark.identifier] == nil then
+        labels[mark.identifier] = settings.equation_label .. '(' .. number .. ')'
+      end
+    elseif mark and mark.identifier ~= '' then
+      warn('数式に番号を付けない設定（equation.numbering が false）なので、名前 #' .. mark.identifier
+        .. ' では参照できません', mark.attributes.line)
+    end
+  end
+  return doc
+end
+
+-- 番号の付いた数式を、右端に (番号) のある数式にする。
+-- 数式の最後の行が % のコメントでも番号が消えないように、\tag の前で改行する。
+local function convert_span(span)
+  if not has_class(span, EQUATION_CLASS) then
+    return nil
+  end
+  local math = span.content[1]
+  local number = equation_numbers[span.attributes.index]
+  if number == nil then
+    return math
+  end
+  if FORMAT:match('latex') then
+    -- 末尾の改行は取り除く（空行が入ると、数式の中で段落が切れてエラーになる）
+    local text = math.text:gsub('%s+$', '')
+    return pandoc.RawInline('latex', '\\[' .. text .. '\n\\tag{' .. number .. '}\\]')
+  end
+  return { math, pandoc.Space(), pandoc.Str('(' .. number .. ')') }
+end
+
+-- 設定を読み、図表・数式の名前と番号の対応を作る走査を先に行い、そのあとで変換の走査を行う。
 return {
   {
     Meta = function(meta) read_settings(meta) end,
-    Pandoc = function(doc) collect_labels(doc) end,
+    Pandoc = function(doc)
+      collect_labels(doc)
+      return number_equations(doc)
+    end,
   },
   {
     Meta = move_title_and_author,
     Div = convert_div,
     Header = convert_header,
     Para = convert_para,
+    Span = convert_span,
     Cite = convert_cite,
     Blocks = convert_blocks,
   },

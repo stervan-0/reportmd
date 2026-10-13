@@ -20,7 +20,8 @@ module Reportmd
   # 現在の対応:
   #   - 保護領域の判定（フロントマター、コードブロック、数式ブロック）
   #   - フロントマターの対応外のキー（title・author 以外）の警告
-  #   - 図表の参照用の名前（{#名前}）の記録と、重複の警告
+  #   - 図表・数式の参照用の名前（{#名前}）の記録と、重複の警告
+  #   - 数式の閉じの $$ の後ろの {#名前} / {-}（番号なし）
   #   - 改ページ（行だけの ^）
   #   - 右揃え（--> ）と中央揃え（<-> ）
   #   - 番号付き見出し（#1 #2 #3）
@@ -83,6 +84,14 @@ module Reportmd
     # 2スペースのあとに、ほかのブロックの記法が来る行は、字下げの段落にしない
     # （リスト、見出し、引用、コード、数式、表、脚注、水平線など）
     BLOCK_START_AFTER_INDENT = /\A(?:[-*+](?:[ \t]|\z)|\d{1,9}[.)](?:[ \t]|\z)|\#{1,6}(?:[ \t]|\z)|>|`{3,}|~{3,}|\$\$|\||\+[-=:]|:::|\[\^[^\]]+\]:|([-*_])(?:[ \t]*\1){2,}[ \t]*\z)/
+
+    # 数式の閉じの $$ の後ろの属性。{#名前}（参照用の名前）か {-}（番号なし）だけを書ける。
+    #   $$ {#energy}  ->  $$[]{.reportmd-equation #energy line="行番号"}
+    #   $$ {-}        ->  $$[]{.reportmd-equation .unnumbered line="行番号"}
+    # 番号の組版は filter.lua が行う。
+    MATH_ATTRIBUTES = /\$\$[ \t]*\{(?<attrs>[^{}]*)\}[ \t]*\z/
+    MATH_ID = /\A#(?<id>[^\s{}#]+)\z/
+    EQUATION_CLASS = 'reportmd-equation'
 
     FIGURE_CLASS = 'reportmd-figure'
     TABLE_CAPTION_CLASS = 'reportmd-table-caption'
@@ -151,7 +160,7 @@ module Reportmd
       case @state
       when :front_matter then in_front_matter(line, lineno)
       when :fence        then in_fence(line)
-      when :math         then in_math(line)
+      when :math         then in_math(line, lineno)
       else                    in_normal(line, lineno)
       end
     end
@@ -189,9 +198,15 @@ module Reportmd
       @state = :normal if fence_close?(line)
     end
 
-    def in_math(line)
-      @output << line
-      @state = :normal if line.include?('$$')
+    # 数式の中身は変更しない。閉じの $$ の行の後ろの属性だけを変換する。
+    def in_math(line, lineno)
+      unless line.include?('$$')
+        @output << line
+        return
+      end
+
+      @output << math_close(line, lineno)
+      @state = :normal
     end
 
     def in_normal(line, lineno)
@@ -218,6 +233,8 @@ module Reportmd
         @region_start = lineno
         @in_list = false
         emit(line)
+      elsif line.lstrip.start_with?('$$')
+        emit(math_close(line, lineno)) # 1行の数式（$$ 式 $$ {#名前}）
       elsif line =~ PAGE_BREAK_LINE
         emit_block(PAGE_BREAK_BLOCK)
       elsif (indented = indented_paragraph(line))
@@ -289,6 +306,25 @@ module Reportmd
       return false unless line.lstrip.start_with?('$$')
 
       line.scan('$$').length.odd?
+    end
+
+    # 数式を閉じる行の、$$ の後ろの {#名前} / {-} を、目印のスパンに変換する。
+    # 属性がなければ、行をそのまま返す。
+    def math_close(line, lineno)
+      match = MATH_ATTRIBUTES.match(line)
+      return line unless match
+
+      attrs = match[:attrs].strip
+      if attrs == '-'
+        marker = ".#{EQUATION_CLASS} .unnumbered"
+      elsif (id = attrs[MATH_ID, :id])
+        register_id(id, lineno)
+        marker = ".#{EQUATION_CLASS} ##{id}"
+      else
+        raise PreprocessError.new('数式の $$ の後ろには、{#名前}（参照用）か {-}（番号なし）だけを書けます',
+                                  line: lineno)
+      end
+      "#{line[0...match.begin(0)]}$$[]{#{marker} line=\"#{lineno}\"}"
     end
 
     # --- 番号付き見出し -------------------------------------------------
@@ -383,13 +419,13 @@ module Reportmd
       [opening, *(title.empty? ? [] : [title]), ':::']
     end
 
-    # 参照用の名前（{#名前}）を記録する。同じ名前が2回出てきたら警告する。
+    # 参照用の名前（図表・数式の {#名前}）を記録する。同じ名前が2回出てきたら警告する。
     def register_id(id, lineno)
       return if id.nil?
 
       if @ids.key?(id)
         @warnings << PreprocessWarning.new(
-          lineno, "図表の名前 ##{id} は、#{@ids[id]} 行目でも使われています（参照は最初の図表を指します）"
+          lineno, "図表・数式の名前 ##{id} は、#{@ids[id]} 行目でも使われています（参照は最初のものを指します）"
         )
         return
       end

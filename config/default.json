@@ -52,5 +52,9 @@
       "vertical": false,
       "sides": false
     }
+  },
+  "equation": {
+    "numbering": true,
+    "label": "式"
   }
 }

@@ -147,6 +147,48 @@ RSpec.describe Reportmd::Preprocessor do
     end
   end
 
+  describe '数式の名前と番号なし（$$ {#名前} / $$ {-}）' do
+    it '閉じの $$ の後ろの {#名前} を、行番号つきの目印のスパンにする' do
+      expect(convert("$$\nE = mc^2\n$$ {#energy}\n"))
+        .to eq("$$\nE = mc^2\n$$[]{.reportmd-equation #energy line=\"3\"}\n")
+    end
+
+    it '{-} は、番号なしの目印にする' do
+      expect(convert("$$\nx\n$${-}\n"))
+        .to eq("$$\nx\n$$[]{.reportmd-equation .unnumbered line=\"3\"}\n")
+    end
+
+    it '1行の数式や、閉じの行に式がある数式にも付けられる' do
+      expect(convert("$$ x = 1 $$ {#one}\n"))
+        .to eq("$$ x = 1 $$[]{.reportmd-equation #one line=\"1\"}\n")
+      expect(convert("$$\nx = 1\ny = 2 $$ {#two}\n"))
+        .to eq("$$\nx = 1\ny = 2 $$[]{.reportmd-equation #two line=\"3\"}\n")
+    end
+
+    it '数式の中身は変更しない' do
+      source = "$$\n{#a} ^\n--> x\n$$\n"
+      expect(convert(source)).to eq(source)
+    end
+
+    it '{#名前} と {-} 以外の属性は、行番号つきでエラーにする' do
+      expect { run("$$\nx\n$$ {width=50%}\n") }.to raise_error(Reportmd::PreprocessError) { |e|
+        expect(e.line).to eq(3)
+        expect(e.message).to include('{#名前}', '{-}')
+      }
+    end
+
+    it '図表と同じ名前を使ったら警告する' do
+      result = run("![f:図](a.png){#same}\n\n$$\nx\n$$ {#same}\n")
+      expect(result.warnings.map(&:line)).to eq([5])
+      expect(result.warnings.first.message).to include('#same', '1 行目')
+    end
+
+    it 'コードブロックの中の $$ {#名前} は変換しない' do
+      source = "```\n$$ x $$ {#a}\n```\n"
+      expect(convert(source)).to eq(source)
+    end
+  end
+
   describe '保護領域：YAMLフロントマター' do
     it 'フロントマター内の ^ は変換しない' do
       source = "---\ntitle: a\n^\n---\n\n本文\n"

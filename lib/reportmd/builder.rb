@@ -144,6 +144,8 @@ module Reportmd
       # 表の組み方（tabular の形）に関わる設定。線の太さなどはプリアンブルで決める
       meta['reportmd']['table_width'] = @config.dig('table', 'width')
       meta['reportmd']['table_header_align'] = @config.dig('table', 'header', 'align')
+      meta['reportmd']['equation_numbering'] = @config.dig('equation', 'numbering')
+      meta['reportmd']['equation_label'] = @config.dig('equation', 'label')
       meta
     end
 

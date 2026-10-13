@@ -89,7 +89,9 @@ module Reportmd
       Rule.new(%w[table header bold], 'true または false', boolean),
       Rule.new(%w[table header align], '"center" "left" "right" "column"（列の揃えに従う）',
                one_of.call(HEADER_ALIGNS)),
-      *TABLE_RULES.map { |name| Rule.new(['table', 'rules', name], RULE_EXPECT, or_false.call(length)) }
+      *TABLE_RULES.map { |name| Rule.new(['table', 'rules', name], RULE_EXPECT, or_false.call(length)) },
+      Rule.new(%w[equation numbering], 'true または false', boolean),
+      Rule.new(%w[equation label], '文字列', string)
     ].freeze
 
     attr_reader :values, :warnings, :source
