@@ -1,0 +1,182 @@
+# frozen_string_literal: true
+
+require 'erb'
+require 'fileutils'
+require 'json'
+require 'open3'
+require 'tmpdir'
+require_relative 'preprocessor'
+require_relative 'config'
+
+module Reportmd
+  # PDF 生成の途中で起きたエラー（外部ツールがない、PDF 生成に失敗した、など）。
+  class BuildError < StandardError; end
+
+  # .rmd を読み、前処理 → Pandoc → XeLaTeX の順に実行して PDF を作る。
+  class Builder
+    FILTER_PATH   = File.join(__dir__, 'filter.lua')
+    PREAMBLE_PATH = File.join(__dir__, 'preamble.tex.erb')
+
+    PAPER_OPTIONS = {
+      'a4' => 'a4paper', 'a5' => 'a5paper', 'b5' => 'b5paper', 'letter' => 'letterpaper'
+    }.freeze
+
+    # 行送りは、文字サイズのこの倍率を標準とする（LaTeX の標準に近い値）
+    BASELINE_RATIO = 1.2
+    PANDOC_READER = 'markdown-raw_html-raw_tex'
+    PANDOC_ERROR_LINES = 25
+
+    Result = Struct.new(:output_path, :warnings, :tool_output, :temp_dir)
+
+    def initialize(input_path:, output_path:, config:, keep_temp: false)
+      @input_path = File.expand_path(input_path)
+      @output_path = File.expand_path(output_path)
+      @config = config
+      @keep_temp = keep_temp
+    end
+
+    def call
+      # 構文のエラーは外部ツールがなくても見つけられるので、先に前処理を行う
+      preprocessed = Preprocessor.new(File.read(@input_path, encoding: 'UTF-8')).call
+
+      check_tools!
+      check_output_dir!
+      check_fonts!
+
+      tool_output = nil
+      with_work_dir do |dir|
+        paths = write_work_files(dir, preprocessed.text)
+        tool_output = run_pandoc(paths)
+      end
+      Result.new(@output_path, preprocessed.warnings, tool_output, @kept_dir)
+    end
+
+    private
+
+    # --- 事前チェック ---------------------------------------------------
+
+    def check_tools!
+      { 'pandoc' => 'Pandoc', 'xelatex' => 'XeLaTeX' }.each do |command, label|
+        next if system(command, '--version', out: File::NULL, err: File::NULL)
+
+        raise BuildError, "#{label}（#{command}）が見つかりません。インストールされているか確認してください"
+      end
+    end
+
+    def check_output_dir!
+      dir = File.dirname(@output_path)
+      raise BuildError, "出力先のディレクトリがありません: #{dir}" unless File.directory?(dir)
+    end
+
+    # 設定されたフォントがインストールされているか確認する。
+    # fc-list が使えない環境では、確認を飛ばす（XeLaTeX がエラーを出す）。
+    def check_fonts!
+      families = installed_font_families
+      return unless families
+
+      [%w[font main], %w[font mono]].each do |path|
+        name = @config.dig(*path)
+        next if families.include?(name.downcase)
+
+        raise BuildError,
+              "フォント「#{name}」が見つかりません（設定: #{path.join('.')}）。" \
+              "`fc-list : family` で使えるフォント名を確認してください"
+      end
+    end
+
+    def installed_font_families
+      out, status = Open3.capture2('fc-list', ':', 'family')
+      return nil unless status.success?
+
+      out.lines.flat_map { |line| line.strip.split(',') }.map { |name| name.strip.downcase }
+    rescue SystemCallError
+      nil
+    end
+
+    # --- 作業用ファイル -------------------------------------------------
+
+    def with_work_dir(&block)
+      if @keep_temp
+        @kept_dir = Dir.mktmpdir('reportmd-')
+        block.call(@kept_dir)
+      else
+        Dir.mktmpdir('reportmd-', &block)
+      end
+    end
+
+    def write_work_files(dir, markdown)
+      paths = {
+        body: File.join(dir, 'body.md'),
+        meta: File.join(dir, 'meta.json'),
+        preamble: File.join(dir, 'preamble.tex')
+      }
+      File.write(paths[:body], markdown)
+      File.write(paths[:meta], JSON.generate(metadata))
+      File.write(paths[:preamble], render_preamble)
+      paths
+    end
+
+    # 文書のメタデータ。空の項目は渡さない。
+    # （本文中の YAML フロントマターの値が、これより優先される）
+    def metadata
+      %w[title author].each_with_object({}) do |key, meta|
+        value = @config.dig('document', key)
+        meta[key] = value unless value.to_s.strip.empty?
+      end
+    end
+
+    def render_preamble
+      ERB.new(File.read(PREAMBLE_PATH, encoding: 'UTF-8'), trim_mode: '-')
+         .result_with_hash(preamble_variables)
+    end
+
+    def preamble_variables
+      font_size = @config.dig('text', 'font_size').to_f
+      margin = @config.dig('page', 'margin')
+      {
+        paper_option: PAPER_OPTIONS.fetch(@config.dig('document', 'paper')),
+        margin_top: margin['top'], margin_bottom: margin['bottom'],
+        margin_left: margin['left'], margin_right: margin['right'],
+        font_main: @config.dig('font', 'main'),
+        font_mono: @config.dig('font', 'mono'),
+        font_size_pt: number(font_size),
+        baseline_pt: number(font_size * BASELINE_RATIO),
+        line_spacing: number(@config.dig('text', 'line_spacing')),
+        # 1字 = 本文の文字サイズ
+        parindent_pt: number(@config.dig('text', 'paragraph_indent') * font_size),
+        page_numbering: @config.dig('page', 'numbering')
+      }
+    end
+
+    def number(value)
+      value.to_f.round(3).to_s.sub(/\.0\z/, '')
+    end
+
+    # --- Pandoc の実行 --------------------------------------------------
+
+    def run_pandoc(paths)
+      args = [
+        'pandoc', paths[:body],
+        '-f', PANDOC_READER,
+        "--lua-filter=#{FILTER_PATH}",
+        "--metadata-file=#{paths[:meta]}",
+        "--include-in-header=#{paths[:preamble]}",
+        '-V', 'indent=true', # Pandoc 標準の段落間隔・字下げなしの設定を無効にする
+        '--pdf-engine=xelatex',
+        '-o', @output_path
+      ]
+      # 画像などの相対パスは、入力ファイルのある場所を基準にする
+      _out, err, status = Open3.capture3(*args, chdir: File.dirname(@input_path))
+      raise BuildError, pandoc_failure_message(status, err) unless status.success?
+
+      err.strip
+    end
+
+    def pandoc_failure_message(status, err)
+      lines = err.lines.map(&:rstrip).reject(&:empty?)
+      shown = lines.last(PANDOC_ERROR_LINES)
+      detail = shown.map { |line| "  #{line}" }.join("\n")
+      "PDF の生成に失敗しました（pandoc の終了コード: #{status.exitstatus}）\n#{detail}"
+    end
+  end
+end

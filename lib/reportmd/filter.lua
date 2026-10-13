@@ -5,6 +5,7 @@
 --
 -- 現在の対応:
 --   .reportmd-pagebreak  ->  \newpage
+--   title / author       ->  PDF のメタデータにだけ使い、本文には出さない
 
 local function has_class(el, name)
   for _, class in ipairs(el.classes) do
@@ -13,6 +14,36 @@ local function has_class(el, name)
     end
   end
   return false
+end
+
+-- メタデータの値を、書式を除いた文字列にする（著者が複数なら「, 」でつなぐ）
+local function meta_to_string(value)
+  if pandoc.utils.type(value) == 'List' then
+    local parts = {}
+    for _, item in ipairs(value) do
+      parts[#parts + 1] = pandoc.utils.stringify(item)
+    end
+    return table.concat(parts, ', ')
+  end
+  return pandoc.utils.stringify(value)
+end
+
+-- title / author をそのまま残すと、Pandoc が本文の先頭にタイトルを出力してしまう。
+-- そこで、PDF のメタデータ用の title-meta / author-meta に移し替える。
+local function move_to_pdf_metadata(meta, key)
+  if meta[key] ~= nil then
+    local meta_key = key .. '-meta'
+    if meta[meta_key] == nil then
+      meta[meta_key] = meta_to_string(meta[key])
+    end
+    meta[key] = nil
+  end
+end
+
+function Meta(meta)
+  move_to_pdf_metadata(meta, 'title')
+  move_to_pdf_metadata(meta, 'author')
+  return meta
 end
 
 function Div(el)

@@ -1,7 +1,7 @@
 {
   "document": {
     "paper": "a4",
-    "title": "実験レポート",
+    "title": "",
     "author": ""
   },
   "page": {
@@ -16,10 +16,22 @@
   "text": {
     "font_size": "10.5pt",
     "line_spacing": 1.5,
-    "paragraph_indent": 0
+    "paragraph_indent": 1
   },
   "font": {
     "main": "IPAexMincho",
     "mono": "Noto Sans Mono CJK JP"
+  },
+  "heading": {
+    "font": "IPAexGothic",
+    "bold": true,
+    "sizes": ["14pt", "12pt", "10.5pt"],
+    "indents": [0, 1, 2]
+  },
+  "caption": {
+    "figure_label": "図",
+    "table_label": "表",
+    "figure_position": "bottom",
+    "table_position": "top"
   }
 }

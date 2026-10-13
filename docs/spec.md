@@ -86,7 +86,8 @@ reportmd/
 │       ├── preprocessor.rb
 │       ├── builder.rb
 │       ├── filter.lua
-│       └── template.tex
+│       ├── preamble.tex.erb
+│       └── version.rb
 ├── docs/
 │   └── spec.md
 ├── config/
@@ -104,7 +105,8 @@ reportmd/
 - `preprocessor.rb`：独自構文の検出と変換
 - `builder.rb`：PDF生成処理（Pandoc・XeLaTeXの呼び出し）
 - `filter.lua`：Pandoc解析後の文書構造に対する変換
-- `template.tex`：Pandocに渡すLaTeXテンプレート（日本語組版・余白・フォント設定を反映）
+- `preamble.tex.erb`：設定ファイルの内容（用紙・余白・フォント・文字サイズ・行間・字下げ・ページ番号）をLaTeXのプリアンブルに変換するテンプレート。PandocのLaTeX標準テンプレートに、`--include-in-header` で追加する
+- `version.rb`：バージョン番号
 - `config/default.json`：内蔵のデフォルト設定（設定ファイルがない場合や、項目が省略された場合に使う）
 - `examples/setting.json`：`examples/report.rmd` 用のサンプル設定
 - `spec/`：自動テスト
@@ -471,9 +473,9 @@ author: 山田 太郎
 1. `.rmd` ファイルをUTF-8として読み込む（5.3参照）。
 2. 設定ファイルを読み込み、検証する。
 3. 独自構文の前処理を行う（6章）。
-4. Pandocで、前処理後のMarkdownを解析する。設定値は、一時的なメタデータとしてPandocに渡す。
+4. Pandocで、前処理後のMarkdownを解析する。`title` と `author` はメタデータとして、そのほかの設定は `preamble.tex.erb` から生成したプリアンブルとしてPandocに渡す。
 5. `filter.lua` で、図表番号・キャプションなどの書式変換を適用する。
-6. `template.tex` を使い、XeLaTeXでPDFを生成する。
+6. XeLaTeXでPDFを生成する（Pandocが呼び出す）。
 7. 成功時には出力先を表示し、失敗時には原因を確認できるエラーを表示する。
 
 PDF生成時に一時ファイルを使用する場合は、一時ディレクトリに作成し、正常終了・異常終了のいずれでも不要な一時ファイルが残らないようにする。ただし `--keep-temp` が指定された場合は残す。
