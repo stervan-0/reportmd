@@ -13,6 +13,7 @@
 --   見出し                    ->  #1〜#3（.reportmd-num）は番号付き、
 --                                 標準の #（クラスなし）は番号なしにする
 --   title / author            ->  PDF のメタデータにだけ使い、本文には出さない
+--   そのほかのメタデータ      ->  取り除く（フロントマターの対応外のキーを無視する）
 --
 -- 設定（builder.rb が metadata の reportmd に入れて渡す）:
 --   figure_label / table_label       図・表のラベル文字列（既定：図・表）
@@ -82,7 +83,25 @@ local function move_to_pdf_metadata(meta, key)
   end
 end
 
+-- フロントマターで使えるのは title と author だけ。ほかのキー（geometry、
+-- header-includes など）は、Pandoc のテンプレートに反映されないように取り除く。
+-- （警告は前処理が行番号つきで出している）
+local META_KEYS = { title = true, author = true }
+
+local function drop_unsupported_meta(meta)
+  local keys = {}
+  for key, _ in pairs(meta) do
+    if not META_KEYS[key] then
+      keys[#keys + 1] = key
+    end
+  end
+  for _, key in ipairs(keys) do
+    meta[key] = nil
+  end
+end
+
 local function move_title_and_author(meta)
+  drop_unsupported_meta(meta)
   move_to_pdf_metadata(meta, 'title')
   move_to_pdf_metadata(meta, 'author')
   return meta

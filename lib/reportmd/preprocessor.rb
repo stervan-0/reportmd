@@ -19,6 +19,7 @@ module Reportmd
   #
   # 現在の対応:
   #   - 保護領域の判定（フロントマター、コードブロック、数式ブロック）
+  #   - フロントマターの対応外のキー（title・author 以外）の警告
   #   - 改ページ（行だけの ^）
   #   - 右揃え（--> ）と中央揃え（<-> ）
   #   - 番号付き見出し（#1 #2 #3）
@@ -33,6 +34,10 @@ module Reportmd
     FENCE_OPEN_LINE   = /\A[ ]*(`{3,}|~{3,})(.*)\z/
     FRONT_MATTER_END  = /\A(---|\.\.\.)[ \t]*\z/
     FRONT_MATTER_OPEN = /\A---[ \t]*\z/
+    # フロントマターの最上位のキー（字下げなし・リスト項目でない行の「キー:」）
+    FRONT_MATTER_KEY = /\A(?:"(?<key>[^"]+)"|'(?<key>[^']+)'|(?<key>[^\s#'"\-][^:]*?))[ \t]*:(?:[ \t]|\z)/
+    # フロントマターで使えるキー。ほかのキーは警告して無視する（filter.lua が取り除く）
+    FRONT_MATTER_KEYS = %w[title author].freeze
 
     # 右揃え・中央揃えの行。行頭（または引用 > ・リスト記号の直後）に、
     # 記号と半角スペース1個以上、続けて内容が来る。内容が空の行も一致する。
@@ -138,7 +143,7 @@ module Reportmd
       end
 
       case @state
-      when :front_matter then in_front_matter(line)
+      when :front_matter then in_front_matter(line, lineno)
       when :fence        then in_fence(line)
       when :math         then in_math(line)
       else                    in_normal(line, lineno)
@@ -153,9 +158,24 @@ module Reportmd
       !lines[1].nil? && !lines[1].strip.empty?
     end
 
-    def in_front_matter(line)
+    def in_front_matter(line, lineno)
       @output << line
-      @state = :normal if line =~ FRONT_MATTER_END
+      if line =~ FRONT_MATTER_END
+        @state = :normal
+      else
+        check_front_matter_key(line, lineno)
+      end
+    end
+
+    # 対応外のキーは警告する（値は filter.lua が取り除くので、文書には反映されない）
+    def check_front_matter_key(line, lineno)
+      match = FRONT_MATTER_KEY.match(line)
+      return unless match
+      return if FRONT_MATTER_KEYS.include?(match[:key])
+
+      @warnings << PreprocessWarning.new(
+        lineno, "対応外のフロントマターのキーを無視します: #{match[:key]}（使えるのは title と author です）"
+      )
     end
 
     def in_fence(line)

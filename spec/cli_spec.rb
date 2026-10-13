@@ -168,6 +168,14 @@ RSpec.describe Reportmd::CLI do
         expect(`pdfinfo #{File.join(@dir, 'report.pdf')}`).to include('実験レポート')
       end
     end
+
+    it 'フロントマターの対応外のキーは、ファイル名と行番号つきで警告するが、PDF は出力する' do
+      input = write_file('report.rmd', "---\ntitle: 実験レポート\ngeometry: margin=1mm\n---\n\n本文\n")
+      code, _out, err = run_cli('build', input)
+      expect(code).to eq(0)
+      expect(err).to include("#{input}:3: warning: 対応外のフロントマターのキーを無視します: geometry")
+      expect(File.exist?(File.join(@dir, 'report.pdf'))).to be(true)
+    end
   end
 
   describe 'PDF の生成（右揃え・中央揃えの位置）' do
@@ -520,6 +528,26 @@ RSpec.describe Reportmd::CLI do
       displayed_pt = width_px / ppi * 72
       expect(displayed_pt).to be <= TEXT_WIDTH_PT + 1
       expect(displayed_pt).to be > TEXT_WIDTH_PT - 5 # 本文幅いっぱいまで縮小される
+    end
+  end
+
+  # 結合テスト（スモークテスト）：同梱のサンプルから PDF が作れることを確認する。
+  # 見た目そのものは比較しない。
+  describe 'サンプル（examples/report.rmd）' do
+    before { skip 'PDF 生成に必要なツールやフォントがありません' unless pdf_build_ready? }
+
+    it '警告なしで PDF を生成できる' do
+      input = File.expand_path('../examples/report.rmd', __dir__)
+      output = File.join(@dir, 'report.pdf')
+      code, _out, err = run_cli('build', input, '-o', output)
+      expect(err).to eq('')
+      expect(code).to eq(0)
+      expect(File.binread(output, 4)).to eq('%PDF')
+      if system('pdftotext', '-v', out: File::NULL, err: File::NULL)
+        text = `pdftotext #{output} -`
+        expect(text).to include('実験レポート')
+        expect(text).to match(/表\s*1\s*ツールの構成/).and match(/表\s*2\s*変換の段階/)
+      end
     end
   end
 end

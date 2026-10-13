@@ -172,6 +172,27 @@ RSpec.describe Reportmd::Preprocessor do
       source = "本文\n\n---\ntitle: a\n---\n"
       expect(convert(source)).to eq(source)
     end
+
+    describe '対応外のキー' do
+      it 'title・author 以外の最上位のキーは、行番号つきで警告する（本文はそのまま）' do
+        source = "---\ntitle: a\nlang: en\n\"geometry\": x\nauthor: b\n---\n\n本文\n"
+        result = run(source)
+        expect(result.text).to eq(source)
+        expect(result.warnings.map(&:line)).to eq([3, 4])
+        expect(result.warnings.map(&:message)).to all(include('対応外のフロントマターのキー'))
+        expect(result.warnings[0].message).to include('lang')
+        expect(result.warnings[1].message).to include('geometry')
+      end
+
+      it '値の中の行（字下げ・リスト項目）やコメントは、キーとして扱わない' do
+        source = "---\nauthor:\n  - 山田\n  - name: 佐藤\n# メモ\ntitle: >\n  長い: タイトル\n---\n"
+        expect(run(source).warnings).to eq([])
+      end
+
+      it 'フロントマターの外の「キー:」の行は警告しない' do
+        expect(run("本文\n\nlang: en\n").warnings).to eq([])
+      end
+    end
   end
 
   describe '右揃え（-->）と中央揃え（<->）' do

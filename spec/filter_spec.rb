@@ -61,6 +61,16 @@ RSpec.describe 'filter.lua' do
       latex = convert_with_pandoc(multi, 'latex', ['-s'])
       expect(latex).to include('pdfauthor={山田 太郎, 佐藤 花子}')
     end
+
+    it '対応外のキー（geometry・header-includes など）は、出力に反映しない' do
+      source = "---\ntitle: 実験\ngeometry: margin=1mm\nheader-includes: '\\usepackage{xyzpkg}'\n" \
+               "documentclass: book\n---\n\n本文\n"
+      latex = convert_with_pandoc(source, 'latex', ['-s'])
+      expect(latex).to include('pdftitle={実験}')
+      expect(latex).not_to include('margin=1mm')
+      expect(latex).not_to include('xyzpkg')
+      expect(latex).not_to include('{book}')
+    end
   end
 
   describe '右揃え・中央揃え' do
