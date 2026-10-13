@@ -355,6 +355,78 @@ RSpec.describe 'filter.lua' do
         expect(html).not_to include('reportmdrule')
       end
     end
+
+    describe '図表の参照（@名前）' do
+      let(:doc) do
+        "![f:構成](a.png){#sys}\n\n![f:二つ目](b.png)\n\n![t:結果]{#result}\n#{table}\n" \
+          "![f:三つ目](c.png){#third width=50%}\n\n"
+      end
+
+      def text_of(rmd, settings = {})
+        convert_with_settings(rmd, 'plain', settings)
+      end
+
+      it '@名前 を、図は「図{番号}」、表は「表{番号}」に置き換える' do
+        out = text_of("#{doc}@sys と @result と @third を参照。\n")
+        expect(out).to include('図1 と 表1 と 図3 を参照。')
+      end
+
+      it '後ろにある図表も参照できる' do
+        out = text_of("@third を見よ。\n\n#{doc}")
+        expect(out).to include('図3 を見よ。')
+      end
+
+      it '名前の直後に日本語が続いても、名前の部分だけを置き換える' do
+        out = text_of("#{doc}@sysに示すように、@resultの値は\n")
+        expect(out).to include('図1に示すように、表1の値は')
+      end
+
+      it '@{名前} の形でも参照できる' do
+        out = text_of("#{doc}@{result}に示す。\n")
+        expect(out).to include('表1に示す。')
+      end
+
+      it '[@a; @b] のように並べると、「、」でつなぐ' do
+        out = text_of("#{doc}[@sys; @result] を参照。\n")
+        expect(out).to include('図1、表1 を参照。')
+      end
+
+      it 'ラベルの設定（figure_label / table_label）に従う' do
+        out = text_of("#{doc}@sys と @result\n", 'figure_label' => 'Fig.', 'table_label' => 'Table')
+        expect(out).to include('Fig.1 と Table1')
+      end
+
+      it '番号の付かない図（画像以外の文字がある図の行）は、図の番号を数えない' do
+        out = text_of("![f:a](a.png){#a} 説明\n\n![f:b](b.png){#b}\n\n@b\n")
+        expect(out).to include('図1')
+        expect(out).not_to include('図2')
+      end
+
+      it '見つからない名前は、ファイル名つきで警告して、@名前 のまま残す' do
+        markdown = Reportmd::Preprocessor.new("#{doc}@nothing を参照。\n").call.text
+        out, err, status = Tempfile.create(['settings', '.json']) do |file|
+          file.write(JSON.generate('reportmd' => { 'source' => 'a.rmd' }))
+          file.flush
+          Open3.capture3('pandoc', '-f', 'markdown-raw_html-raw_tex', "--lua-filter=#{filter_path}",
+                         "--metadata-file=#{file.path}", '-t', 'plain', stdin_data: markdown)
+        end
+        expect(status.success?).to be(true)
+        expect(err).to include('a.rmd: warning: 参照先の図表が見つかりません: @nothing')
+        expect(out).to include('@nothing を参照。')
+      end
+
+      it 'コードの中の @名前 や、メールアドレスは置き換えない' do
+        out = text_of("#{doc}`@sys` と a@sys.com\n")
+        expect(out).to include('@sys')
+        expect(out).to include('a@sys.com')
+        expect(out).not_to match(/図1 と/)
+      end
+
+      it 'LaTeX でも置き換える' do
+        latex = convert_with_pandoc("#{doc}@sys に示す。\n", 'latex')
+        expect(latex).to include('図1 に示す。')
+      end
+    end
   end
 
   describe '2スペースの字下げ' do

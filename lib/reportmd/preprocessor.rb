@@ -20,6 +20,7 @@ module Reportmd
   # 現在の対応:
   #   - 保護領域の判定（フロントマター、コードブロック、数式ブロック）
   #   - フロントマターの対応外のキー（title・author 以外）の警告
+  #   - 図表の参照用の名前（{#名前}）の記録と、重複の警告
   #   - 改ページ（行だけの ^）
   #   - 右揃え（--> ）と中央揃え（<-> ）
   #   - 番号付き見出し（#1 #2 #3）
@@ -67,7 +68,11 @@ module Reportmd
     FIGURE_START = /\A!\[f(?::|\])/
     TABLE_START = /\A!\[t(?::|\])/
     FULLWIDTH_COLON_START = /\A!\[[ft]：/
-    TABLE_CAPTION_LINE = /\A!\[t(?::(?<title>.*))?\][ \t]*\z/
+    # 表の見出し行の後ろには、参照用の名前 {#名前} だけを書ける
+    TABLE_CAPTION_LINE = /\A!\[t(?::(?<title>.*))?\](?:\{#(?<id>[^\s{}#]+)\})?[ \t]*\z/
+    # 図の行の画像の属性（{#名前 width=50%} など）と、その中の参照用の名前
+    FIGURE_ATTRIBUTES = /\]\([^)]*\)\{(?<attrs>[^}]*)\}/
+    ID_IN_ATTRIBUTES = /(?:\A|\s)#([^\s{}#]+)/
     # 段落の字下げ。段落の最初の行が、ちょうど半角スペース2個で始まる場合、
     # 先頭に空のスパン（目印）を置く。字下げの組版は filter.lua が行う。
     #   "  本文"  ->  "[]{.reportmd-indent}本文"
@@ -99,6 +104,7 @@ module Reportmd
       @after_generated = false
       @align = nil
       @last_heading_level = 0
+      @ids = {} # 図表の参照用の名前 => 行番号
       @in_list = false
       @last_line_blank = true # ファイルの先頭は、空行のあとと同じに扱う
 
@@ -330,7 +336,8 @@ module Reportmd
     #   ![t:タイトル]        ->  ::: {.reportmd-table-caption}
     #                            タイトル
     #                            :::
-    # 番号とキャプションの組版は filter.lua が行う。
+    #   ![t:タイトル]{#名前} ->  ::: {.reportmd-table-caption #名前}  （図は画像の {#名前} をそのまま使う）
+    # 番号とキャプションの組版、@名前 の参照は filter.lua が行う。
     def figure_table_block(line, lineno)
       if line.match?(FULLWIDTH_COLON_START)
         @warnings << PreprocessWarning.new(
@@ -349,6 +356,8 @@ module Reportmd
         raise PreprocessError.new('図には画像のパスが必要です（例: ![f:タイトル](images/a.png)）', line: lineno)
       end
 
+      attributes = line[FIGURE_ATTRIBUTES, :attrs]
+      register_id(attributes.to_s[ID_IN_ATTRIBUTES, 1], lineno)
       image = line.sub(/\A!\[f:?/, '![').rstrip
       # line は、filter.lua が警告に元の行番号を表示するために使う
       ["::: {.#{FIGURE_CLASS} line=\"#{lineno}\"}", image, ':::']
@@ -358,7 +367,8 @@ module Reportmd
       match = TABLE_CAPTION_LINE.match(line)
       unless match
         raise PreprocessError.new(
-          '![t:...] は表の見出し行です。後ろに (...) などは付けられません（画像には ![f:...](...) を使ってください）',
+          '![t:...] は表の見出し行です。後ろには参照用の {#名前} だけを書けます' \
+          '（画像には ![f:...](...) を使ってください）',
           line: lineno
         )
       end
@@ -367,8 +377,23 @@ module Reportmd
                                   line: lineno)
       end
 
+      register_id(match[:id], lineno)
       title = match[:title].to_s.strip
-      ["::: {.#{TABLE_CAPTION_CLASS}}", *(title.empty? ? [] : [title]), ':::']
+      opening = match[:id] ? "::: {.#{TABLE_CAPTION_CLASS} ##{match[:id]}}" : "::: {.#{TABLE_CAPTION_CLASS}}"
+      [opening, *(title.empty? ? [] : [title]), ':::']
+    end
+
+    # 参照用の名前（{#名前}）を記録する。同じ名前が2回出てきたら警告する。
+    def register_id(id, lineno)
+      return if id.nil?
+
+      if @ids.key?(id)
+        @warnings << PreprocessWarning.new(
+          lineno, "図表の名前 ##{id} は、#{@ids[id]} 行目でも使われています（参照は最初の図表を指します）"
+        )
+        return
+      end
+      @ids[id] = lineno
     end
 
     # 現在の行の直後（空行は1つまで）に、表が始まっているか。

@@ -10,6 +10,7 @@
 --   .reportmd-figure          ->  図（番号とキャプションを付ける）
 --   .reportmd-table-caption   ->  直後の表に、番号とキャプションを付ける
 --   表（LaTeX）               ->  tabular に組む（書式はプリアンブルの命令で決める）
+--   @名前（引用）             ->  名前を付けた図表の「図1」「表2」
 --   2 スペース始まりの段落   ->  字下げ 1 文字分（paragraph_indent の置き換え）
 --   見出し                    ->  #1〜#3（.reportmd-num）は番号付き、
 --                                 標準の #（クラスなし）は番号なしにする
@@ -198,7 +199,8 @@ local function make_caption(label, number, title)
   return inlines
 end
 
--- 図のブロック（Div）から、画像とタイトルを取り出す。画像だけの行でなければ nil。
+-- 図のブロック（Div）から、画像・タイトル・参照用の名前（{#名前}。なければ ''）を
+-- 取り出す。画像だけの行でなければ nil。
 local function figure_parts(div)
   if #div.content ~= 1 then
     return nil
@@ -208,11 +210,14 @@ local function figure_parts(div)
     local inner = block.content
     if #inner == 1 and (inner[1].t == 'Plain' or inner[1].t == 'Para')
         and #inner[1].content == 1 and inner[1].content[1].t == 'Image' then
-      return inner[1].content[1], pandoc.utils.blocks_to_inlines(block.caption.long)
+      local image = inner[1].content[1]
+      local id = block.identifier ~= '' and block.identifier or image.identifier
+      return image, pandoc.utils.blocks_to_inlines(block.caption.long), id
     end
   elseif block.t == 'Para' or block.t == 'Plain' then
     if #block.content == 1 and block.content[1].t == 'Image' then
-      return block.content[1], pandoc.List()
+      local image = block.content[1]
+      return image, pandoc.List(), image.identifier
     end
   end
   return nil
@@ -555,14 +560,92 @@ local function convert_para(para)
   return pandoc.Para(content)
 end
 
--- 設定を読む走査を先に行い、そのあとで変換の走査を行う。
+-- ---------------------------------------------------------------------
+-- 図表の参照（@名前 -> 図1）
+-- ---------------------------------------------------------------------
+--
+-- 図は画像の {#名前}、表は ![t:...]{#名前} で名前を付け、本文で @名前 と書くと、
+-- 「図1」「表2」のように、ラベルと番号に置き換える。
+-- Pandoc は @名前 を引用（Cite）として読むので、Cite を置き換える。
+
+local labels = {} -- 名前 -> 「図1」など
+
+-- 番号を付ける前に、文書を先頭から見て、名前と番号の対応を作る。
+-- 番号の付け方は convert_blocks と同じ（画像だけの図の行と、直後に表がある表の見出し）。
+local function collect_labels(doc)
+  local figure, tbl = 0, 0
+  local blocks = doc.blocks
+  for i, block in ipairs(blocks) do
+    if block.t == 'Div' and has_class(block, 'reportmd-figure') then
+      local image, _, id = figure_parts(block)
+      if image ~= nil then
+        figure = figure + 1
+        if id ~= '' and labels[id] == nil then
+          labels[id] = settings.figure_label .. figure
+        end
+      end
+    elseif block.t == 'Div' and has_class(block, 'reportmd-table-caption')
+        and blocks[i + 1] ~= nil and blocks[i + 1].t == 'Table' then
+      tbl = tbl + 1
+      if block.identifier ~= '' and labels[block.identifier] == nil then
+        labels[block.identifier] = settings.table_label .. tbl
+      end
+    end
+  end
+end
+
+-- 名前に対応するラベルと、名前のあとに続いていた文字を返す。
+-- 「@sysに示す」のように、名前の直後に日本語が続くと、Pandoc は「sysに示す」までを
+-- 名前として読む。そこで、名前が見つからなければ、先頭が一致する一番長い名前を使い、
+-- 残り（「に示す」）はそのまま本文に戻す。
+local function resolve_label(id)
+  if labels[id] ~= nil then
+    return labels[id], ''
+  end
+  local best = nil
+  for name, _ in pairs(labels) do
+    if #name < #id and id:sub(1, #name) == name and id:sub(#name + 1):match('^[\194-\244]')
+        and (best == nil or #name > #best) then
+      best = name
+    end
+  end
+  if best ~= nil then
+    return labels[best], id:sub(#best + 1)
+  end
+  return nil
+end
+
+-- @名前（[@名前]、[@a; @b] も）を、「図1」などに置き換える。
+-- 見つからない名前は、警告して @名前 のまま残す。
+local function convert_cite(cite)
+  local result = pandoc.List({})
+  for i, citation in ipairs(cite.citations) do
+    if i > 1 then
+      result:insert(pandoc.Str('、'))
+    end
+    local label, rest = resolve_label(citation.id)
+    if label == nil then
+      warn('参照先の図表が見つかりません: @' .. citation.id .. '（{#' .. citation.id .. '} で名前を付けてください）')
+      result:insert(pandoc.Str('@' .. citation.id))
+    else
+      result:insert(pandoc.Str(label .. rest))
+    end
+  end
+  return result
+end
+
+-- 設定を読み、図表の名前と番号の対応を作る走査を先に行い、そのあとで変換の走査を行う。
 return {
-  { Meta = function(meta) read_settings(meta) end },
+  {
+    Meta = function(meta) read_settings(meta) end,
+    Pandoc = function(doc) collect_labels(doc) end,
+  },
   {
     Meta = move_title_and_author,
     Div = convert_div,
     Header = convert_header,
     Para = convert_para,
+    Cite = convert_cite,
     Blocks = convert_blocks,
   },
 }

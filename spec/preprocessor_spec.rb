@@ -549,6 +549,12 @@ RSpec.describe Reportmd::Preprocessor do
       }
     end
 
+    it '後ろに {#名前} 以外の属性がある行もエラーにする' do
+      expect { run("![t:x]{width=50%}\n#{TABLE}") }.to raise_error(Reportmd::PreprocessError) { |e|
+        expect(e.message).to include('{#名前}')
+      }
+    end
+
     it '全角コロンは表の見出しとして扱わず、警告してそのまま通す' do
       result = run("![t：全角]\n#{TABLE}")
       expect(result.text).to eq("![t：全角]\n#{TABLE}")
@@ -558,6 +564,39 @@ RSpec.describe Reportmd::Preprocessor do
     it '図と表が混ざっていても、それぞれ変換する' do
       expect(convert("![f:図](a.png)\n\n![t:表]\n#{TABLE}"))
         .to eq("#{figure}\n![図](a.png)\n:::\n\n#{CAPTION}\n表\n:::\n\n#{TABLE}")
+    end
+  end
+
+  describe '図表の参照用の名前（{#名前}）' do
+    it '![t:タイトル]{#名前} の名前を、表の見出しのブロックの ID にする' do
+      expect(convert("![t:実験結果]{#result}\n#{TABLE}"))
+        .to eq("::: {.reportmd-table-caption #result}\n実験結果\n:::\n\n#{TABLE}")
+    end
+
+    it 'タイトルが空の表にも名前を付けられる' do
+      expect(convert("![t]{#result}\n#{TABLE}"))
+        .to eq("::: {.reportmd-table-caption #result}\n:::\n\n#{TABLE}")
+    end
+
+    it '図の {#名前} は、画像の属性としてそのまま残す' do
+      expect(convert("![f:図](a.png){#sys width=50%}\n"))
+        .to eq("#{figure}\n![図](a.png){#sys width=50%}\n:::\n")
+    end
+
+    it '同じ名前を2回使ったら、2回目の行番号つきで警告する（図と表の間でも）' do
+      result = run("![f:図](a.png){width=50% #same}\n\n![t:表]{#same}\n#{TABLE}")
+      expect(result.warnings.map(&:line)).to eq([3])
+      expect(result.warnings.first.message).to include('#same', '1 行目')
+    end
+
+    it '名前の違う図表や、名前のない図表は警告しない' do
+      result = run("![f:a](a.png){#a}\n\n![f:b](b.png)\n\n![t:表]{#c}\n#{TABLE}")
+      expect(result.warnings).to eq([])
+    end
+
+    it '本文の @名前 は、前処理では変更しない（filter.lua が置き換える）' do
+      source = "@sys に示す。[@a; @b]\n"
+      expect(convert(source)).to eq(source)
     end
   end
 

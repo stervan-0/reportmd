@@ -1,3 +1,5 @@
 /vendor/bundle/
 /.bundle/
 *.pdf
+# Claude Code 用の個人設定（コミットしない）
+/CLAUDE.md

@@ -527,6 +527,22 @@ RSpec.describe Reportmd::CLI do
       expect(`pdftotext -layout #{File.join(@dir, 'fig.pdf')} -`.force_encoding('UTF-8')).not_to match(/図\s*1/)
     end
 
+    it '@名前 の参照が、PDF の本文で「図1」「表1」になる' do
+      rmd = "@sys に示すように、結果は @resultにまとめた。\n\n" \
+            "![f:構成](img.png){#sys width=20%}\n\n![t:結果]{#result}\n#{table}"
+      text = `pdftotext #{build_pdf(rmd)} -`.force_encoding('UTF-8')
+      expect(text).to match(/図\s*1\s*に示すように、結果は表\s*1\s*にまとめた。/)
+    end
+
+    it '参照先がない名前と、重複した名前は警告するが、PDF は出力する' do
+      rmd = "@nothing を参照。\n\n![f:a](img.png){#dup width=20%}\n\n![f:b](img.png){#dup width=20%}\n"
+      input = write_file('fig.rmd', rmd)
+      code, _out, err = run_cli('build', input)
+      expect(code).to eq(0)
+      expect(err).to include("#{input}:5: warning: 図表の名前 #dup は、3 行目でも使われています")
+      expect(err).to include("#{input}: warning: 参照先の図表が見つかりません: @nothing")
+    end
+
     # 幅 width、高さ height の、真っ白な PNG（グレースケール 8bit）を作る
     def blank_png(width, height)
       chunk = lambda do |type, data|
