@@ -33,5 +33,24 @@
     "table_label": "表",
     "figure_position": "bottom",
     "table_position": "top"
+  },
+  "table": {
+    "position": "center",
+    "width": "auto",
+    "font_size": null,
+    "row_spacing": 1.3,
+    "cell_padding": "6pt",
+    "header": {
+      "bold": false,
+      "align": "center"
+    },
+    "rules": {
+      "top": "0.8pt",
+      "header": "1.2pt",
+      "bottom": "0.8pt",
+      "rows": false,
+      "vertical": false,
+      "sides": false
+    }
   }
 }

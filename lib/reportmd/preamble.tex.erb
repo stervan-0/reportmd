@@ -26,3 +26,24 @@
 \renewcommand{\<%= name %>}{\@startsection{<%= name %>}{<%= i + 1 %>}{<%= heading_indents[i] %>pt}{<%= heading_before %>pt}{<%= heading_after %>pt}{\reportmdheading{<%= heading_sizes[i] %>pt}{<%= heading_leadings[i] %>pt}}}
 <% end -%>
 \makeatother
+% --- 表（filter.lua が tabular に組み、ここで定義した命令で書式を決める） ---
+\usepackage{array}
+\usepackage{calc}
+\usepackage{tabularx}
+\newenvironment{reportmdtablebox}{\begin{<%= table_position_env %>}}{\end{<%= table_position_env %>}}
+\newcommand{\reportmdtablestyle}{\linespread{1}\fontsize{<%= table_font_size %>pt}{<%= table_baseline %>pt}\selectfont\setlength{\tabcolsep}{<%= table_cell_padding %>}\renewcommand{\arraystretch}{<%= table_row_spacing %>}}
+<% if table_header_bold -%>
+% 見出し行の太字。太字の書体がない本文フォント（IPAex明朝など）でも太く見えるよう、疑似太字を使う
+\newfontfamily\reportmdtableheadlatin{<%= font_main %>}[AutoFakeBold=2.5]
+\newCJKfontfamily\reportmdtableheadcjk{<%= font_main %>}[AutoFakeBold=2.5]
+\newcommand{\reportmdtablehead}[1]{{\reportmdtableheadlatin\reportmdtableheadcjk\bfseries #1}}
+<% else -%>
+\newcommand{\reportmdtablehead}[1]{#1}
+<% end -%>
+% 横の罫線（使わない線は、空の命令にする）
+<% %w[top header bottom rows].each do |name| -%>
+\newcommand{\reportmdrule<%= name %>}{<%= table_rules[name] ? "\\noalign{\\hrule height #{table_rules[name]}}" : '' %>}
+<% end -%>
+% 縦の罫線（列の間 vrule と、表の左右の端 vside）
+\newcommand{\reportmdvrule}{<%= table_rules['vertical'] ? "\\vrule width #{table_rules['vertical']}" : '' %>}
+\newcommand{\reportmdvside}{<%= table_rules['sides'] ? "\\vrule width #{table_rules['sides']}" : '' %>}

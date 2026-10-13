@@ -229,13 +229,13 @@ RSpec.describe 'filter.lua' do
       it '表のキャプションは、既定では表の上（top）に置く' do
         latex = convert_with_pandoc("![t:実験結果]\n#{table}", 'latex')
         expect(latex).not_to include('\\caption')
-        expect(latex.index('表1 実験結果')).to be < latex.index('\\begin{longtable}')
+        expect(latex.index('表1 実験結果')).to be < latex.index('\\begin{tabular}')
         expect(latex).to include('\\nopagebreak')
       end
 
       it 'table_position が bottom なら、表のキャプションを表の下に置く' do
         latex = convert_with_settings("![t:実験結果]\n#{table}", 'latex', 'table_position' => 'bottom')
-        expect(latex.index('\\end{longtable}')).to be < latex.index('表1 実験結果')
+        expect(latex.index('\\end{tabular}')).to be < latex.index('表1 実験結果')
       end
 
       it '画像の属性（width）が \\includegraphics に渡る' do
@@ -258,6 +258,101 @@ RSpec.describe 'filter.lua' do
         expect(err).to include('a.rmd:3: warning: 図の行には、画像だけを書いてください')
         expect(out).to include('説明')
         expect(out).not_to include('図1')
+      end
+    end
+
+    # 表の書式（罫線の太さ・文字サイズなど）は、プリアンブルの命令で決まる。
+    # ここでは、filter.lua が組む tabular の形を確認する。
+    describe '表の組版（LaTeX）' do
+      let(:three_rows) { "| 条件 | 結果 |\n|:---|---:|\n| A | 10 |\n| B | 20 |\n| C | 30 |\n" }
+
+      it 'longtable ではなく tabular に組み、列の揃えと縦の罫線の命令を入れる' do
+        latex = convert_with_pandoc("![t:結果]\n#{three_rows}", 'latex')
+        expect(latex).not_to include('longtable')
+        expect(latex).to include('\\begin{reportmdtablebox}')
+        expect(latex).to include('{\\reportmdtablestyle')
+        expect(latex).to include('\\begin{tabular}{!{\\reportmdvside}l!{\\reportmdvrule}r!{\\reportmdvside}}')
+      end
+
+      it '罫線の命令を、上・見出しの下・本文の行の間・下の順に置く' do
+        latex = convert_with_pandoc("![t:結果]\n#{three_rows}", 'latex')
+        rows = latex[/\\begin\{tabular\}.*?\n(.*)\n\\end\{tabular\}/m, 1].lines.map(&:strip)
+        # 罫線は、本文の行の間だけ（3行なら2本）。見出しの行の後ろには見出しの下の線を置く
+        expect(rows.map { |row| row[/\A\\reportmdrule\w+|\A\S+/] }).to eq(
+          ['\\reportmdruletop', '\\multicolumn{1}{!{\\reportmdvside}c!{\\reportmdvrule}}{\\reportmdtablehead{条件}}',
+           '\\reportmdruleheader', 'A', '\\reportmdrulerows', 'B', '\\reportmdrulerows', 'C', '\\reportmdrulebottom']
+        )
+      end
+
+      it '見出しのセルは、既定では中央揃え（列の揃えを上書き）で、見出しの書式の命令で囲む' do
+        latex = convert_with_pandoc("![t:結果]\n#{three_rows}", 'latex')
+        expect(latex).to include('\\multicolumn{1}{!{\\reportmdvside}c!{\\reportmdvrule}}{\\reportmdtablehead{条件}}')
+        expect(latex).to include('\\multicolumn{1}{c!{\\reportmdvside}}{\\reportmdtablehead{結果}}')
+      end
+
+      it 'header.align が column なら、見出しのセルも列の揃えに従う' do
+        latex = convert_with_settings("![t:結果]\n#{three_rows}", 'latex', 'table_header_align' => 'column')
+        expect(latex).to include('\\reportmdtablehead{条件} & \\reportmdtablehead{結果} \\\\')
+      end
+
+      it 'header.align が right なら、見出しのセルを右揃えにする' do
+        latex = convert_with_settings("![t:結果]\n#{three_rows}", 'latex', 'table_header_align' => 'right')
+        expect(latex).to include('\\multicolumn{1}{!{\\reportmdvside}r!{\\reportmdvrule}}{\\reportmdtablehead{条件}}')
+      end
+
+      it 'セルの中のインライン書式や数式が使える' do
+        latex = convert_with_pandoc("![t]\n| a | b |\n|---|---|\n| **太字** | $x^2$ |\n", 'latex')
+        expect(latex).to include('\\textbf{太字} & \\(x^2\\) \\\\')
+      end
+
+      it '横に結合したセルは \\multicolumn にし、結合した列の幅の合計で折り返す' do
+        grid = "+-----+-----+\n| a   | b   |\n+=====+=====+\n| 結合      |\n+-----+-----+\n"
+        latex = convert_with_pandoc("![t]\n#{grid}", 'latex')
+        column = latex[/\\real\{([\d.]+)\}/, 1].to_f
+        pattern = /#{Regexp.escape('\\multicolumn{2}{!{\\reportmdvside}>{\\raggedright\\arraybackslash}p{(\\linewidth - 4\\tabcolsep) * \\real{')}([\d.]+)#{Regexp.escape('}}!{\\reportmdvside}}{結合} \\\\')}/
+        expect(latex).to match(pattern)
+        expect(latex[pattern, 1].to_f).to be_within(0.001).of(column * 2)
+      end
+
+      it '列の幅が決まっている表（長い区切り行）は、折り返す p 列にする' do
+        wide = "| 項目 | 説明 |\n|---|#{'-' * 80}|\n| 入力 | 長い説明 |\n"
+        latex = convert_with_pandoc("![t]\n#{wide}", 'latex')
+        expect(latex).to include('>{\\raggedright\\arraybackslash}p{(\\linewidth - 4\\tabcolsep) * \\real{')
+      end
+
+      it 'width が full なら、幅の決まっていない列を X 列にして tabularx で本文幅に広げる' do
+        latex = convert_with_settings("![t:結果]\n#{three_rows}", 'latex', 'table_width' => 'full')
+        expect(latex).to include('\\begin{tabularx}{\\linewidth}{!{\\reportmdvside}>{\\raggedright\\arraybackslash}X' \
+                                 '!{\\reportmdvrule}>{\\raggedleft\\arraybackslash}X!{\\reportmdvside}}')
+        expect(latex).to include('\\end{tabularx}')
+      end
+
+      it 'width が full で、すべての列の幅が決まっている表は、幅の合計を本文幅にそろえる' do
+        grid = "+---+---+\n| a | b |\n+===+===+\n| 1 | 2 |\n+---+---+\n"
+        latex = convert_with_settings("![t]\n#{grid}", 'latex', 'table_width' => 'full')
+        widths = latex.scan(/\\real\{([\d.]+)\}/).flatten.map(&:to_f)
+        expect(widths.length).to be >= 2
+        expect(widths.first(2).sum).to be_within(0.001).of(1.0)
+        expect(latex).not_to include('tabularx')
+      end
+
+      it '![t:...] のない表も同じ形で組み、番号は付けない' do
+        latex = convert_with_pandoc(three_rows, 'latex')
+        expect(latex).to include('\\begin{tabular}')
+        expect(latex).not_to include('表1')
+      end
+
+      it '![t:...] のない表に Pandoc 標準のキャプションがあれば、番号なしでそのまま使う' do
+        latex = convert_with_pandoc("#{three_rows}\n: 標準のキャプション\n", 'latex')
+        expect(latex).to include('標準のキャプション')
+        expect(latex).not_to include('表1')
+        expect(latex.index('標準のキャプション')).to be < latex.index('\\begin{tabular}')
+      end
+
+      it 'HTML では、表をそのまま残す（キャプションだけ付ける）' do
+        html = convert_with_pandoc("![t:結果]\n#{three_rows}", 'html')
+        expect(html).to include('<table')
+        expect(html).not_to include('reportmdrule')
       end
     end
   end

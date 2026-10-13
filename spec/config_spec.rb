@@ -23,6 +23,27 @@ RSpec.describe Reportmd::Config do
       expect(config.source).to be_nil
       expect(config.warnings).to eq([])
     end
+
+    it '表の既定は三線表（上下 0.8pt、見出しの下が太い 1.2pt、縦線なし）' do
+      rules = described_class.load.dig('table', 'rules')
+      expect(rules).to eq('top' => '0.8pt', 'header' => '1.2pt', 'bottom' => '0.8pt',
+                          'rows' => false, 'vertical' => false, 'sides' => false)
+    end
+  end
+
+  describe '表の設定' do
+    it '書いた罫線だけを変え、ほかの罫線は既定のまま' do
+      path = write_json(@dir, 's.json', { table: { rules: { vertical: '0.4pt', top: false } } })
+      rules = described_class.load(explicit_path: path).dig('table', 'rules')
+      expect(rules).to include('vertical' => '0.4pt', 'top' => false, 'bottom' => '0.8pt')
+    end
+
+    it '文字サイズは null（本文と同じ）と pt 単位の両方を受け付ける' do
+      %w[9pt].push(nil).each do |size|
+        path = write_json(@dir, 's.json', { table: { font_size: size } })
+        expect(described_class.load(explicit_path: path).dig('table', 'font_size')).to eq(size)
+      end
+    end
   end
 
   describe '設定ファイルの探索' do
@@ -71,7 +92,16 @@ RSpec.describe Reportmd::Config do
       'ページ番号の型' => [{ page: { numbering: 'yes' } }, /page\.numbering/],
       'フォント名の特殊文字' => [{ font: { main: 'A}B' } }, /font\.main/],
       '見出しサイズの個数' => [{ heading: { sizes: ['14pt'] } }, /heading\.sizes/],
-      'キャプション位置' => [{ caption: { table_position: 'left' } }, /caption\.table_position/]
+      'キャプション位置' => [{ caption: { table_position: 'left' } }, /caption\.table_position/],
+      '表の配置' => [{ table: { position: 'right' } }, /table\.position/],
+      '表の幅' => [{ table: { width: '50%' } }, /table\.width/],
+      '表の文字サイズ' => [{ table: { font_size: '4pt' } }, /table\.font_size/],
+      '表の行の高さ' => [{ table: { row_spacing: 5 } }, /table\.row_spacing/],
+      'セルの余白' => [{ table: { cell_padding: 6 } }, /table\.cell_padding/],
+      '表の見出しの太字' => [{ table: { header: { bold: 'yes' } } }, /table\.header\.bold/],
+      '表の見出しの揃え' => [{ table: { header: { align: 'middle' } } }, /table\.header\.align/],
+      '罫線の太さ' => [{ table: { rules: { top: '1' } } }, /table\.rules\.top/],
+      '罫線に true' => [{ table: { rules: { vertical: true } } }, /table\.rules\.vertical/]
     }.each do |name, (data, pattern)|
       it "#{name}が不正ならエラーにし、項目名を示す" do
         path = write_json(@dir, 's.json', data)

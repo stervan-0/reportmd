@@ -555,6 +555,90 @@ RSpec.describe Reportmd::CLI do
     end
   end
 
+  describe 'PDF の生成（表の書式）' do
+    before { skip 'PDF 生成に必要なツールやフォントがありません' unless pdf_build_ready? }
+
+    A4_WIDTH = 595.276 unless defined?(A4_WIDTH)
+    MARGIN_25MM = 70.866 unless defined?(MARGIN_25MM)
+
+    let(:rmd) { "![t:結果]\n| 条件 | 測定値 |\n|:---|---:|\n| 左端 | 右端 |\n| A | 10 |\n" }
+
+    def table_words(setting = nil)
+      write_file('setting.json', setting) if setting
+      input = write_file('table.rmd', rmd)
+      code, _out, err = run_cli('build', input)
+      expect(code).to eq(0), err
+      html = IO.popen(['pdftotext', '-bbox', File.join(@dir, 'table.pdf'), '-'], &:read).force_encoding('UTF-8')
+      html.scan(%r{xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="([\d.]+)">(.*?)</word>}m)
+          .to_h { |x0, y0, x1, y1, text| [text, { x_min: x0.to_f, y_min: y0.to_f, x_max: x1.to_f, y_max: y1.to_f }] }
+    end
+
+    # --keep-temp で残したプリアンブル
+    def preamble(setting)
+      write_file('setting.json', setting)
+      input = write_file('table.rmd', rmd)
+      code, _out, err = run_cli('build', input, '--keep-temp')
+      expect(code).to eq(0), err
+      kept = err[/一時ファイルを残しました: (.+)$/, 1]
+      text = File.read(File.join(kept, 'preamble.tex'))
+      FileUtils.rm_rf(kept)
+      text
+    end
+
+    it '既定では、表をページの中央に置く' do
+      words = table_words
+      center = (words.fetch('左端')[:x_min] + words.fetch('右端')[:x_max]) / 2
+      expect(center).to be_within(2.0).of(A4_WIDTH / 2)
+    end
+
+    it 'position が left なら、表を本文の左端に置く（セルの余白の分だけ内側に文字が来る）' do
+      words = table_words('{ "table": { "position": "left", "cell_padding": "6pt" } }')
+      expect(words.fetch('左端')[:x_min]).to be_within(1.0).of(MARGIN_25MM + 6)
+    end
+
+    it 'width が full なら、表を本文幅いっぱいに広げる' do
+      words = table_words('{ "table": { "width": "full", "cell_padding": "6pt" } }')
+      expect(words.fetch('左端')[:x_min]).to be_within(1.0).of(MARGIN_25MM + 6)
+      expect(words.fetch('右端')[:x_max]).to be_within(1.0).of(A4_WIDTH - MARGIN_25MM - 6)
+    end
+
+    it 'font_size で、表の中の文字だけを小さくできる（キャプションは本文と同じ）' do
+      normal = table_words
+      small = table_words('{ "table": { "font_size": "8pt" } }')
+      height = ->(words, text) { words.fetch(text)[:y_max] - words.fetch(text)[:y_min] }
+      expect(height.call(small, '左端') / height.call(normal, '左端')).to be_within(0.05).of(8 / 10.5)
+      expect(height.call(small, '結果')).to be_within(0.1).of(height.call(normal, '結果'))
+    end
+
+    it 'row_spacing を大きくすると、行の間隔が広がる' do
+      gap = ->(words) { words.fetch('A')[:y_min] - words.fetch('左端')[:y_min] }
+      normal = gap.call(table_words('{ "table": { "row_spacing": 1.0 } }'))
+      wide = gap.call(table_words('{ "table": { "row_spacing": 2.0 } }'))
+      expect(wide / normal).to be_within(0.1).of(2.0)
+    end
+
+    it '既定のプリアンブルは三線表（上下 0.8pt、見出しの下 1.2pt、縦線と行の間の線なし）' do
+      text = preamble('{}')
+      expect(text).to include('\\newcommand{\\reportmdruletop}{\\noalign{\\hrule height 0.8pt}}')
+      expect(text).to include('\\newcommand{\\reportmdruleheader}{\\noalign{\\hrule height 1.2pt}}')
+      expect(text).to include('\\newcommand{\\reportmdrulebottom}{\\noalign{\\hrule height 0.8pt}}')
+      expect(text).to include('\\newcommand{\\reportmdrulerows}{}')
+      expect(text).to include('\\newcommand{\\reportmdvrule}{}')
+      expect(text).to include('\\newcommand{\\reportmdvside}{}')
+      expect(text).to include('\\newcommand{\\reportmdtablehead}[1]{#1}')
+    end
+
+    it 'すべての罫線と見出しの太字を指定しても、PDF を生成できる' do
+      text = preamble('{ "table": { "header": { "bold": true }, "rules": { "top": "1.5pt", "rows": "0.2pt", ' \
+                      '"vertical": "0.4pt", "sides": "1mm" } } }')
+      expect(text).to include('\\newcommand{\\reportmdruletop}{\\noalign{\\hrule height 1.5pt}}')
+      expect(text).to include('\\newcommand{\\reportmdrulerows}{\\noalign{\\hrule height 0.2pt}}')
+      expect(text).to include('\\newcommand{\\reportmdvrule}{\\vrule width 0.4pt}')
+      expect(text).to include('\\newcommand{\\reportmdvside}{\\vrule width 1mm}')
+      expect(text).to include('AutoFakeBold')
+    end
+  end
+
   # 結合テスト（スモークテスト）：同梱のサンプルから PDF が作れることを確認する。
   # 見た目そのものは比較しない。
   describe 'サンプル（examples/report.rmd）' do

@@ -47,8 +47,15 @@ module Reportmd
     point_in    = ->(range) { ->(v) { v.is_a?(String) && v.match?(POINTS) && range.cover?(v.to_f) } }
     array_of    = ->(count, item) { ->(v) { v.is_a?(Array) && v.length == count && v.all?(&item) } }
     one_of      = ->(list) { ->(v) { list.include?(v) } }
+    or_null     = ->(check) { ->(v) { v.nil? || check.call(v) } }
+    or_false    = ->(check) { ->(v) { v == false || check.call(v) } }
 
     FONT_EXPECT = '空でない文字列。{ } \ % # & $ ^ _ ~ は使えません'
+    RULE_EXPECT = 'false（線を引かない）または線の太さ（例："0.5pt"。単位は mm cm pt in）'
+    TABLE_POSITIONS = %w[center left].freeze
+    TABLE_WIDTHS = %w[auto full].freeze
+    HEADER_ALIGNS = %w[center left right column].freeze
+    TABLE_RULES = %w[top header bottom rows vertical sides].freeze
 
     RULES = [
       Rule.new(%w[document paper], PAPERS.map { |p| "\"#{p}\"" }.join(' '), one_of.call(PAPERS)),
@@ -73,7 +80,16 @@ module Reportmd
       Rule.new(%w[caption figure_label], '文字列', string),
       Rule.new(%w[caption table_label], '文字列', string),
       Rule.new(%w[caption figure_position], '"top" または "bottom"', one_of.call(POSITIONS)),
-      Rule.new(%w[caption table_position], '"top" または "bottom"', one_of.call(POSITIONS))
+      Rule.new(%w[caption table_position], '"top" または "bottom"', one_of.call(POSITIONS)),
+      Rule.new(%w[table position], '"center" または "left"', one_of.call(TABLE_POSITIONS)),
+      Rule.new(%w[table width], '"auto"（内容に合わせる）または "full"（本文幅いっぱい）', one_of.call(TABLE_WIDTHS)),
+      Rule.new(%w[table font_size], 'null（本文と同じ）または "6pt"〜"24pt"', or_null.call(point_in.call(6.0..24.0))),
+      Rule.new(%w[table row_spacing], '1.0〜3.0 の数値', number_in.call(1.0..3.0)),
+      Rule.new(%w[table cell_padding], '単位つきの長さ（例："6pt"。単位は mm cm pt in）', length),
+      Rule.new(%w[table header bold], 'true または false', boolean),
+      Rule.new(%w[table header align], '"center" "left" "right" "column"（列の揃えに従う）',
+               one_of.call(HEADER_ALIGNS)),
+      *TABLE_RULES.map { |name| Rule.new(['table', 'rules', name], RULE_EXPECT, or_false.call(length)) }
     ].freeze
 
     attr_reader :values, :warnings, :source

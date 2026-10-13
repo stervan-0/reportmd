@@ -1,0 +1,18 @@
+{
+  "table": {
+    "position": "left",
+    "width": "full",
+    "font_size": "9pt",
+    "row_spacing": 1.6,
+    "cell_padding": "10pt",
+    "header": { "bold": true, "align": "column" },
+    "rules": {
+      "top": "1.5pt",
+      "header": "0.5pt",
+      "bottom": "1.5pt",
+      "rows": "0.2pt",
+      "vertical": false,
+      "sides": false
+    }
+  }
+}

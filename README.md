@@ -44,7 +44,7 @@ bin/reportmd build report.rmd -o out.pdf -c setting.json
 
 ## 設定
 
-用紙・余白・フォント・文字サイズ・行間・見出し・キャプションを JSON で指定します。書かなかった項目は [config/default.json](config/default.json) の値になります。項目の一覧は仕様書の7章を参照してください。
+用紙・余白・フォント・文字サイズ・行間・見出し・キャプション・表の書式を JSON で指定します。書かなかった項目は [config/default.json](config/default.json) の値になります。項目の一覧は仕様書の7章を参照してください。
 
 ```json
 {
@@ -52,6 +52,37 @@ bin/reportmd build report.rmd -o out.pdf -c setting.json
   "text": { "font_size": "11pt", "paragraph_indent": 0 }
 }
 ```
+
+### 表の書式
+
+表は、既定では三線表（上端と下端に 0.8pt、見出し行の下に太い 1.2pt の線、縦線なし）になります。`table` で細かく変えられます。
+
+```json
+{
+  "table": {
+    "position": "center",
+    "width": "auto",
+    "font_size": "9pt",
+    "row_spacing": 1.3,
+    "cell_padding": "6pt",
+    "header": { "bold": true, "align": "center" },
+    "rules": {
+      "top": "0.8pt", "header": "1.2pt", "bottom": "0.8pt",
+      "rows": false, "vertical": false, "sides": false
+    }
+  }
+}
+```
+
+| 項目 | 意味 |
+| --- | --- |
+| `position` | 表の配置（`"center"` / `"left"`） |
+| `width` | `"auto"`（内容に合わせる）/ `"full"`（本文幅いっぱい） |
+| `font_size` | 表の中の文字サイズ（`null` なら本文と同じ） |
+| `row_spacing` | 行の高さ（倍率） |
+| `cell_padding` | セルの左右の余白 |
+| `header.bold` / `header.align` | 見出し行の太字と揃え（`"column"` なら列の揃えに従う） |
+| `rules.*` | 各罫線の太さ。`false` で線を引かない（`top` 上端、`header` 見出しの下、`bottom` 下端、`rows` 行の間、`vertical` 列の間、`sides` 左右の端） |
 
 ## テスト
 

@@ -30,6 +30,8 @@ module Reportmd
       'a4' => 'a4paper', 'a5' => 'a5paper', 'b5' => 'b5paper', 'letter' => 'letterpaper'
     }.freeze
 
+    TABLE_POSITION_ENVS = { 'center' => 'center', 'left' => 'flushleft' }.freeze
+
     # 行送りは、文字サイズのこの倍率を標準とする（LaTeX の標準に近い値）
     BASELINE_RATIO = 1.2
     PANDOC_READER = 'markdown-raw_html-raw_tex'
@@ -139,6 +141,9 @@ module Reportmd
       end
       meta['reportmd'] = CAPTION_KEYS.to_h { |key| [key, @config.dig('caption', key)] }
       meta['reportmd']['source'] = @input_name # filter.lua の警告に表示するファイル名
+      # 表の組み方（tabular の形）に関わる設定。線の太さなどはプリアンブルで決める
+      meta['reportmd']['table_width'] = @config.dig('table', 'width')
+      meta['reportmd']['table_header_align'] = @config.dig('table', 'header', 'align')
       meta
     end
 
@@ -152,6 +157,7 @@ module Reportmd
       margin = @config.dig('page', 'margin')
       {
         **heading_variables(font_size),
+        **table_variables(font_size),
         paper_option: PAPER_OPTIONS.fetch(@config.dig('document', 'paper')),
         margin_top: margin['top'], margin_bottom: margin['bottom'],
         margin_left: margin['left'], margin_right: margin['right'],
@@ -179,6 +185,22 @@ module Reportmd
         heading_indents: @config.dig('heading', 'indents').map { |n| number(n * font_size) },
         heading_before: number(leading),
         heading_after: number(leading * 0.5)
+      }
+    end
+
+    # 表の書式。文字サイズが null なら本文と同じにする。
+    # 表の中は本文の行間（line_spacing）を使わず、row_spacing だけで行の高さを決める。
+    def table_variables(body_font_size)
+      table = @config['table']
+      size = table['font_size'] ? table['font_size'].to_f : body_font_size
+      {
+        table_position_env: TABLE_POSITION_ENVS.fetch(table['position']),
+        table_font_size: number(size),
+        table_baseline: number(size * BASELINE_RATIO),
+        table_cell_padding: table['cell_padding'],
+        table_row_spacing: number(table['row_spacing']),
+        table_header_bold: table.dig('header', 'bold'),
+        table_rules: table['rules']
       }
     end
 
