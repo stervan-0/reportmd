@@ -338,6 +338,17 @@ RSpec.describe Reportmd::CLI do
       expect(bold_size).to be > thin_size * 1.15
     end
 
+    it '本文の **太字** は、太字の書体がない本文フォントでも太く表示される' do
+      skip 'pdftoppm がありません' unless system('pdftoppm', '-v', out: File::NULL, err: File::NULL)
+      run_cli('build', write_file('b.rmd', "**実験レポート**\n"))
+      bold_size = render_ink(File.join(@dir, 'b.pdf'), 'bold')
+
+      run_cli('build', write_file('t.rmd', "実験レポート\n"))
+      thin_size = render_ink(File.join(@dir, 't.pdf'), 'thin')
+
+      expect(bold_size).to be > thin_size * 1.15
+    end
+
     # 1ページ目を PGM（白黒画像）にして、黒い部分の量（濃さの合計）を返す
     def render_ink(pdf, name)
       prefix = File.join(@dir, name)
