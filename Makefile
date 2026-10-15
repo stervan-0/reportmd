@@ -17,6 +17,16 @@ test:
 install: build
 	install -d $(PREFIX)/bin
 	install -m 755 reportmd $(PREFIX)/bin/reportmd
+	@# インストール先が PATH に入っていなければ、使えるようにする方法を案内する
+	@# （Ubuntu の ~/.profile は、ログインの時点で ~/.local/bin があるときだけ PATH に入れる）
+	@case ":$$PATH:" in \
+		*":$(PREFIX)/bin:"*) echo "reportmd をインストールしました。reportmd で使えます" ;; \
+		*) echo ""; \
+		   echo "reportmd をインストールしましたが、$(PREFIX)/bin が PATH に入っていません。"; \
+		   echo "次のどちらかを実行すると、reportmd で使えるようになります:"; \
+		   echo "  source ~/.profile     （またはターミナルを開き直す）"; \
+		   echo "  echo 'export PATH=\"$(PREFIX)/bin:\$$PATH\"' >> ~/.bashrc && source ~/.bashrc" ;; \
+	esac
 
 # install で入れたものを取り除く（reportmd が置くファイルは実行ファイルだけ）。
 # install と同じ PREFIX を指定する
