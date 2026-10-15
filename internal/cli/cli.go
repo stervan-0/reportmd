@@ -16,7 +16,7 @@ import (
 )
 
 // Version は reportmd のバージョン。
-const Version = "0.11.3"
+const Version = "0.11.4"
 
 const usage = `使い方:
   reportmd                                 （いちばん簡単な使い方。下を参照）

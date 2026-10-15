@@ -2,7 +2,7 @@ VERSION := $(shell sed -n 's/^const Version = "\(.*\)"/\1/p' internal/cli/cli.go
 PREFIX ?= $(HOME)/.local
 TARGETS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
 
-.PHONY: build test install uninstall dist example clean
+.PHONY: build test install uninstall dist example vscode vscode-test clean
 
 # 実行ファイル reportmd を作る
 build:
@@ -47,5 +47,13 @@ dist:
 example: build
 	./reportmd build examples/report.reportmd
 
+# VS Code 拡張機能（vscode/）を .vsix にまとめる（Node.js が必要）
+vscode:
+	cd vscode && npm run package
+
+# VS Code 拡張機能のテスト（Node.js が必要）
+vscode-test:
+	cd vscode && npm install && npm test
+
 clean:
-	rm -rf reportmd dist examples/*.pdf
+	rm -rf reportmd dist examples/*.pdf vscode/*.vsix
