@@ -35,7 +35,7 @@
       },
       {
         "command": "reportmd.watch",
-        "title": "監視を開始（保存のたびに PDF を生成）",
+        "title": "監視を開始（変更のたびに PDF を生成）",
         "category": "reportmd",
         "icon": "$(eye)"
       },
@@ -147,6 +147,17 @@
           ],
           "default": "preview",
           "description": "「PDF を生成」「監視を開始」で生成した PDF をどこで開くか"
+        },
+        "reportmd.liveUpdate": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "プレビュー・監視の間は、保存しなくても、入力するたびに PDF を生成し直す（保存していない内容を `reportmd watch --stdin` に送る）。オフにすると、保存したときだけ生成し直す"
+        },
+        "reportmd.liveUpdateDelay": {
+          "type": "number",
+          "default": 300,
+          "minimum": 0,
+          "markdownDescription": "入力が止まってから、生成し直すまでの時間（ミリ秒）。`reportmd.liveUpdate` が有効なときに使う"
         }
       }
     },

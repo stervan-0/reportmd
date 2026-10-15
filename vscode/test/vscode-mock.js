@@ -54,11 +54,14 @@ class TextDocument {
     this.uri = Uri.file(fsPath);
     this.languageId = languageId;
     this.isDirty = false;
+    this.text = null; // 保存していない内容（null ならファイルの内容）
   }
   getText() {
-    return fs.readFileSync(this.uri.fsPath, 'utf8');
+    return this.text !== null ? this.text : fs.readFileSync(this.uri.fsPath, 'utf8');
   }
   async save() {
+    if (this.text !== null) fs.writeFileSync(this.uri.fsPath, this.text);
+    this.text = null;
     this.isDirty = false;
     return true;
   }
@@ -112,6 +115,7 @@ function createMock() {
   const events = {
     open: new Emitter(),
     save: new Emitter(),
+    change: new Emitter(),
     close: new Emitter(),
     activeEditor: new Emitter(),
   };
@@ -190,6 +194,7 @@ function createMock() {
       },
       onDidOpenTextDocument: events.open.event,
       onDidSaveTextDocument: events.save.event,
+      onDidChangeTextDocument: events.change.event,
       onDidCloseTextDocument: events.close.event,
     },
     commands: {
