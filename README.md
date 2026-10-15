@@ -67,6 +67,16 @@ reportmd build report.reportmd -o report.tex   # LaTeX のソース（.html .doc
 
 エラーと警告は `ファイル名:行番号: error: メッセージ` の形で表示します（エディタから行に飛べます）。
 
+## VS Code 拡張機能
+
+[vscode/](vscode/README.md) に、VS Code の拡張機能があります。独自記法の色分け、保存するたびの誤りの表示（波線）、ボタンからの PDF の生成・監視、`setting.json` の補完と検査ができます。
+
+```bash
+make vscode     # vscode/reportmd-0.1.0.vsix を作る（Node.js が必要）
+```
+
+VS Code の拡張機能ビューの「…」→「VSIX からのインストール...」で入れます。
+
 ## 記法
 
 | 記法 | 意味 |

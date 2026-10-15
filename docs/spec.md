@@ -101,6 +101,13 @@ reportmd/
 ├── examples/
 │   ├── report.reportmd
 │   └── setting.json
+├── vscode/                  （VS Code 拡張機能。13章）
+│   ├── package.json
+│   ├── extension.js
+│   ├── lib/
+│   ├── syntaxes/
+│   ├── schemas/
+│   └── test/
 └── README.md
 ```
 
@@ -733,6 +740,7 @@ PDF生成時に一時ファイルを使用する場合は、一時ディレク�
 - **結合テスト**：`examples/report.reportmd` からPDFが生成できることを確認する（スモークテスト）。PDFの見た目そのものの比較は行わない。
 - **互換性のテスト**：Ruby 版（0.1.0）が同じ設定から生成したプリアンブルとメタデータ（`internal/build/testdata`）と、Go 版の出力が一致することを確認する。
 - テストは `go test ./...` で実行する。PandocやXeLaTeX・既定のフォントが必要なテストは、揃っていない環境では飛ばす。
+- VS Code 拡張機能のテストは 13.6 を参照。
 
 ### 10.2 確認する項目
 
@@ -785,9 +793,61 @@ PDF生成時に一時ファイルを使用する場合は、一時ディレク�
 - 2段階以上のインデント、リスト・引用内でのインデント
 - `#4` 以降の見出しレベル
 - 縦書き・段組み
-- VS Code拡張の機能
+- VS Code 拡張機能の、`@名前` の補完・スニペット・PDF のプレビュー
 
 以上を初期仕様案とし、実装・テストで問題が見つかった場合は、本文の互換性を優先して仕様を改訂する。
+
+## 13. VS Code 拡張機能
+
+`vscode/` に、VS Code の拡張機能を置く。文書の変換はすべて reportmd 本体（コマンド）が行い、拡張機能は本体を呼び出して結果を表示するだけにする（変換の仕組みを二重に持たない）。JavaScript で書き、ビルドの手順は持たない。
+
+### 13.1 言語と色分け
+
+- 言語 `reportmd` を、拡張子 `.reportmd` に結び付ける（`.rmd` は R Markdown と衝突するため結び付けない。使う場合は利用者が `files.associations` で設定する）。
+- 色分けは TextMate の文法（`syntaxes/reportmd.tmLanguage.json`）で行う。行単位の独自構文（改ページ・右揃え・中央揃え・番号付き見出し・図・表の見出し行・独立した数式と閉じの `$$` の後ろの `{#名前}` / `{-}`）を先に調べ、それ以外は VS Code の Markdown の文法に任せる。
+- 段落・リスト・表などの中の、数式（`$…$`）と参照（`@名前`）は、注入の文法（`reportmd.injection.tmLanguage.json`）で色を付ける。コード・コードブロック・フロントマター・リンクの中には付けない。
+- 数式の中は、VS Code の Markdown 数式の文法（`text.html.markdown.math`）で色を付ける。
+
+### 13.2 エラー・警告の表示
+
+- 文書を開いたときと保存したときに `reportmd check <文書>` を文書のフォルダで実行し、出力の `ファイル:行: 種類: メッセージ` を VS Code のエラー・警告（波線と「問題」パネル）にする。字下げされた続きの行（LaTeX のエラーの説明など）はメッセージに含める。
+- 行番号のないものは、次の位置に表示する。
+  - 文書の警告で `@名前` を含むもの（見つからない参照）：文書の中のその `@名前` の位置（コードブロックの中は除く）
+  - 設定ファイル（`setting.json`）のもので項目名を含むもの：設定ファイルの中のその項目のキーの位置
+  - そのほか：ファイルの先頭の行
+- `setting.json` を保存したときは、同じフォルダの開いている文書を調べ直す。
+- 監視中（13.3）の文書は check を実行せず、watch の出力（最後の「変更を検出しました」より後）からエラー・警告を表示する。生成し直すたびに表示を入れ替える。
+- 設定 `reportmd.checkOnSave` が `false` なら、保存時に調べない。
+
+### 13.3 コマンド
+
+| コマンド | 動作 |
+| --- | --- |
+| PDF を生成（`reportmd.build`） | 文書を保存し、`reportmd build <文書>` を実行する。結果のエラー・警告を表示する |
+| 監視を開始（`reportmd.watch`） | 文書を保存し、`reportmd watch <文書>` を起動する。出力は出力パネル「reportmd」に表示する |
+| 監視を停止（`reportmd.stopWatch`） | watch のプロセスを止める（拡張機能の終了時にも止める） |
+| 誤りを調べる（`reportmd.check`） | check を実行し、結果を通知でも知らせる |
+| 出力を表示（`reportmd.showOutput`） | 出力パネルを表示する |
+
+- エディタの右上（PDF を生成・監視の開始/停止）、ステータスバー（`PDF`・`監視`/`監視中`。`.reportmd` を開いているときだけ）、エクスプローラーの右クリック、コマンドパレットから実行できる。
+- 生成した PDF は、設定 `reportmd.openPdf` に従って開く。`external`（既定）は本体の `--open` で OS の PDF ビューアを開く。`vscode` は VS Code の横のタブで開く（PDF を表示する拡張機能が必要）。`none` は開かない。
+
+### 13.4 reportmd の実行
+
+- 設定 `reportmd.path` があれば、それを実行する。なければ `reportmd`。Linux・macOS で PATH に見つからず、`~/.local/bin/reportmd` があれば、それを使う（VS Code がログインシェルの PATH を引き継がないことがあるため）。
+- Windows の VS Code で WSL のフォルダ（`\\wsl.localhost\<ディストリビューション>\...` または `\\wsl$\...`）を開いている場合は、`wsl.exe -d <ディストリビューション> --cd <Linux のパス> -e bash -lc 'exec "$0" "$@"' reportmd ...` で、WSL の中の reportmd を実行する（ログインシェルで `~/.profile` の PATH を読む）。
+- WSL に接続した VS Code では、拡張機能は WSL の中で動く（`extensionKind` は `workspace`）。
+- reportmd が見つからない場合（起動できない、または WSL のシェルの終了コード 127）は、インストールか `reportmd.path` の設定を促す通知を、1回だけ表示する。
+
+### 13.5 setting.json の補完と検査
+
+- `schemas/setting.schema.json`（JSON Schema）を、`setting.json` という名前のファイルに結び付ける。項目と値の候補・説明・既定値を表示し、7.3 と同じ規則（列挙・範囲・長さの形式・フォント名に使えない文字・未知のキー）で印を付ける。
+- スキーマの項目と既定値が、本体の設定の規則と `default.json` に一致することを、Go のテスト（`internal/config/schema_test.go`）で確かめる。
+
+### 13.6 テストとパッケージ
+
+- `npm test`（`make vscode-test`）で実行する。色分け（vscode-textmate で VS Code 本体の文法とともに字句に分ける）、出力の読み取り、コマンドラインの組み立て、スキーマ（vscode-json-languageservice）、拡張機能の動作（VS Code の API の代わりの上で `extension.js` を動かし、実際に reportmd を実行する）をテストする。VS Code・reportmd・PDF の生成に必要なものがなければ、そのテストを飛ばす。
+- `npm run package`（`make vscode`）で `.vsix` を作る。
 
 ---
 
