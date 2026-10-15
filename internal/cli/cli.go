@@ -19,7 +19,8 @@ import (
 const Version = "0.2.0"
 
 const usage = `使い方:
-  reportmd build INPUT.rmd [-o OUTPUT] [-c setting.json] [--keep-temp] [-w]
+  reportmd build [INPUT.rmd] [-o OUTPUT] [-c setting.json] [--keep-temp] [-w]
+  reportmd INPUT.rmd [オプション]          （build を省略した書き方）
   reportmd watch INPUT.rmd [-o OUTPUT] [-c setting.json]
   reportmd check INPUT.rmd [-c setting.json]
   reportmd init [DIR] [--force]
@@ -35,6 +36,8 @@ const usage = `使い方:
   init     新しいレポートの雛形（report.rmd と setting.json）を作る
   fonts    設定に書けるフォント名の一覧を表示する（既定は日本語フォントのみ）
   doctor   Pandoc・XeLaTeX・フォントなど、必要なものが揃っているか調べる
+
+INPUT.rmd を省略すると、カレントディレクトリにある .rmd（1つだけの場合）を使う。
 
 オプション:
   -o, --output FILE   出力するファイルのパス（省略時は入力ファイルと同じ場所の PDF）
@@ -84,6 +87,10 @@ func (c *CLI) Run(args []string) int {
 		return c.fonts(rest)
 	case "doctor":
 		return c.doctor(rest)
+	}
+	// 「reportmd report.rmd」のように、コマンドを省略して入力ファイルを書いたら build にする
+	if strings.HasSuffix(strings.ToLower(command), ".rmd") {
+		return c.build(args, false)
 	}
 	fmt.Fprintf(c.Stderr, "error: 不明なコマンドです: %s\n", command)
 	fmt.Fprint(c.Stderr, usage)
@@ -232,7 +239,14 @@ func (c *CLI) reportWarnings(input string, warnings []preprocess.Warning) {
 // --- 入力の確認 -----------------------------------------------------------
 
 // singleInput は、位置引数がちょうど1つの入力ファイルであることを確認する。
+// 入力ファイルを省略した場合は、カレントディレクトリにある .rmd が1つだけなら、それを使う。
 func (c *CLI) singleInput(opts *options, command string) (string, int) {
+	if len(opts.args) == 0 {
+		matches, _ := filepath.Glob("*.rmd")
+		if len(matches) == 1 {
+			opts.args = matches
+		}
+	}
 	if len(opts.args) != 1 {
 		return "", c.fail(fmt.Sprintf("error: 入力ファイルを1つ指定してください（例: reportmd %s report.rmd）", command))
 	}
