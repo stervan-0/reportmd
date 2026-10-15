@@ -16,7 +16,7 @@ import (
 )
 
 // Version は reportmd のバージョン。
-const Version = "0.7.0"
+const Version = "0.8.0"
 
 const usage = `使い方:
   reportmd build [INPUT.rmd] [-o OUTPUT] [-c setting.json] [--keep-temp] [-w]
@@ -219,7 +219,7 @@ func (c *CLI) reportError(input string, err error) int {
 		if file == "" {
 			file = input
 		}
-		return c.fail(diagnostic(file, 0, "error", bld.Message))
+		return c.fail(diagnostic(file, bld.Line, "error", bld.Message))
 	}
 	return c.fail(diagnostic(input, 0, "error", err.Error()))
 }

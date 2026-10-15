@@ -324,3 +324,37 @@ func TestIndent(t *testing.T) {
 		}
 	}
 }
+
+func TestMathBraces(t *testing.T) {
+	cases := []struct {
+		name, in string
+		lines    []int
+		message  string
+	}{
+		{"閉じていない {", "本文\n\n$$\n\\frac{1}{2 + x\n$$\n", []int{3}, "閉じていない { が 1 個"},
+		{"対応する { のない }", "$$ a } $$\n", []int{1}, "対応する { のない }"},
+		{"1行の数式の後ろの属性は数えない", "$$ \\frac{a}{b} $$ {#eq}\n", nil, ""},
+		{"エスケープした括弧は数えない", "$$\n\\left\\{ x \\right.\n$$\n", nil, ""},
+		{"コメントの中は数えない", "$$\nx^{2} % {メモ\n$$\n", nil, ""},
+		{"開始行・閉じの行の式も数える", "$$ \\sqrt{x\n+ 1 $$\n", []int{1}, "閉じていない {"},
+		{"対応が取れていれば警告しない", "$$\n\\begin{aligned}\na &= {b}_{c} \\\\\n\\end{aligned}\n$$\n", nil, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r := run(t, c.in)
+			if !strings.Contains(c.in, "{#") && r.Text != c.in {
+				t.Errorf("数式は変更しない: %q", r.Text)
+			}
+			got := warningLines(r)
+			if len(c.lines) == 0 {
+				if len(got) != 0 {
+					t.Errorf("警告しないはず: %+v", r.Warnings)
+				}
+				return
+			}
+			if !reflect.DeepEqual(got, c.lines) || !strings.Contains(r.Warnings[0].Message, c.message) {
+				t.Errorf("警告 %v %q のはず: %+v", c.lines, c.message, r.Warnings)
+			}
+		})
+	}
+}
