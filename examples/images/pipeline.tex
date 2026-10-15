@@ -16,7 +16,7 @@
   arrow/.style={->, thick}
 ]
   \node[file] (rmd) {.rmd};
-  \node[stage, right=of rmd] (pre) {前処理\\\footnotesize preprocessor.rb};
+  \node[stage, right=of rmd] (pre) {前処理\\\footnotesize preprocess};
   \node[stage, right=of pre] (pandoc) {Pandoc};
   \node[stage, right=of pandoc] (filter) {フィルタ\\\footnotesize filter.lua};
   \node[stage, right=of filter] (xelatex) {XeLaTeX};
