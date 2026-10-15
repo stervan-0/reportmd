@@ -115,6 +115,10 @@ func TestParseOptions(t *testing.T) {
 	if err != nil || opts.output != "x.pdf" || opts.config != "s.json" || !opts.keepTemp || !opts.watch || len(opts.args) != 1 {
 		t.Errorf("オプションと位置引数を分ける: %+v %v", opts, err)
 	}
+	opts, err = parseOptions([]string{"a.rmd", "--open"}, "open")
+	if err != nil || !opts.open {
+		t.Errorf("--open: %+v %v", opts, err)
+	}
 	opts, err = parseOptions([]string{"-ox.pdf", "--", "-a.rmd"}, "output")
 	if err != nil || opts.output != "x.pdf" || opts.args[0] != "-a.rmd" {
 		t.Errorf("-oFILE と -- のあとの引数: %+v %v", opts, err)

@@ -159,6 +159,7 @@ reportmd build report.rmd -c setting.json
 | `-c`, `--config` | 設定ファイルのパス                  |
 | `--keep-temp`    | 一時ファイルを残す（デバッグ用。前処理後のMarkdownなどを確認できる） |
 | `-w`, `--watch`  | 生成したあと、変更を監視して生成し直す（4.5参照） |
+| `--open`         | 生成したファイルを既定のアプリ（PDF ビューアなど）で開く。監視中は最初に生成できたときだけ開く。WSL では Windows 側のアプリで開く（`wslview`、なければ `explorer.exe`） |
 | `-v`, `--version` | バージョン表示                   |
 | `-h`, `--help`   | ヘルプ表示                      |
 

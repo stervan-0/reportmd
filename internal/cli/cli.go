@@ -19,9 +19,9 @@ import (
 const Version = "0.2.0"
 
 const usage = `使い方:
-  reportmd build [INPUT.rmd] [-o OUTPUT] [-c setting.json] [--keep-temp] [-w]
+  reportmd build [INPUT.rmd] [-o OUTPUT] [-c setting.json] [--keep-temp] [-w] [--open]
   reportmd INPUT.rmd [オプション]          （build を省略した書き方）
-  reportmd watch INPUT.rmd [-o OUTPUT] [-c setting.json]
+  reportmd watch [INPUT.rmd] [-o OUTPUT] [-c setting.json] [--open]
   reportmd check INPUT.rmd [-c setting.json]
   reportmd init [DIR] [--force]
   reportmd fonts [--all]
@@ -43,6 +43,7 @@ INPUT.rmd を省略すると、カレントディレクトリにある .rmd（1�
   -o, --output FILE   出力するファイルのパス（省略時は入力ファイルと同じ場所の PDF）
   -c, --config FILE   設定ファイルのパス
       --keep-temp     一時ファイルを残す（デバッグ用）
+      --open          生成したファイルを既定のアプリ（PDF ビューアなど）で開く
   -w, --watch         生成したあと、変更を監視して生成し直す
   -v, --version       バージョンを表示
   -h, --help          このヘルプを表示
@@ -102,6 +103,7 @@ func (c *CLI) Run(args []string) int {
 type options struct {
 	output, config string
 	keepTemp       bool
+	open           bool
 	watch          bool
 	force          bool
 	all            bool
@@ -168,6 +170,8 @@ func parseOptions(args []string, allowed ...string) (*options, error) {
 				return nil, fmt.Errorf("オプション %s には値を付けられません", arg)
 			}
 			switch name {
+			case "open":
+				opts.open = true
 			case "keep-temp":
 				opts.keepTemp = true
 			case "watch":
@@ -265,7 +269,7 @@ func defaultOutputPath(input string) string {
 // --- build / watch --------------------------------------------------------
 
 func (c *CLI) build(args []string, watch bool) int {
-	opts, err := parseOptions(args, "output", "config", "keep-temp", "watch")
+	opts, err := parseOptions(args, "output", "config", "keep-temp", "watch", "open")
 	if err != nil {
 		return c.fail("error: " + err.Error())
 	}
@@ -286,6 +290,7 @@ func (c *CLI) build(args []string, watch bool) int {
 		return c.fail(diagnostic(output, 0, "error", "出力ファイルの拡張子は .pdf .tex .html .docx のどれかにしてください"))
 	}
 
+	opened := false
 	run := func() int {
 		cfg, err := config.Load(opts.config, input)
 		if err != nil {
@@ -306,6 +311,13 @@ func (c *CLI) build(args []string, watch bool) int {
 			fmt.Fprintln(c.Stderr, result.ToolOutput)
 		}
 		fmt.Fprintf(c.Stdout, "%s を出力しました\n", result.Output)
+		// --open は、最初に生成できたときだけ開く（監視中に何度も開かない）
+		if opts.open && !opened {
+			opened = true
+			if err := openFile(result.Output); err != nil {
+				fmt.Fprintln(c.Stderr, diagnostic(result.Output, 0, "warning", "ファイルを開けませんでした（"+err.Error()+"）"))
+			}
+		}
 		return 0
 	}
 
