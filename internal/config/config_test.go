@@ -88,7 +88,7 @@ func TestTableFontSize(t *testing.T) {
 
 func TestFindUserFile(t *testing.T) {
 	dir := t.TempDir()
-	input := writeFile(t, dir, "report.rmd", "本文\n")
+	input := writeFile(t, dir, "report.reportmd", "本文\n")
 	writeFile(t, dir, "setting.json", `{"text": {"font_size": "12pt"}}`)
 	other := writeFile(t, dir, "other.json", `{"text": {"font_size": "11pt"}}`)
 
