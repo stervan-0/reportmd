@@ -1,4 +1,4 @@
-// Package build は、.rmd を読み、前処理 → Pandoc（filter.lua）→ XeLaTeX の順に実行して
+// Package build は、入力ファイルを読み、前処理 → Pandoc（filter.lua）→ XeLaTeX の順に実行して
 // PDF（または LaTeX・HTML・Word の文書）を作る。
 package build
 
@@ -63,6 +63,10 @@ type Options struct {
 	Format   Format // 空なら PDF
 	Config   *config.Config
 	KeepTemp bool
+	// WorkDir は作業ディレクトリ。指定すると、そのまま残し、次の生成で LaTeX の補助ファイル
+	// （.aux など）を使い回す。しおり・相互参照が前回と同じなら、XeLaTeX が1回で済む（watch 用）。
+	// 空なら、一時ディレクトリを作り、終わったら消す。
+	WorkDir string
 }
 
 // Result は生成の結果。
@@ -73,6 +77,8 @@ type Result struct {
 	ToolOutput string
 	// TempDir は、--keep-temp で残した一時ディレクトリ。
 	TempDir string
+	// LaTeXRuns は、XeLaTeX を実行した回数（PDF のとき）。
+	LaTeXRuns int
 }
 
 // pandocReader は、生 HTML・生 TeX を解釈しない Markdown（仕様 5.1）。
@@ -110,26 +116,44 @@ func Run(opts Options) (*Result, error) {
 	}
 
 	result := &Result{Output: opts.Output, Warnings: pre.Warnings}
-	dir, err := os.MkdirTemp("", "reportmd-")
-	if err != nil {
-		return nil, &Error{Message: fmt.Sprintf("一時ディレクトリを作れません（%v）", err)}
-	}
-	if opts.KeepTemp {
-		result.TempDir = dir
+	dir := opts.WorkDir
+	if dir != "" {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, &Error{Message: fmt.Sprintf("作業ディレクトリを作れません（%v）", err)}
+		}
+		if opts.KeepTemp {
+			result.TempDir = dir
+		}
 	} else {
-		defer os.RemoveAll(dir)
+		dir, err = os.MkdirTemp("", "reportmd-")
+		if err != nil {
+			return nil, &Error{Message: fmt.Sprintf("一時ディレクトリを作れません（%v）", err)}
+		}
+		if opts.KeepTemp {
+			result.TempDir = dir
+		} else {
+			defer os.RemoveAll(dir)
+		}
 	}
 
 	output, err := filepath.Abs(opts.Output)
 	if err != nil {
 		return nil, err
 	}
-	toolOutput, err := runPandoc(dir, pre.Text, output, opts, string(source))
-	result.ToolOutput = toolOutput
+	if opts.Format != PDF {
+		result.ToolOutput, err = runPandoc(dir, pre.Text, output, opts.Format, opts, string(source))
+		return result, err
+	}
+
+	// PDF は、Pandoc で LaTeX にしてから、XeLaTeX を必要な回数だけ実行する（Pandoc に PDF まで任せると、
+	// 毎回2回実行するため）。作業ディレクトリを使い回す場合は、前回の補助ファイルで1回で済むことが多い
+	tex := filepath.Join(dir, texName+".tex")
+	result.ToolOutput, err = runPandoc(dir, pre.Text, tex, LaTeX, opts, string(source))
 	if err != nil {
 		return result, err
 	}
-	return result, nil
+	result.LaTeXRuns, err = runLaTeX(dir, opts.Input, output, string(source), opts.WorkDir != "")
+	return result, err
 }
 
 // CheckTools は、Pandoc（PDF なら XeLaTeX も）が使えるか確認する。
@@ -252,16 +276,11 @@ func PandocArgs(paths map[string]string, output string, format Format, title str
 		"--number-sections", // 見出しの番号（標準の見出しは filter.lua で番号なしにする）
 	}
 	switch format {
-	case PDF:
-		args = append(args,
-			"--include-in-header="+paths["preamble.tex"],
-			"-V", "indent=true", // Pandoc 標準の段落間隔・字下げなしの設定を無効にする
-			"--pdf-engine=xelatex")
-	case LaTeX:
+	case LaTeX: // PDF も、いったん LaTeX にしてから XeLaTeX にかける（latex.go）
 		args = append(args,
 			"-t", "latex", "-s",
 			"--include-in-header="+paths["preamble.tex"],
-			"-V", "indent=true")
+			"-V", "indent=true") // Pandoc 標準の段落間隔・字下げなしの設定を無効にする
 	case HTML:
 		args = append(args, "-t", "html5", "-s", "--mathml", "--metadata=pagetitle:"+title)
 	case Docx:
@@ -271,7 +290,7 @@ func PandocArgs(paths map[string]string, output string, format Format, title str
 }
 
 // source は元の .rmd の内容（LaTeX のエラーの位置を推定するために使う）。
-func runPandoc(dir, markdown, output string, opts Options, source string) (string, error) {
+func runPandoc(dir, markdown, output string, format Format, opts Options, source string) (string, error) {
 	paths, err := WorkFiles(dir, markdown, opts.Config, opts.Input)
 	if err != nil {
 		return "", err
@@ -281,7 +300,7 @@ func runPandoc(dir, markdown, output string, opts Options, source string) (strin
 		base := filepath.Base(opts.Input)
 		title = strings.TrimSuffix(base, filepath.Ext(base))
 	}
-	cmd := exec.Command("pandoc", PandocArgs(paths, output, opts.Format, title)...)
+	cmd := exec.Command("pandoc", PandocArgs(paths, output, format, title)...)
 	// 画像などの相対パスは、入力ファイルのある場所を基準にする
 	cmd.Dir = filepath.Dir(opts.Input)
 	var stderr bytes.Buffer
@@ -297,6 +316,12 @@ func runPandoc(dir, markdown, output string, opts Options, source string) (strin
 	if errors.As(err, &exitErr) {
 		code = exitErr.ExitCode()
 	}
+	return "", toolError("pandoc", code, text, source)
+}
+
+// toolError は、Pandoc・XeLaTeX が失敗したときのエラーを作る。
+// LaTeX のよくあるエラーには説明を付け、エラーの箇所の文字から入力ファイルの行番号を推定する。
+func toolError(tool string, code int, text, source string) error {
 	var lines []string
 	for _, line := range strings.Split(text, "\n") {
 		if line = strings.TrimRight(line, " \t\r"); line != "" {
@@ -306,7 +331,7 @@ func runPandoc(dir, markdown, output string, opts Options, source string) (strin
 	if len(lines) > pandocErrorLines {
 		lines = lines[len(lines)-pandocErrorLines:]
 	}
-	message := fmt.Sprintf("文書の生成に失敗しました（pandoc の終了コード: %d）", code)
+	message := fmt.Sprintf("文書の生成に失敗しました（%s の終了コード: %d）", tool, code)
 	hint, line := explainLaTeXError(text, strings.ReplaceAll(source, "\r\n", "\n"))
 	if hint != "" {
 		message += "\n  原因の候補: " + hint
@@ -314,5 +339,5 @@ func runPandoc(dir, markdown, output string, opts Options, source string) (strin
 	if line > 0 {
 		message += "\n  （行番号は、エラーの箇所の文字から推定したものです）"
 	}
-	return "", &Error{Line: line, Message: message + "\n" + strings.Join(lines, "\n")}
+	return &Error{Line: line, Message: message + "\n" + strings.Join(lines, "\n")}
 }
