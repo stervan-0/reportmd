@@ -1,8 +1,8 @@
 # reportmd 仕様書
 
-- バージョン：0.1.0（初期仕様案）
+- バージョン：0.2.0（Go による書き直し）
 - ステータス：設計中
-- 言語：Ruby
+- 言語：Go（0.1.0 は Ruby で実装。独自構文・設定・出力の互換性を保つ）
 - 文書形式：Markdownベースの独自拡張形式
 - ファイル拡張子：`.rmd`（R Markdownの `.Rmd` と衝突するため、変更案を募集予定。12章参照）
 
@@ -46,26 +46,28 @@ HTMLやCSSを直接記述せずに、本文を執筆し、用紙サイズ・余�
 
 | 項目            | 技術          |
 | ------------- | ----------- |
-| 実装言語          | Ruby        |
+| 実装言語          | Go（1.22 以上）  |
 | 入力形式          | `.rmd`      |
 | 設定形式          | JSON        |
 | Markdown解析・変換 | Pandoc      |
 | PDF生成         | XeLaTeX     |
 | 日本語フォント       | IPAex明朝など   |
-| テスト           | RSpecを候補とする |
+| テスト           | Go 標準の `go test` |
 | 将来の拡張         | VS Code拡張   |
+
+実行ファイルは1つのバイナリとして配布する。`filter.lua`・プリアンブルのテンプレート・既定の設定はバイナリに埋め込み、実行のたびに一時ディレクトリへ書き出して使う。Ruby などの実行環境は不要で、外部に必要なのは Pandoc と XeLaTeX（PDF を作る場合）だけである。
 
 ### 2.1 処理の流れと役割分担
 
 ```text
-.rmd ──> preprocessor.rb ──> Pandoc ──> filter.lua ──> XeLaTeX ──> PDF
-                                ▲                          ▲
+.rmd ──> internal/preprocess ──> Pandoc ──> filter.lua ──> XeLaTeX ──> PDF
+                                   ▲                          ▲
                           setting.json の内容を渡す（一時ファイル経由）
 ```
 
 | 段階 | 役割 |
 | --- | --- |
-| `preprocessor.rb` | Markdownの独自構文を認識し、Pandocが理解できる形式へ変換する。 |
+| `internal/preprocess` | Markdownの独自構文を認識し、Pandocが理解できる形式へ変換する。 |
 | Pandoc | Markdownを構造化された文書データ（AST）に変換する。 |
 | `filter.lua` | 図表の自動採番、キャプションの組版、必要に応じた見出し番号などを処理する。 |
 | XeLaTeX | 日本語フォントや余白などの設定を反映し、PDFを生成する。 |
@@ -76,39 +78,42 @@ HTMLやCSSを直接記述せずに、本文を執筆し、用紙サイズ・余�
 
 ```text
 reportmd/
-├── bin/
-│   └── reportmd
-├── lib/
-│   └── reportmd/
-│       ├── cli.rb
-│       ├── config.rb
-│       ├── preprocessor.rb
-│       ├── builder.rb
+├── main.go
+├── go.mod
+├── Makefile
+├── internal/
+│   ├── cli/
+│   │   ├── cli.go
+│   │   └── commands.go
+│   ├── config/
+│   │   ├── config.go
+│   │   └── default.json
+│   ├── preprocess/
+│   │   └── preprocess.go
+│   └── build/
+│       ├── build.go
+│       ├── preamble.go
+│       ├── preamble.tex.tmpl
 │       ├── filter.lua
-│       ├── preamble.tex.erb
-│       └── version.rb
+│       └── testdata/
 ├── docs/
 │   └── spec.md
-├── config/
-│   └── default.json
 ├── examples/
 │   ├── report.rmd
 │   └── setting.json
-├── spec/
-├── Gemfile
 └── README.md
 ```
 
-- `cli.rb`：コマンドライン引数の処理
-- `config.rb`：設定ファイルの読み込み・検証
-- `preprocessor.rb`：独自構文の検出と変換
-- `builder.rb`：PDF生成処理（Pandoc・XeLaTeXの呼び出し）
-- `filter.lua`：Pandoc解析後の文書構造に対する変換
-- `preamble.tex.erb`：設定ファイルの内容（用紙・余白・フォント・文字サイズ・行間・字下げ・ページ番号）をLaTeXのプリアンブルに変換するテンプレート。PandocのLaTeX標準テンプレートに、`--include-in-header` で追加する
-- `version.rb`：バージョン番号
-- `config/default.json`：内蔵のデフォルト設定（設定ファイルがない場合や、項目が省略された場合に使う）
+- `main.go`：実行ファイルの入口
+- `internal/cli`：コマンドライン引数の処理と各コマンド（`cli.go` にバージョン番号）
+- `internal/config`：設定ファイルの読み込み・検証
+- `internal/config/default.json`：内蔵のデフォルト設定（設定ファイルがない場合や、項目が省略された場合に使う。バイナリに埋め込む）
+- `internal/preprocess`：独自構文の検出と変換
+- `internal/build`：文書の生成（Pandoc・XeLaTeXの呼び出し）
+- `filter.lua`：Pandoc解析後の文書構造に対する変換（バイナリに埋め込む）
+- `preamble.tex.tmpl`：設定ファイルの内容（用紙・余白・フォント・文字サイズ・行間・字下げ・ページ番号・見出し・表）をLaTeXのプリアンブルに変換するテンプレート（Go の `text/template`）。PandocのLaTeX標準テンプレートに、`--include-in-header` で追加する
 - `examples/setting.json`：`examples/report.rmd` 用のサンプル設定
-- `spec/`：自動テスト
+- 各パッケージの `*_test.go`：自動テスト。`internal/build/testdata` には、Ruby 版（0.1.0）が生成したプリアンブルなど、互換性の確認に使うファイルを置く
 
 ## 4. コマンドライン仕様
 
@@ -120,11 +125,25 @@ reportmd build report.rmd
 
 指定した入力ファイルからPDFを生成する。出力先を省略した場合、入力ファイルと同じディレクトリに同名のPDFを出力する。
 
+- `build` は省略できる（`reportmd report.rmd`）。最初の引数が `.rmd` で終わる場合に `build` として扱う。
+- 入力ファイルを省略した場合、カレントディレクトリにある `.rmd` が1つだけなら、それを使う。0個または2個以上ならエラーとする。
+
 ### 4.2 出力先の指定
 
 ```bash
 reportmd build report.rmd -o output.pdf
 ```
+
+出力の形式は、出力先の拡張子で決める。
+
+| 拡張子 | 形式 | 備考 |
+| --- | --- | --- |
+| `.pdf` | PDF | 既定。XeLaTeX を使う |
+| `.tex` | LaTeX のソース | PDF と同じプリアンブルを含む単独の文書。XeLaTeX でそのまま組める |
+| `.html` `.htm` | HTML | 単独のページ。数式は MathML。右揃え・中央揃えは `text-align`、図表の番号とキャプションは付く |
+| `.docx` | Word | 図表の番号とキャプションは付く。用紙・フォントなどの設定は反映しない |
+
+そのほかの拡張子はエラーとする。
 
 ### 4.3 設定ファイルの指定
 
@@ -136,13 +155,28 @@ reportmd build report.rmd -c setting.json
 
 | オプション            | 説明                         |
 | ---------------- | -------------------------- |
-| `-o`, `--output` | 出力PDFのパス                   |
+| `-o`, `--output` | 出力ファイルのパス（形式は拡張子で決まる。4.2参照） |
 | `-c`, `--config` | 設定ファイルのパス                  |
 | `--keep-temp`    | 一時ファイルを残す（デバッグ用。前処理後のMarkdownなどを確認できる） |
+| `-w`, `--watch`  | 生成したあと、変更を監視して生成し直す（4.5参照） |
 | `-v`, `--version` | バージョン表示                   |
 | `-h`, `--help`   | ヘルプ表示                      |
 
-### 4.5 パスの扱い
+オプションは、入力ファイルの前後どちらにも書ける。`-o FILE` `-oFILE` `--output FILE` `--output=FILE` のどれでもよい。
+
+### 4.5 そのほかのコマンド
+
+| コマンド | 説明 |
+| --- | --- |
+| `reportmd watch report.rmd` | `build -w` と同じ。入力ファイルのあるディレクトリ（画像・`setting.json` を含む。`.` で始まる名前は除く）と `-c` の設定ファイルを監視し、変更があるたびに生成し直す。エラーがあっても表示して監視を続ける。Ctrl+C で終了する |
+| `reportmd check report.rmd` | PDF を作らずに、独自構文・設定・図表と数式の参照（`@名前`）の誤りを調べる。XeLaTeX は使わない。Pandoc がない環境では、独自構文と設定だけを調べる |
+| `reportmd init [DIR]` | 新しいレポートの雛形（`report.rmd`、すべての項目を書いた `setting.json`、`images/`）を作る。既にあるファイルは上書きしない（`--force` で上書きする） |
+| `reportmd fonts` | 設定に書けるフォント名（`fc-list` で調べた日本語フォント）を表示する。`--all` ですべてのフォント |
+| `reportmd doctor` | Pandoc・XeLaTeX・fontconfig・必要な LaTeX パッケージ・設定のフォントが揃っているかを調べる。足りないものがあれば終了コード 1 |
+
+`check` と `doctor` は `-c` で設定ファイルを指定できる。
+
+### 4.6 パスの扱い
 
 - 本文中の画像パスは、**入力ファイルのあるディレクトリ**を基準に解決する。実行時のカレントディレクトリには依存しない。
 - 出力先に同名ファイルが存在する場合は上書きする。
@@ -379,7 +413,7 @@ author: 山田 太郎
 - 横に結合したセル（グリッド表）は、結合した列の幅で表示する。縦に結合したセルは、上の行にだけ内容を表示する。
 - 表の中は、本文の行間（`text.line_spacing`）を使わず、`table.row_spacing` で行の高さを決める。
 - 表はページをまたいで分割しない（長い表の扱いは12章で検討する）。
-- 実装：`filter.lua` が表を LaTeX の `tabular`（`width` が `full` なら `tabularx`）に組み、罫線などの書式は `preamble.tex.erb` が設定から定義する命令で決める。
+- 実装：`filter.lua` が表を LaTeX の `tabular`（`width` が `full` なら `tabularx`）に組み、罫線などの書式は `preamble.tex.tmpl` が設定から定義する命令で決める。
 
 #### 6.7.4 採番と表示
 
@@ -619,7 +653,7 @@ $$ {-}
 1. `.rmd` ファイルをUTF-8として読み込む（5.3参照）。
 2. 設定ファイルを読み込み、検証する。
 3. 独自構文の前処理を行う（6章）。
-4. Pandocで、前処理後のMarkdownを解析する。`title` と `author` はメタデータとして、そのほかの設定は `preamble.tex.erb` から生成したプリアンブルとしてPandocに渡す。
+4. Pandocで、前処理後のMarkdownを解析する。`title` と `author` はメタデータとして、そのほかの設定は `preamble.tex.tmpl` から生成したプリアンブルとしてPandocに渡す。
 5. `filter.lua` で、図表番号・キャプションなどの書式変換を適用する。
 6. XeLaTeXでPDFを生成する（Pandocが呼び出す）。
 7. 成功時には出力先を表示し、失敗時には原因を確認できるエラーを表示する。
@@ -676,6 +710,8 @@ PDF生成時に一時ファイルを使用する場合は、一時ディレク�
 - **前処理の単体テスト**：入力テキストと、期待される出力テキストを比較する（スナップショット）。PDFを生成せずに高速に実行できる。
 - **フィルタのテスト**：Pandocに通して、期待される文書構造になることを確認する。
 - **結合テスト**：`examples/report.rmd` からPDFが生成できることを確認する（スモークテスト）。PDFの見た目そのものの比較は行わない。
+- **互換性のテスト**：Ruby 版（0.1.0）が同じ設定から生成したプリアンブルとメタデータ（`internal/build/testdata`）と、Go 版の出力が一致することを確認する。
+- テストは `go test ./...` で実行する。PandocやXeLaTeX・既定のフォントが必要なテストは、揃っていない環境では飛ばす。
 
 ### 10.2 確認する項目
 
