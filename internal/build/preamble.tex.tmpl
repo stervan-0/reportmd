@@ -1,0 +1,50 @@
+% reportmd が生成した LaTeX のプリアンブル（設定ファイルの内容を反映）
+\usepackage[{{.PaperOption}},top={{.MarginTop}},bottom={{.MarginBottom}},left={{.MarginLeft}},right={{.MarginRight}}]{geometry}
+\usepackage{xeCJK}
+% 本文の太字（**…**）。太字の書体がない本文フォント（IPAex明朝など）でも太く見えるよう、疑似太字を使う
+\setmainfont{ {{- .FontMain -}} }[AutoFakeBold=2.5]
+\setCJKmainfont{ {{- .FontMain -}} }[AutoFakeBold=2.5]
+\setmonofont{ {{- .FontMono -}} }
+\setCJKmonofont{ {{- .FontMono -}} }
+\usepackage{indentfirst}
+\newlength{\reportmdchar}
+\setlength{\reportmdchar}{ {{- .FontSize -}} pt}
+\setlength{\parindent}{ {{- .ParIndent -}} pt}
+\linespread{ {{- .LineSpacing -}} }
+\makeatletter
+\renewcommand\normalsize{\@setfontsize\normalsize{ {{- .FontSize -}} pt}{ {{- .Baseline -}} pt}}
+\makeatother
+{{- if not .PageNumbering}}
+\pagestyle{empty}
+{{- end}}
+% --- 見出し（レベル1〜3：section, subsection, subsubsection） ---
+\newfontfamily\reportmdheadlatin{ {{- .HeadingFont -}} }{{if .HeadingBold}}[AutoFakeBold=2.5]{{end}}
+\newCJKfontfamily\reportmdheadcjk{ {{- .HeadingFont -}} }{{if .HeadingBold}}[AutoFakeBold=2.5]{{end}}
+\makeatletter
+\newcommand{\reportmdheading}[2]{\reportmdheadlatin\reportmdheadcjk{{if .HeadingBold}}\bfseries{{end}}\fontsize{#1}{#2}\selectfont}
+\renewcommand{\@seccntformat}[1]{\csname the#1\endcsname\hspace{1em}}
+{{- range .Headings}}
+\renewcommand{\ {{- .Name -}} }{\@startsection{ {{- .Name -}} }{ {{- .Level -}} }{ {{- .Indent -}} pt}{ {{- $.HeadingBefore -}} pt}{ {{- $.HeadingAfter -}} pt}{\reportmdheading{ {{- .Size -}} pt}{ {{- .Leading -}} pt}}}
+{{- end}}
+\makeatother
+% --- 表（filter.lua が tabular に組み、ここで定義した命令で書式を決める） ---
+\usepackage{array}
+\usepackage{calc}
+\usepackage{tabularx}
+\newenvironment{reportmdtablebox}{\begin{ {{- .TablePositionEnv -}} }}{\end{ {{- .TablePositionEnv -}} }}
+\newcommand{\reportmdtablestyle}{\linespread{1}\fontsize{ {{- .TableFontSize -}} pt}{ {{- .TableBaseline -}} pt}\selectfont\setlength{\tabcolsep}{ {{- .TableCellPadding -}} }\renewcommand{\arraystretch}{ {{- .TableRowSpacing -}} }}
+{{- if .TableHeaderBold}}
+% 見出し行の太字。太字の書体がない本文フォント（IPAex明朝など）でも太く見えるよう、疑似太字を使う
+\newfontfamily\reportmdtableheadlatin{ {{- .FontMain -}} }[AutoFakeBold=2.5]
+\newCJKfontfamily\reportmdtableheadcjk{ {{- .FontMain -}} }[AutoFakeBold=2.5]
+\newcommand{\reportmdtablehead}[1]{{"{{"}}\reportmdtableheadlatin\reportmdtableheadcjk\bfseries #1}}
+{{- else}}
+\newcommand{\reportmdtablehead}[1]{#1}
+{{- end}}
+% 横の罫線（使わない線は、空の命令にする）
+{{- range .HorizontalRules}}
+\newcommand{\reportmdrule{{.Name}}}{ {{- if .Width}}\noalign{\hrule height {{.Width}}}{{end -}} }
+{{- end}}
+% 縦の罫線（列の間 vrule と、表の左右の端 vside）
+\newcommand{\reportmdvrule}{ {{- if .RuleVertical}}\vrule width {{.RuleVertical}}{{end -}} }
+\newcommand{\reportmdvside}{ {{- if .RuleSides}}\vrule width {{.RuleSides}}{{end -}} }

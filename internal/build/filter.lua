@@ -1,6 +1,6 @@
 -- reportmd 用 Pandoc Lua フィルタ
 --
--- 前処理(preprocessor.rb)が出力した「クラス付きのブロック」を、
+-- 前処理（internal/preprocess）が出力した「クラス付きのブロック」を、
 -- 出力形式ごとの組版に変換する。
 --
 -- 現在の対応:
@@ -19,7 +19,7 @@
 --   title / author            ->  PDF のメタデータにだけ使い、本文には出さない
 --   そのほかのメタデータ      ->  取り除く（フロントマターの対応外のキーを無視する）
 --
--- 設定（builder.rb が metadata の reportmd に入れて渡す）:
+-- 設定（internal/build が metadata の reportmd に入れて渡す）:
 --   figure_label / table_label       図・表のラベル文字列（既定：図・表）
 --   figure_position / table_position キャプションの位置 top / bottom
 --   source                           警告に表示する入力ファイル名
@@ -35,7 +35,7 @@ local function has_class(el, name)
   return false
 end
 
--- 警告に表示する入力ファイル名（builder.rb が metadata の reportmd.source に入れて渡す）
+-- 警告に表示する入力ファイル名（internal/build が metadata の reportmd.source に入れて渡す）
 local source_name = nil
 
 -- 仕様 9.3 の形式「ファイル名:行番号: warning: メッセージ」で表示する。
@@ -266,7 +266,7 @@ end
 -- ---------------------------------------------------------------------
 --
 -- Pandoc 標準の longtable は使わず、tabular に組む。書式（罫線の有無と太さ、
--- 文字サイズ、行の高さ、セルの余白、見出しの太字）は、preamble.tex.erb が
+-- 文字サイズ、行の高さ、セルの余白、見出しの太字）は、preamble.tex.tmpl が
 -- 設定から定義する命令（\reportmdruletop など）で決める。
 -- 使わない罫線は空の命令になるので、ここでは常に同じ形で出力すればよい。
 

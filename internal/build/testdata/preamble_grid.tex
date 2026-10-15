@@ -1,0 +1,44 @@
+% reportmd が生成した LaTeX のプリアンブル（設定ファイルの内容を反映）
+\usepackage[a4paper,top=25mm,bottom=25mm,left=25mm,right=25mm]{geometry}
+\usepackage{xeCJK}
+% 本文の太字（**…**）。太字の書体がない本文フォント（IPAex明朝など）でも太く見えるよう、疑似太字を使う
+\setmainfont{IPAexMincho}[AutoFakeBold=2.5]
+\setCJKmainfont{IPAexMincho}[AutoFakeBold=2.5]
+\setmonofont{Noto Sans Mono CJK JP}
+\setCJKmonofont{Noto Sans Mono CJK JP}
+\usepackage{indentfirst}
+\newlength{\reportmdchar}
+\setlength{\reportmdchar}{10.5pt}
+\setlength{\parindent}{10.5pt}
+\linespread{1.5}
+\makeatletter
+\renewcommand\normalsize{\@setfontsize\normalsize{10.5pt}{12.6pt}}
+\makeatother
+% --- 見出し（レベル1〜3：section, subsection, subsubsection） ---
+\newfontfamily\reportmdheadlatin{IPAexGothic}[AutoFakeBold=2.5]
+\newCJKfontfamily\reportmdheadcjk{IPAexGothic}[AutoFakeBold=2.5]
+\makeatletter
+\newcommand{\reportmdheading}[2]{\reportmdheadlatin\reportmdheadcjk\bfseries\fontsize{#1}{#2}\selectfont}
+\renewcommand{\@seccntformat}[1]{\csname the#1\endcsname\hspace{1em}}
+\renewcommand{\section}{\@startsection{section}{1}{0pt}{18.9pt}{9.45pt}{\reportmdheading{14pt}{16.8pt}}}
+\renewcommand{\subsection}{\@startsection{subsection}{2}{10.5pt}{18.9pt}{9.45pt}{\reportmdheading{12pt}{14.4pt}}}
+\renewcommand{\subsubsection}{\@startsection{subsubsection}{3}{21pt}{18.9pt}{9.45pt}{\reportmdheading{10.5pt}{12.6pt}}}
+\makeatother
+% --- 表（filter.lua が tabular に組み、ここで定義した命令で書式を決める） ---
+\usepackage{array}
+\usepackage{calc}
+\usepackage{tabularx}
+\newenvironment{reportmdtablebox}{\begin{center}}{\end{center}}
+\newcommand{\reportmdtablestyle}{\linespread{1}\fontsize{10.5pt}{12.6pt}\selectfont\setlength{\tabcolsep}{6pt}\renewcommand{\arraystretch}{1.3}}
+% 見出し行の太字。太字の書体がない本文フォント（IPAex明朝など）でも太く見えるよう、疑似太字を使う
+\newfontfamily\reportmdtableheadlatin{IPAexMincho}[AutoFakeBold=2.5]
+\newCJKfontfamily\reportmdtableheadcjk{IPAexMincho}[AutoFakeBold=2.5]
+\newcommand{\reportmdtablehead}[1]{{\reportmdtableheadlatin\reportmdtableheadcjk\bfseries #1}}
+% 横の罫線（使わない線は、空の命令にする）
+\newcommand{\reportmdruletop}{\noalign{\hrule height 0.4pt}}
+\newcommand{\reportmdruleheader}{\noalign{\hrule height 0.4pt}}
+\newcommand{\reportmdrulebottom}{\noalign{\hrule height 0.4pt}}
+\newcommand{\reportmdrulerows}{\noalign{\hrule height 0.4pt}}
+% 縦の罫線（列の間 vrule と、表の左右の端 vside）
+\newcommand{\reportmdvrule}{\vrule width 0.4pt}
+\newcommand{\reportmdvside}{\vrule width 0.4pt}

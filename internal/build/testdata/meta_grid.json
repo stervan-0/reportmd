@@ -1,0 +1,13 @@
+{
+  "reportmd": {
+    "figure_label": "図",
+    "table_label": "表",
+    "figure_position": "bottom",
+    "table_position": "top",
+    "source": "x.rmd",
+    "table_width": "auto",
+    "table_header_align": "center",
+    "equation_numbering": true,
+    "equation_label": "式"
+  }
+}

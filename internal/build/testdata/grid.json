@@ -1,0 +1,13 @@
+{
+  "table": {
+    "header": { "bold": true, "align": "center" },
+    "rules": {
+      "top": "0.4pt",
+      "header": "0.4pt",
+      "bottom": "0.4pt",
+      "rows": "0.4pt",
+      "vertical": "0.4pt",
+      "sides": "0.4pt"
+    }
+  }
+}
