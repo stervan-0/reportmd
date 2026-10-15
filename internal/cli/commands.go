@@ -166,6 +166,21 @@ func (c *CLI) init(args []string) int {
 	if len(opts.args) == 1 {
 		dir = opts.args[0]
 	}
+	if code := c.writeTemplate(dir, opts.force, false); code != 0 {
+		return code
+	}
+	next := "reportmd"
+	if dir != "." {
+		next = "cd " + dir + " && reportmd"
+	}
+	fmt.Fprintf(c.Stdout, "\n次のコマンドで、書きながら PDF を確認できます:\n  %s\n", next)
+	return 0
+}
+
+// writeTemplate は、雛形（report.rmd・setting.json・images/）を dir に書き出す。
+// 既にあるファイルは、force なら上書きし、keepExisting ならそのまま残す。
+// どちらでもなければエラーにする（何も書かない）。
+func (c *CLI) writeTemplate(dir string, force, keepExisting bool) int {
 	if err := os.MkdirAll(filepath.Join(dir, "images"), 0o755); err != nil {
 		return c.fail(diagnostic(dir, 0, "error", fmt.Sprintf("ディレクトリを作れません（%v）", err)))
 	}
@@ -177,21 +192,37 @@ func (c *CLI) init(args []string) int {
 		{"report.rmd", []byte(initReport)},
 		{config.SettingFileName, config.DefaultJSON()},
 	}
+	var writes []string
 	for _, f := range files {
 		path := filepath.Join(dir, f.name)
-		if _, err := os.Stat(path); err == nil && !opts.force {
+		if _, err := os.Stat(path); err == nil && !force {
+			if keepExisting {
+				continue
+			}
 			return c.fail(diagnostic(path, 0, "error", "ファイルが既にあります（上書きするには --force を付けてください）"))
 		}
+		writes = append(writes, f.name)
 	}
 	for _, f := range files {
+		if !hasString(writes, f.name) {
+			continue
+		}
 		path := filepath.Join(dir, f.name)
 		if err := os.WriteFile(path, f.data, 0o644); err != nil {
 			return c.fail(diagnostic(path, 0, "error", fmt.Sprintf("ファイルを書き込めません（%v）", err)))
 		}
 		fmt.Fprintf(c.Stdout, "%s を作成しました\n", path)
 	}
-	fmt.Fprintf(c.Stdout, "\n次のコマンドで PDF を生成できます:\n  reportmd build %s\n", filepath.Join(dir, "report.rmd"))
 	return 0
+}
+
+func hasString(list []string, s string) bool {
+	for _, x := range list {
+		if x == s {
+			return true
+		}
+	}
+	return false
 }
 
 // --- fonts ----------------------------------------------------------------
