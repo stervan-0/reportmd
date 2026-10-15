@@ -1,0 +1,12 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "reportmd (inline)",
+  "scopeName": "text.reportmd.inline",
+  "comment": "Markdown の段落・リスト・表などの中に、数式と @名前 の色分けを差し込む。",
+  "injectionSelector": "L:text.reportmd - (comment, string, markup.math, markup.fenced_code, markup.raw, markup.inline.raw, meta.embedded, meta.link, markup.underline.link)",
+  "patterns": [
+    { "include": "text.reportmd#display-math" },
+    { "include": "text.reportmd#inline-math" },
+    { "include": "text.reportmd#reference" }
+  ]
+}

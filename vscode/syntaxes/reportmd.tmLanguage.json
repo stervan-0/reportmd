@@ -1,0 +1,123 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "reportmd",
+  "scopeName": "text.reportmd",
+  "comment": "reportmd の独自構文。行単位の構文を先に調べ、それ以外は VS Code の Markdown の文法に任せる。",
+  "patterns": [
+    { "include": "#page-break" },
+    { "include": "#align" },
+    { "include": "#numbered-heading" },
+    { "include": "#figure" },
+    { "include": "#table-caption" },
+    { "include": "#display-math" },
+    { "include": "text.html.markdown" }
+  ],
+  "repository": {
+    "page-break": {
+      "comment": "^ だけの行（改ページ）",
+      "match": "^(\\^)[ \\t]*$",
+      "captures": { "1": { "name": "keyword.control.page-break.reportmd" } }
+    },
+    "align": {
+      "comment": "--> 右揃え / <-> 中央揃え（引用・リストの中も可）",
+      "match": "^((?:[ ]{0,3}>[ ]?)*)([ ]{0,3}(?:[-*+]|\\d{1,9}[.)])[ ]+)?(-->|<->)(?:([ ]+)(.*?))?[ \\t]*$",
+      "name": "meta.align.reportmd",
+      "captures": {
+        "1": { "name": "punctuation.definition.quote.begin.markdown" },
+        "2": { "name": "punctuation.definition.list.begin.markdown" },
+        "3": { "name": "keyword.operator.align.reportmd" },
+        "5": { "patterns": [{ "include": "#inline" }] }
+      }
+    },
+    "numbered-heading": {
+      "comment": "#1 #2 #3（番号付き見出し）",
+      "match": "^(#\\d)(?:([ ]+)(\\S.*?))?[ \\t]*$",
+      "name": "markup.heading.reportmd",
+      "captures": {
+        "1": { "name": "punctuation.definition.heading.reportmd" },
+        "3": { "name": "entity.name.section.reportmd", "patterns": [{ "include": "#inline" }] }
+      }
+    },
+    "figure": {
+      "comment": "![f:タイトル](画像){#名前 width=50%}",
+      "match": "^(!\\[)(f)(:?)([^\\]]*)(\\])(?:(\\()([^)]*)(\\)))?(?:(\\{)([^}]*)(\\}))?(.*)$",
+      "name": "meta.figure.reportmd",
+      "captures": {
+        "1": { "name": "punctuation.definition.figure.begin.reportmd" },
+        "2": { "name": "keyword.other.figure.reportmd" },
+        "3": { "name": "punctuation.separator.reportmd" },
+        "4": { "name": "string.other.caption.reportmd", "patterns": [{ "include": "#inline" }] },
+        "5": { "name": "punctuation.definition.figure.end.reportmd" },
+        "6": { "name": "punctuation.definition.metadata.markdown" },
+        "7": { "name": "markup.underline.link.image.markdown" },
+        "8": { "name": "punctuation.definition.metadata.markdown" },
+        "9": { "name": "punctuation.definition.attributes.begin.reportmd" },
+        "10": { "patterns": [{ "include": "#attributes" }] },
+        "11": { "name": "punctuation.definition.attributes.end.reportmd" },
+        "12": { "patterns": [{ "include": "#inline" }] }
+      }
+    },
+    "table-caption": {
+      "comment": "![t:タイトル]{#名前}（直後の表の見出し）",
+      "match": "^(!\\[)(t)(:?)([^\\]]*)(\\])(?:(\\{)([^}]*)(\\}))?(.*)$",
+      "name": "meta.table-caption.reportmd",
+      "captures": {
+        "1": { "name": "punctuation.definition.table.begin.reportmd" },
+        "2": { "name": "keyword.other.table.reportmd" },
+        "3": { "name": "punctuation.separator.reportmd" },
+        "4": { "name": "string.other.caption.reportmd", "patterns": [{ "include": "#inline" }] },
+        "5": { "name": "punctuation.definition.table.end.reportmd" },
+        "6": { "name": "punctuation.definition.attributes.begin.reportmd" },
+        "7": { "patterns": [{ "include": "#attributes" }] },
+        "8": { "name": "punctuation.definition.attributes.end.reportmd" },
+        "9": { "name": "invalid.illegal.reportmd" }
+      }
+    },
+    "attributes": {
+      "comment": "{ } の中。#名前 は参照用の名前",
+      "patterns": [
+        { "match": "(?<=[{\\s])(#)([^\\s{}#]+)", "captures": { "1": { "name": "punctuation.definition.label.reportmd" }, "2": { "name": "entity.name.label.reportmd" } } },
+        { "match": "([\\w-]+)(=)(\\S+)", "captures": { "1": { "name": "entity.other.attribute-name.reportmd" }, "2": { "name": "punctuation.separator.key-value.reportmd" }, "3": { "name": "string.unquoted.reportmd" } } }
+      ]
+    },
+    "display-math": {
+      "comment": "$$ … $$ {#名前} / {-}。閉じの $$ の後ろに参照用の名前か番号なしを書ける",
+      "begin": "^[ \\t]*(\\$\\$)",
+      "beginCaptures": { "1": { "name": "punctuation.definition.math.begin.reportmd" } },
+      "end": "(\\$\\$)(?:[ \\t]*(\\{)(?:(#)([^\\s{}#]+)|(-))(\\}))?",
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.math.end.reportmd" },
+        "2": { "name": "punctuation.definition.attributes.begin.reportmd" },
+        "3": { "name": "punctuation.definition.label.reportmd" },
+        "4": { "name": "entity.name.label.reportmd" },
+        "5": { "name": "keyword.other.unnumbered.reportmd" },
+        "6": { "name": "punctuation.definition.attributes.end.reportmd" }
+      },
+      "name": "markup.math.block.reportmd",
+      "contentName": "meta.embedded.math.reportmd",
+      "patterns": [{ "include": "text.html.markdown.math#math" }]
+    },
+    "inline-math": {
+      "match": "(?<!\\$)(\\$)(?=\\S)(.+?)(?<=\\S)(\\$)(?![\\$\\d])",
+      "name": "markup.math.inline.reportmd",
+      "captures": {
+        "1": { "name": "punctuation.definition.math.begin.reportmd" },
+        "2": { "name": "meta.embedded.math.reportmd", "patterns": [{ "include": "text.html.markdown.math#math" }] },
+        "3": { "name": "punctuation.definition.math.end.reportmd" }
+      }
+    },
+    "reference": {
+      "comment": "@名前（図表・数式の参照）。名前のあとに日本語が続いてもよい",
+      "match": "(?<![\\w@.])(@)([A-Za-z0-9_](?:[A-Za-z0-9_:.\\-]*[A-Za-z0-9_])?)",
+      "name": "variable.other.reference.reportmd",
+      "captures": { "1": { "name": "punctuation.definition.reference.reportmd" } }
+    },
+    "inline": {
+      "patterns": [
+        { "include": "#inline-math" },
+        { "include": "#reference" },
+        { "include": "text.html.markdown#inline" }
+      ]
+    }
+  }
+}
