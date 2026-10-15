@@ -22,13 +22,23 @@ const watchInterval = 200 * time.Millisecond
 
 // watchLoop は、生成したあと、入力ファイルのあるディレクトリ（画像や設定ファイルを含む）の
 // 変更を監視し、変更があるたびに生成し直す。エラーがあっても監視は続ける。
-func (c *CLI) watchLoop(input, output, configPath string, run func() int) int {
+// live（--stdin）があれば、文書の内容はファイルの代わりに live のものを使い、その内容が変わったときに
+// 生成し直す（保存して、ファイルが受け取った内容と同じになっただけなら、生成し直さない）。
+func (c *CLI) watchLoop(input, output, configPath string, live *liveSource, run func() int) int {
 	ignore := map[string]bool{}
 	if abs, err := filepath.Abs(output); err == nil {
 		ignore[abs] = true
 	}
+	state := func() string { return snapshot(input, configPath, ignore) }
+	if live != nil {
+		if abs, err := filepath.Abs(input); err == nil {
+			ignore[abs] = true
+		}
+		state = func() string { return snapshot(input, configPath, ignore) + live.state(input) }
+		live.waitFirst()
+	}
 
-	last := snapshot(input, configPath, ignore)
+	last := state()
 	run()
 	fmt.Fprintln(c.Stderr, "変更を監視しています（Ctrl+C で終了）")
 	ticker := time.NewTicker(watchInterval)
@@ -39,7 +49,7 @@ func (c *CLI) watchLoop(input, output, configPath string, run func() int) int {
 			return 0
 		case <-ticker.C:
 		}
-		current := snapshot(input, configPath, ignore)
+		current := state()
 		if current == last {
 			continue
 		}

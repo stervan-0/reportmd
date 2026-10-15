@@ -52,6 +52,8 @@ INPUT.reportmd を省略すると、カレントディレクトリにある .rep
       --keep-temp     一時ファイルを残す（デバッグ用）
       --open          生成したファイルを既定のアプリ（PDF ビューアなど）で開く
   -w, --watch         生成したあと、変更を監視して生成し直す
+      --stdin         文書の内容を、ファイルの代わりに標準入力から読む（エディタの保存前の内容に使う。
+                      build・check は標準入力の全体、watch は「バイト数の行＋内容」のメッセージを続けて受け取る）
   -v, --version       バージョンを表示
   -h, --help          このヘルプを表示
 `
@@ -122,6 +124,7 @@ func (c *CLI) Run(args []string) int {
 type options struct {
 	output, config string
 	keepTemp       bool
+	stdin          bool
 	open           bool
 	watch          bool
 	force          bool
@@ -193,6 +196,8 @@ func parseOptions(args []string, allowed ...string) (*options, error) {
 				opts.open = true
 			case "keep-temp":
 				opts.keepTemp = true
+			case "stdin":
+				opts.stdin = true
 			case "watch":
 				opts.watch = true
 			case "force":
@@ -306,7 +311,7 @@ func defaultOutputPath(input string) string {
 // --- build / watch --------------------------------------------------------
 
 func (c *CLI) build(args []string, watch bool) int {
-	opts, err := parseOptions(args, "output", "config", "keep-temp", "watch", "open")
+	opts, err := parseOptions(args, "output", "config", "keep-temp", "watch", "open", "stdin")
 	if err != nil {
 		return c.fail("error: " + err.Error())
 	}
@@ -333,15 +338,29 @@ func (c *CLI) build(args []string, watch bool) int {
 		workDir = watchWorkDir(output)
 	}
 
+	// --stdin: build は標準入力の全体を、watch は標準入力から受け取るメッセージ（liveSource）を、文書の内容にする
+	var source []byte
+	var live *liveSource
+	if opts.stdin {
+		if watching {
+			live = newLiveSource(c.Stdin)
+		} else if source, err = readStdin(c.Stdin); err != nil {
+			return c.reportError(input, err)
+		}
+	}
+
 	opened := false
 	run := func() int {
+		if live != nil {
+			source = live.get()
+		}
 		cfg, err := config.Load(opts.config, input)
 		if err != nil {
 			return c.reportError(input, err)
 		}
 		c.reportConfigWarnings(cfg)
 		result, err := build.Run(build.Options{
-			Input: input, Output: output, Format: format, Config: cfg, KeepTemp: opts.keepTemp, WorkDir: workDir,
+			Input: input, Output: output, Format: format, Config: cfg, KeepTemp: opts.keepTemp, WorkDir: workDir, Source: source,
 		})
 		if result != nil && result.TempDir != "" {
 			defer fmt.Fprintf(c.Stderr, "一時ファイルを残しました: %s\n", result.TempDir)
@@ -365,9 +384,24 @@ func (c *CLI) build(args []string, watch bool) int {
 	}
 
 	if watching {
-		return c.watchLoop(input, output, opts.config, run)
+		return c.watchLoop(input, output, opts.config, live, run)
 	}
 	return run()
+}
+
+// readStdin は、標準入力の全体を読む（--stdin）。
+func readStdin(r io.Reader) ([]byte, error) {
+	if r == nil {
+		return []byte{}, nil
+	}
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return nil, fmt.Errorf("標準入力を読み込めません（%v）", err)
+	}
+	if data == nil {
+		data = []byte{}
+	}
+	return data, nil
 }
 
 // watchWorkDir は、監視中の PDF の生成に使う作業ディレクトリ（~/.cache/reportmd/watch/<出力先のパスのハッシュ>）。
@@ -391,7 +425,7 @@ func watchWorkDir(output string) string {
 // check は、PDF を作らずに誤りを調べる。前処理と設定の検証に加えて、Pandoc があれば
 // filter.lua まで通し、参照先が見つからない @名前 なども報告する（XeLaTeX は使わない）。
 func (c *CLI) check(args []string) int {
-	opts, err := parseOptions(args, "config")
+	opts, err := parseOptions(args, "config", "stdin")
 	if err != nil {
 		return c.fail("error: " + err.Error())
 	}
@@ -403,6 +437,12 @@ func (c *CLI) check(args []string) int {
 	if code != 0 {
 		return code
 	}
+	var stdin []byte
+	if opts.stdin {
+		if stdin, err = readStdin(c.Stdin); err != nil {
+			return c.reportError(input, err)
+		}
+	}
 	cfg, err := config.Load(opts.config, input)
 	if err != nil {
 		return c.reportError(input, err)
@@ -411,9 +451,11 @@ func (c *CLI) check(args []string) int {
 
 	if build.CheckTools(false) != nil {
 		// Pandoc がなければ、前処理だけで調べる
-		source, err := os.ReadFile(input)
-		if err != nil {
-			return c.reportError(input, err)
+		source := stdin
+		if source == nil {
+			if source, err = os.ReadFile(input); err != nil {
+				return c.reportError(input, err)
+			}
 		}
 		pre, err := preprocess.Run(string(source))
 		if err != nil {
@@ -431,7 +473,7 @@ func (c *CLI) check(args []string) int {
 	}
 	defer os.RemoveAll(dir)
 	result, err := build.Run(build.Options{
-		Input: input, Output: filepath.Join(dir, "check.tex"), Format: build.LaTeX, Config: cfg,
+		Input: input, Output: filepath.Join(dir, "check.tex"), Format: build.LaTeX, Config: cfg, Source: stdin,
 	})
 	if err != nil {
 		return c.reportError(input, err)

@@ -67,6 +67,9 @@ type Options struct {
 	// （.aux など）を使い回す。しおり・相互参照が前回と同じなら、XeLaTeX が1回で済む（watch 用）。
 	// 空なら、一時ディレクトリを作り、終わったら消す。
 	WorkDir string
+	// Source は、入力ファイルの代わりに使う文書の内容（エディタの保存されていない内容など）。
+	// nil なら入力ファイルを読む。画像などの相対パスと、エラーの表示には Input を使う。
+	Source []byte
 }
 
 // Result は生成の結果。
@@ -92,9 +95,12 @@ func Run(opts Options) (*Result, error) {
 	if opts.Format == "" {
 		opts.Format = PDF
 	}
-	source, err := os.ReadFile(opts.Input)
-	if err != nil {
-		return nil, &Error{File: opts.Input, Message: "入力ファイルを読み込めません"}
+	source := opts.Source
+	if source == nil {
+		var err error
+		if source, err = os.ReadFile(opts.Input); err != nil {
+			return nil, &Error{File: opts.Input, Message: "入力ファイルを読み込めません"}
+		}
 	}
 	// 構文のエラーは外部ツールがなくても見つけられるので、先に前処理を行う
 	pre, err := preprocess.Run(string(source))
