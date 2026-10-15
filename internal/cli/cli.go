@@ -19,6 +19,7 @@ import (
 const Version = "0.2.0"
 
 const usage = `使い方:
+  reportmd                                 （いちばん簡単な使い方。下を参照）
   reportmd build [INPUT.rmd] [-o OUTPUT] [-c setting.json] [--keep-temp] [-w] [--open]
   reportmd INPUT.rmd [オプション]          （build を省略した書き方）
   reportmd watch [INPUT.rmd] [-o OUTPUT] [-c setting.json] [--open]
@@ -39,6 +40,9 @@ const usage = `使い方:
 
 INPUT.rmd を省略すると、カレントディレクトリにある .rmd（1つだけの場合）を使う。
 
+引数なしの reportmd は、カレントディレクトリの .rmd を PDF にしてビューアで開き、
+保存するたびに作り直す（watch --open と同じ）。.rmd がなければ、雛形を作るか尋ねる。
+
 オプション:
   -o, --output FILE   出力するファイルのパス（省略時は入力ファイルと同じ場所の PDF）
   -c, --config FILE   設定ファイルのパス
@@ -53,20 +57,32 @@ INPUT.rmd を省略すると、カレントディレクトリにある .rmd（1�
 type CLI struct {
 	Stdout io.Writer
 	Stderr io.Writer
+	Stdin  io.Reader
+	// Interactive は、利用者に質問してよいか（標準入力が端末か）。
+	Interactive bool
 	// watchStop は、テストで監視を止めるために使う（nil なら止めない）。
 	watchStop <-chan struct{}
+	// opener は、生成したファイルを開く処理（nil なら既定のアプリで開く）。テストで差し替える。
+	opener func(string) error
 }
 
 // Main は os.Args を受けて終了コードを返す。
 func Main(args []string) int {
-	return (&CLI{Stdout: os.Stdout, Stderr: os.Stderr}).Run(args)
+	c := &CLI{Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, Interactive: isTerminal(os.Stdin)}
+	return c.Run(args)
+}
+
+func (c *CLI) open(path string) error {
+	if c.opener != nil {
+		return c.opener(path)
+	}
+	return openFile(path)
 }
 
 // Run はコマンドを実行し、終了コードを返す。
 func (c *CLI) Run(args []string) int {
 	if len(args) == 0 {
-		fmt.Fprint(c.Stderr, usage)
-		return 1
+		return c.start()
 	}
 	command, rest := args[0], args[1:]
 	switch command {
@@ -314,7 +330,7 @@ func (c *CLI) build(args []string, watch bool) int {
 		// --open は、最初に生成できたときだけ開く（監視中に何度も開かない）
 		if opts.open && !opened {
 			opened = true
-			if err := openFile(result.Output); err != nil {
+			if err := c.open(result.Output); err != nil {
 				fmt.Fprintln(c.Stderr, diagnostic(result.Output, 0, "warning", "ファイルを開けませんでした（"+err.Error()+"）"))
 			}
 		}

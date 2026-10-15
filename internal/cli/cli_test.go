@@ -374,6 +374,94 @@ func TestInputShortcuts(t *testing.T) {
 	}
 }
 
+// --- 引数なしの reportmd -------------------------------------------------
+
+// runStart は、引数なしの reportmd を実行する。監視は最初の生成のあとすぐ止める。
+// 開こうとしたファイルを opened に記録する（実際には開かない）。
+func runStart(t *testing.T, interactive bool, input string) (code int, out, errOut string, opened []string) {
+	t.Helper()
+	var o, e syncBuffer
+	stop := make(chan struct{})
+	close(stop)
+	c := &CLI{
+		Stdout: &o, Stderr: &e, Stdin: strings.NewReader(input), Interactive: interactive,
+		watchStop: stop,
+		opener:    func(path string) error { opened = append(opened, path); return nil },
+	}
+	code = c.Run(nil)
+	return code, o.String(), e.String(), opened
+}
+
+func TestStartWithOneReport(t *testing.T) {
+	pdfReady(t)
+	dir := t.TempDir()
+	chdir(t, dir)
+	writeFile(t, dir, "my.rmd", "本文\n")
+
+	code, out, errOut, opened := runStart(t, true, "")
+	if code != 0 {
+		t.Fatalf("1つだけの .rmd を生成する: %s", errOut)
+	}
+	contains(t, "標準出力", out, "my.pdf を出力しました")
+	contains(t, "標準エラー出力", errOut, "変更を監視しています")
+	if len(opened) != 1 || opened[0] != "my.pdf" {
+		t.Errorf("生成した PDF を開く: %v", opened)
+	}
+}
+
+func TestStartWithManyReports(t *testing.T) {
+	dir := t.TempDir()
+	chdir(t, dir)
+	writeFile(t, dir, "a.rmd", "本文\n")
+	writeFile(t, dir, "b.rmd", "本文\n")
+	code, _, errOut, opened := runStart(t, true, "")
+	if code != 1 || !strings.Contains(errOut, "reportmd watch a.rmd --open") || !strings.Contains(errOut, "b.rmd") || len(opened) != 0 {
+		t.Errorf(".rmd が複数なら、ファイルの一覧を表示して 1: %s", errOut)
+	}
+}
+
+func TestStartWithoutReport(t *testing.T) {
+	dir := t.TempDir()
+	chdir(t, dir)
+
+	// 端末でなければ尋ねずに、使い方を表示する
+	code, out, errOut, _ := runStart(t, false, "")
+	if code != 1 || !strings.Contains(errOut, "使い方") || strings.Contains(out, "雛形") {
+		t.Errorf("端末でなければ使い方を表示する: %d %s", code, out)
+	}
+	// n と答えたら、何も作らない
+	code, out, _, _ = runStart(t, true, "n\n")
+	if code != 0 || !strings.Contains(out, "雛形を作りますか") {
+		t.Errorf("n なら作らずに 0: %d %s", code, out)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "report.rmd")); err == nil {
+		t.Errorf("n なら雛形を作らない")
+	}
+}
+
+func TestStartCreatesTemplate(t *testing.T) {
+	pdfReady(t)
+	dir := t.TempDir()
+	chdir(t, dir)
+	// 既にある setting.json は残す
+	writeFile(t, dir, "setting.json", `{ "text": { "font_size": "11pt" } }`)
+
+	code, out, errOut, opened := runStart(t, true, "\n") // Enter だけ（既定の Y）
+	if code != 0 {
+		t.Fatalf("雛形を作って生成する: %s", errOut)
+	}
+	contains(t, "標準出力", out, "report.rmd を作成しました")
+	contains(t, "標準出力", out, "report.pdf を出力しました")
+	if strings.Contains(out, "setting.json を作成しました") {
+		t.Errorf("既にある setting.json は上書きしない")
+	}
+	data, _ := os.ReadFile(filepath.Join(dir, "setting.json"))
+	contains(t, "setting.json", string(data), "11pt")
+	if len(opened) != 1 || opened[0] != "report.pdf" {
+		t.Errorf("生成した PDF を開く: %v", opened)
+	}
+}
+
 // --- init -----------------------------------------------------------------
 
 func TestInit(t *testing.T) {

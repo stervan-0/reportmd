@@ -22,11 +22,21 @@ make dist               # Linux・macOS・Windows 向けの実行ファイルを
 
 ## 使い方
 
+ふだんは、レポートのフォルダで `reportmd` と打つだけです。
+
 ```bash
-reportmd init myreport            # 雛形（report.rmd・setting.json・images/）を作る
-cd myreport
-reportmd report.rmd               # report.pdf を出力（build は省略できる）
-reportmd                          # .rmd が1つだけなら、ファイル名も省略できる
+mkdir myreport && cd myreport
+reportmd
+```
+
+- フォルダに `.rmd` がなければ、雛形（`report.rmd`・`setting.json`・`images/`）を作るか尋ねます。
+- `.rmd` を PDF にしてビューアで開き、あとは `.rmd`・画像・設定を保存するたびに PDF を作り直します（Ctrl+C で終了）。
+
+個別のコマンドも使えます。
+
+```bash
+reportmd init myreport            # 雛形を作る
+reportmd report.rmd               # report.pdf を1回だけ出力（build は省略できる）
 reportmd watch report.rmd         # 保存するたびに PDF を作り直す
 reportmd check report.rmd         # PDF を作らずに、誤りだけを調べる（速い）
 reportmd build report.rmd -o out.pdf -c setting.json
