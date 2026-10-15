@@ -1,6 +1,6 @@
 // reportmd の VS Code 拡張機能。
 //   - 保存するたびに reportmd check を実行し、エラー・警告を波線と「問題」パネルに表示する
-//   - PDF の生成（build）と、保存のたびに生成し直す監視（watch）を、ボタンとコマンドから実行する
+//   - PDF の生成（build）と、変更のたびに生成し直す監視（watch）を、ボタンとコマンドから実行する
 //   - 生成した PDF を、VS Code の中のプレビュー（preview.js）に表示する
 // reportmd 本体（コマンド）を呼び出すだけで、文書の変換はすべて本体が行う。
 'use strict';
@@ -51,6 +51,7 @@ function activate(context) {
     vscode.commands.registerCommand('reportmd.showOutput', () => output.show(true)),
     vscode.workspace.onDidOpenTextDocument((doc) => isReport(doc) && checkOnSave() && check(doc)),
     vscode.workspace.onDidSaveTextDocument(onSave),
+    vscode.workspace.onDidChangeTextDocument((e) => onChange(e.document)),
     vscode.workspace.onDidCloseTextDocument(onClose),
     vscode.window.onDidChangeActiveTextEditor(updateStatusBar),
     { dispose: () => [...watches.keys()].forEach(stopWatch) },
@@ -96,6 +97,8 @@ async function withDocument(uri, action) {
 
 // onSave は、保存した文書を調べ直す（終わるのを待てるように Promise を返す）。
 function onSave(doc) {
+  // 監視している文書は、ファイルの内容に戻す（保存した内容は、送った内容と同じなので、生成し直さない）
+  if (watches.has(doc.uri.fsPath)) sendContent(doc.uri.fsPath, doc);
   if (!checkOnSave()) return;
   let targets = [];
   if (isReport(doc)) {
@@ -115,6 +118,38 @@ function onClose(doc) {
   // 監視は、文書を閉じても続ける（PDF のための監視なので）。check だけ止めて、表示を消す
   if (checks.has(file)) checks.get(file).kill();
   if (!watches.has(file)) clearReported(file);
+  // 保存せずに閉じたら、監視はファイルの内容で生成し直す
+  if (watches.has(file)) sendContent(file, null);
+}
+
+// onChange は、監視している文書が編集されたら、少し待ってから、その内容を監視に送る
+// （保存しなくても、プレビューが更新される）。
+function onChange(doc) {
+  const watch = watches.get(doc.uri.fsPath);
+  if (!watch || !watch.live) return;
+  clearTimeout(watch.timer);
+  watch.timer = setTimeout(() => sendContent(doc.uri.fsPath, doc), liveDelay());
+}
+
+// sendContent は、文書 doc の保存されていない内容を、監視（reportmd watch --stdin）に送る。
+// 保存されている（または doc が null）なら、ファイルの内容を使うように知らせる。
+// メッセージの形は「バイト数の行＋内容」、ファイルの内容に戻すときは「-」の行（仕様 13.4）。
+function sendContent(file, doc) {
+  const watch = watches.get(file);
+  if (!watch || !watch.live) return;
+  clearTimeout(watch.timer);
+  let message = '-\n';
+  if (doc && doc.isDirty) {
+    const text = Buffer.from(doc.getText(), 'utf8');
+    message = Buffer.concat([Buffer.from(`${text.length}\n`), text]);
+  }
+  if (watch.process.stdin.writable) watch.process.stdin.write(message);
+}
+
+// liveDelay は、入力が止まってから監視に内容を送るまでの時間（ミリ秒）。
+// 生成している間に届いた内容は、reportmd が1つにまとめて、生成が終わってから生成し直す。
+function liveDelay() {
+  return config().get('liveUpdateDelay', 300);
 }
 
 // --- reportmd の実行 ------------------------------------------------------
@@ -312,16 +347,16 @@ function pdfPath(file) {
 
 // --- preview --------------------------------------------------------------
 
-// preview は、PDF のプレビューを横に開き、監視を始める（保存のたびに生成し直して、プレビューも更新する）。
+// preview は、PDF のプレビューを横に開き、監視を始める（入力・保存のたびに生成し直して、プレビューも更新する）。
 // プレビューから始めた監視は、プレビューを閉じると止める。
 function preview(doc) {
   const file = doc.uri.fsPath;
   const panel = Preview.show(pdfPath(file));
   if (!watches.has(file)) {
     startWatch(doc, { fromPreview: true });
-    const watch = watches.get(file);
     panel.onDispose.push(() => {
-      if (watches.get(file) === watch) stopWatch(file);
+      const watch = watches.get(file);
+      if (watch && watch.fromPreview) stopWatch(file);
     });
   }
 }
@@ -329,20 +364,25 @@ function preview(doc) {
 // --- watch ----------------------------------------------------------------
 
 // startWatch は、reportmd watch を起動する。fromPreview（プレビューから始めた）なら、PDF をほかで開かない。
-function startWatch(doc, { fromPreview = false } = {}) {
+// 設定 reportmd.liveUpdate が有効なら、--stdin を付けて、保存していない内容も送る（onChange）。
+function startWatch(doc, { fromPreview = false, live = config().get('liveUpdate', true) } = {}) {
   const file = doc.uri.fsPath;
   if (watches.has(file)) {
     vscode.window.showInformationMessage(`${path.basename(file)} は監視中です`);
     return;
   }
-  if (doc.isDirty) doc.save();
+  if (doc.isDirty && !live) doc.save();
   const args = ['watch', path.basename(file)];
   if (!fromPreview && openMode() === 'external') args.push('--open');
+  if (live) args.push('--stdin');
   const pdf = pdfPath(file);
 
   const { child, wsl } = spawnReportmd(args, path.dirname(file));
-  const watch = { process: child, buffer: '', opened: fromPreview, wsl };
+  const watch = { process: child, buffer: '', opened: fromPreview, wsl, live, fromPreview, timer: null };
   watches.set(file, watch);
+  child.stdin.on('error', () => {}); // 終了したあとに書き込んでも、エラーにしない
+  // 最初の生成は、送った内容（保存されていれば、ファイルの内容）で行う
+  if (live) sendContent(file, doc);
   if (checks.has(file)) checks.get(file).kill();
   log(`reportmd ${args.join(' ')}`, '');
   // プレビューがあれば、出力パネルは前に出さない（プレビューに状態を表示する）
@@ -379,7 +419,16 @@ function startWatch(doc, { fromPreview = false } = {}) {
   child.on('close', (code) => {
     if (watches.get(file) !== watch) return;
     watches.delete(file);
+    clearTimeout(watch.timer);
     if (isNotFound({ exitCode: code, wsl })) showNotFound();
+    // --stdin を知らない古い reportmd なら、保存したときだけ生成し直す監視で始め直す
+    if (live && /不明なオプションです: --stdin/.test(watch.buffer)) {
+      vscode.window.showWarningMessage(
+        'この reportmd は、保存していない内容のプレビューに対応していません。reportmd を更新してください（make install）。それまでは、保存したときに更新します。',
+      );
+      startWatch(doc, { fromPreview, live: false });
+      return;
+    }
     output.appendLine(`[${new Date().toLocaleTimeString()}] ${path.basename(file)} の監視を終了しました`);
     updateStatusBar();
   });
@@ -390,6 +439,7 @@ function stopWatch(file) {
   const watch = watches.get(file);
   if (!watch) return;
   watches.delete(file);
+  clearTimeout(watch.timer);
   watch.process.kill();
   output.appendLine(`[${new Date().toLocaleTimeString()}] ${path.basename(file)} の監視を終了しました`);
   updateStatusBar();
@@ -412,11 +462,11 @@ function updateStatusBar() {
   buildItem.show();
   if (watching) {
     watchItem.text = '$(eye) 監視中';
-    watchItem.tooltip = '保存のたびに PDF を生成し直しています。クリックで監視を止める';
+    watchItem.tooltip = '変更のたびに PDF を生成し直しています。クリックで監視を止める';
     watchItem.command = 'reportmd.stopWatch';
   } else {
     watchItem.text = '$(eye-closed) 監視';
-    watchItem.tooltip = '保存のたびに PDF を生成し直す（reportmd watch）';
+    watchItem.tooltip = '変更のたびに PDF を生成し直す（reportmd watch）';
     watchItem.command = 'reportmd.watch';
   }
   watchItem.show();

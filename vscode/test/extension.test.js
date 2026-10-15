@@ -149,6 +149,36 @@ test('拡張機能', { skip }, async (t) => {
     assert.ok(doc);
   });
 
+  await t.test('監視中は、保存しなくても、入力するたびに生成し直す', { skip: pdfAvailable() ? false : 'PDF を生成できない環境のため飛ばす' }, async () => {
+    const file = write('live.reportmd', '本文\n');
+    const doc = await open(file);
+    // 保存していない内容で監視を始めると、最初の生成からその内容を使う（保存はしない）
+    doc.text = '本文\n\n![t:表がない]\n';
+    doc.isDirty = true;
+    await mock.commands.get('reportmd.watch')();
+    const { watches } = extension._test;
+    await waitFor(() => diagnosticsOf(file).length === 1, '保存していない内容の誤りの表示');
+    assert.strictEqual(diagnosticsOf(file)[0].line, 2);
+    assert.strictEqual(fs.readFileSync(file, 'utf8'), '本文\n', '保存はしない');
+
+    const output = () => mock.record.output.join('');
+    const builds = () => (output().match(/live\.pdf を出力しました/g) || []).length;
+    // 入力すると、少し待ってから、その内容で生成し直す
+    doc.text = '直した本文\n';
+    await mock.events.change.fire({ document: doc });
+    await waitFor(() => diagnosticsOf(file).length === 0 && builds() === 1, '入力した内容での生成');
+
+    // 保存しても、内容が同じなら生成し直さない
+    await doc.save();
+    await mock.events.save.fire(doc);
+    await new Promise((r) => setTimeout(r, 1500));
+    assert.strictEqual(builds(), 1, '保存しただけでは生成し直さない');
+
+    const child = watches.get(file).process;
+    await mock.commands.get('reportmd.stopWatch')();
+    await waitFor(() => child.exitCode !== null || child.signalCode !== null, '監視のプロセスの終了', 10000);
+  });
+
   await t.test('プレビュー：横に表示し、監視して、生成し直すたびに表示し直す', { skip: pdfAvailable() ? false : 'PDF を生成できない環境のため飛ばす' }, async () => {
     const file = write('preview.reportmd', '#1 はじめに\n\n本文\n');
     const pdf = path.join(dir, 'preview.pdf');
