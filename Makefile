@@ -28,10 +28,11 @@ install: build
 		   echo "  echo 'export PATH=\"$(PREFIX)/bin:\$$PATH\"' >> ~/.bashrc && source ~/.bashrc" ;; \
 	esac
 
-# install で入れたものを取り除く（reportmd が置くファイルは実行ファイルだけ）。
+# install で入れたものを取り除く（実行ファイルと、監視で使うキャッシュ ~/.cache/reportmd）。
 # install と同じ PREFIX を指定する
 uninstall:
 	rm -f $(PREFIX)/bin/reportmd
+	rm -rf $${XDG_CACHE_HOME:-$(HOME)/.cache}/reportmd
 
 # 各 OS 向けの実行ファイルを dist/ に作る
 dist:

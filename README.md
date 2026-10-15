@@ -17,7 +17,7 @@ Go で書いた1つの実行ファイルで動きます（Ruby などの実行�
 
 ```bash
 make install            # ~/.local/bin/reportmd に入れる（PREFIX=/usr/local で変更）
-make uninstall          # 取り除く（install で PREFIX を指定した場合は、同じ PREFIX を指定）
+make uninstall          # 取り除く（監視で使うキャッシュ ~/.cache/reportmd も消す。install で PREFIX を指定した場合は、同じ PREFIX を指定）
 make dist               # Linux・macOS・Windows 向けの実行ファイルを dist/ に作る
 ```
 

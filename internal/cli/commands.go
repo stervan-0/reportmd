@@ -17,8 +17,8 @@ import (
 
 // --- watch ----------------------------------------------------------------
 
-// watchInterval は、変更を確かめる間隔。
-const watchInterval = 500 * time.Millisecond
+// watchInterval は、変更を確かめる間隔（短いほど、保存してから生成を始めるまでが速い）。
+const watchInterval = 200 * time.Millisecond
 
 // watchLoop は、生成したあと、入力ファイルのあるディレクトリ（画像や設定ファイルを含む）の
 // 変更を監視し、変更があるたびに生成し直す。エラーがあっても監視は続ける。

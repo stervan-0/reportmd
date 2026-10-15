@@ -3,6 +3,8 @@
 package cli
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -325,6 +327,12 @@ func (c *CLI) build(args []string, watch bool) int {
 		return c.fail(diagnostic(output, 0, "error", "出力ファイルの拡張子は .pdf .tex .html .docx のどれかにしてください"))
 	}
 
+	watching := watch || opts.watch
+	workDir := ""
+	if watching && format == build.PDF {
+		workDir = watchWorkDir(output)
+	}
+
 	opened := false
 	run := func() int {
 		cfg, err := config.Load(opts.config, input)
@@ -333,7 +341,7 @@ func (c *CLI) build(args []string, watch bool) int {
 		}
 		c.reportConfigWarnings(cfg)
 		result, err := build.Run(build.Options{
-			Input: input, Output: output, Format: format, Config: cfg, KeepTemp: opts.keepTemp,
+			Input: input, Output: output, Format: format, Config: cfg, KeepTemp: opts.keepTemp, WorkDir: workDir,
 		})
 		if result != nil && result.TempDir != "" {
 			defer fmt.Fprintf(c.Stderr, "一時ファイルを残しました: %s\n", result.TempDir)
@@ -356,10 +364,26 @@ func (c *CLI) build(args []string, watch bool) int {
 		return 0
 	}
 
-	if watch || opts.watch {
+	if watching {
 		return c.watchLoop(input, output, opts.config, run)
 	}
 	return run()
+}
+
+// watchWorkDir は、監視中の PDF の生成に使う作業ディレクトリ（~/.cache/reportmd/watch/<出力先のパスのハッシュ>）。
+// 生成のたびに使い回し、監視をやめたあとも残す（次に監視を始めたときも、XeLaTeX が1回で済むように）。
+// キャッシュの場所がわからなければ空（生成のたびに一時ディレクトリを使う）。
+func watchWorkDir(output string) string {
+	cache, err := os.UserCacheDir()
+	if err != nil {
+		return ""
+	}
+	abs, err := filepath.Abs(output)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(abs))
+	return filepath.Join(cache, "reportmd", "watch", hex.EncodeToString(sum[:8]))
 }
 
 // --- check ----------------------------------------------------------------
