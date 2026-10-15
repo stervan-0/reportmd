@@ -1,0 +1,6 @@
+*.pdf
+# ビルドしたバイナリ
+/reportmd
+/dist/
+# Claude Code 用の個人設定（コミットしない）
+/CLAUDE.md

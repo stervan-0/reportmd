@@ -1,0 +1,60 @@
+{
+  "document": {
+    "paper": "a4",
+    "title": "",
+    "author": ""
+  },
+  "page": {
+    "margin": {
+      "top": "25mm",
+      "bottom": "25mm",
+      "left": "25mm",
+      "right": "25mm"
+    },
+    "numbering": true
+  },
+  "text": {
+    "font_size": "10.5pt",
+    "line_spacing": 1.5,
+    "paragraph_indent": 1
+  },
+  "font": {
+    "main": "IPAexMincho",
+    "mono": "Noto Sans Mono CJK JP"
+  },
+  "heading": {
+    "font": "IPAexGothic",
+    "bold": true,
+    "sizes": ["14pt", "12pt", "10.5pt"],
+    "indents": [0, 1, 2]
+  },
+  "caption": {
+    "figure_label": "図",
+    "table_label": "表",
+    "figure_position": "bottom",
+    "table_position": "top"
+  },
+  "table": {
+    "position": "center",
+    "width": "auto",
+    "font_size": null,
+    "row_spacing": 1.3,
+    "cell_padding": "6pt",
+    "header": {
+      "bold": false,
+      "align": "center"
+    },
+    "rules": {
+      "top": "0.8pt",
+      "header": "1.2pt",
+      "bottom": "0.8pt",
+      "rows": false,
+      "vertical": false,
+      "sides": false
+    }
+  },
+  "equation": {
+    "numbering": true,
+    "label": "式"
+  }
+}

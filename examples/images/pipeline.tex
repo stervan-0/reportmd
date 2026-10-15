@@ -1,0 +1,34 @@
+% examples/report.rmd の図「reportmd の処理の流れ」の元データ。
+% 作り直すときは、このディレクトリで次を実行する：
+%   xelatex pipeline.tex && pdftoppm -r 300 -png -singlefile pipeline.pdf pipeline
+\documentclass[border=6pt]{standalone}
+\usepackage{xeCJK}
+\setCJKmainfont{IPAexGothic}
+\setmainfont{IPAexGothic}
+\usepackage{tikz}
+\usetikzlibrary{positioning}
+\begin{document}
+\begin{tikzpicture}[
+  node distance=7mm,
+  stage/.style={draw, thick, rounded corners=2pt, align=center,
+               minimum height=12mm, minimum width=20mm, fill=black!5},
+  file/.style={draw, thick, align=center, minimum height=12mm, minimum width=14mm},
+  arrow/.style={->, thick}
+]
+  \node[file] (rmd) {.rmd};
+  \node[stage, right=of rmd] (pre) {前処理\\\footnotesize preprocessor.rb};
+  \node[stage, right=of pre] (pandoc) {Pandoc};
+  \node[stage, right=of pandoc] (filter) {フィルタ\\\footnotesize filter.lua};
+  \node[stage, right=of filter] (xelatex) {XeLaTeX};
+  \node[file, right=of xelatex] (pdf) {PDF};
+  \node[file, above=of pandoc] (setting) {setting.json};
+
+  \draw[arrow] (rmd) -- (pre);
+  \draw[arrow] (pre) -- (pandoc);
+  \draw[arrow] (pandoc) -- (filter);
+  \draw[arrow] (filter) -- (xelatex);
+  \draw[arrow] (xelatex) -- (pdf);
+  \draw[arrow, dashed] (setting) -- (pandoc);
+  \draw[arrow, dashed] (setting) -| (xelatex);
+\end{tikzpicture}
+\end{document}
