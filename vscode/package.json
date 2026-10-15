@@ -142,6 +142,12 @@
         "configuration": "./language-configuration.json"
       }
     ],
+    "jsonValidation": [
+      {
+        "fileMatch": "setting.json",
+        "url": "./schemas/setting.schema.json"
+      }
+    ],
     "grammars": [
       {
         "language": "reportmd",
@@ -164,6 +170,7 @@
     "test": "node --test \"test/**/*.test.js\""
   },
   "devDependencies": {
+    "vscode-json-languageservice": "^5.7.2",
     "vscode-oniguruma": "^2.0.1",
     "vscode-textmate": "^9.2.0"
   }
