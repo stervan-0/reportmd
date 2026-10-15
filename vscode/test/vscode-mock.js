@@ -25,6 +25,9 @@ class Uri {
   static file(fsPath) {
     return new Uri(fsPath);
   }
+  static joinPath(base, ...parts) {
+    return new Uri(require('node:path').join(base.fsPath, ...parts));
+  }
   toString() {
     return 'file://' + this.fsPath;
   }
@@ -61,6 +64,50 @@ class TextDocument {
   }
 }
 
+// WebviewPanel の代わり。拡張機能が送ったメッセージを messages に記録する。
+// receive で、Webview から拡張機能へのメッセージを送れる
+class WebviewPanel {
+  constructor(viewType, title) {
+    this.viewType = viewType;
+    this.title = title;
+    this.messages = [];
+    this.revealed = 0;
+    this.disposed = false;
+    this.receiveEvent = new Emitter();
+    this.disposeEvent = new Emitter();
+    this.webview = {
+      html: '',
+      options: {},
+      cspSource: 'vscode-webview://test',
+      asWebviewUri: (uri) => 'vscode-webview://test' + uri.fsPath,
+      postMessage: async (message) => {
+        this.messages.push(message);
+        return true;
+      },
+      onDidReceiveMessage: this.receiveEvent.event,
+    };
+    this.onDidDispose = this.disposeEvent.event;
+  }
+  reveal() {
+    this.revealed++;
+  }
+  receive(message) {
+    return this.receiveEvent.fire(message);
+  }
+  dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.disposeEvent.fire();
+  }
+}
+
+class RelativePattern {
+  constructor(base, pattern) {
+    this.base = base;
+    this.pattern = pattern;
+  }
+}
+
 function createMock() {
   const events = {
     open: new Emitter(),
@@ -68,7 +115,7 @@ function createMock() {
     close: new Emitter(),
     activeEditor: new Emitter(),
   };
-  const record = { messages: [], executed: [], output: [] };
+  const record = { messages: [], executed: [], output: [], panels: [], watchers: [] };
   const diagnostics = new Map(); // fsPath → Diagnostic[]
   const commands = new Map();
   const settings = {};
@@ -83,6 +130,7 @@ function createMock() {
   const vscode = {
     Uri,
     Range,
+    RelativePattern,
     Diagnostic,
     DiagnosticSeverity: { Error: 0, Warning: 1, Information: 2, Hint: 3 },
     StatusBarAlignment: { Left: 1, Right: 2 },
@@ -105,6 +153,12 @@ function createMock() {
         return { dispose() {} };
       },
       withProgress: (options, task) => task({ report() {} }),
+      createWebviewPanel: (viewType, title) => {
+        const panel = new WebviewPanel(viewType, title);
+        record.panels.push(panel);
+        return panel;
+      },
+      registerWebviewPanelSerializer: () => ({ dispose() {} }),
       onDidChangeActiveTextEditor: events.activeEditor.event,
     },
     languages: {
@@ -118,6 +172,22 @@ function createMock() {
       textDocuments: [],
       getConfiguration: () => ({ get: (key, fallback) => (key in settings ? settings[key] : fallback) }),
       openTextDocument: async (uri) => new TextDocument(uri.fsPath),
+      // ファイルの変更の監視の代わり。テストから change を呼んで、変更を知らせる
+      createFileSystemWatcher: (pattern) => {
+        const change = new Emitter();
+        const watcher = {
+          pattern,
+          onDidChange: change.event,
+          onDidCreate: change.event,
+          change: () => change.fire(),
+          disposed: false,
+          dispose() {
+            this.disposed = true;
+          },
+        };
+        record.watchers.push(watcher);
+        return watcher;
+      },
       onDidOpenTextDocument: events.open.event,
       onDidSaveTextDocument: events.save.event,
       onDidCloseTextDocument: events.close.event,
@@ -138,7 +208,7 @@ function createMock() {
     },
   };
 
-  return { vscode, events, record, diagnostics, commands, settings, contexts, TextDocument };
+  return { vscode, events, record, diagnostics, commands, settings, contexts, TextDocument, WebviewPanel };
 }
 
 // install は、require('vscode') が、この代わりを返すようにする。

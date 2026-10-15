@@ -1,6 +1,7 @@
 // reportmd の VS Code 拡張機能。
 //   - 保存するたびに reportmd check を実行し、エラー・警告を波線と「問題」パネルに表示する
 //   - PDF の生成（build）と、保存のたびに生成し直す監視（watch）を、ボタンとコマンドから実行する
+//   - 生成した PDF を、VS Code の中のプレビュー（preview.js）に表示する
 // reportmd 本体（コマンド）を呼び出すだけで、文書の変換はすべて本体が行う。
 'use strict';
 
@@ -11,6 +12,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { parseDiagnostics, referencesIn, findReferences, settingKeyIn, findSettingKey } = require('./lib/output');
 const { commandLine, resolveExecutable, isNotFound } = require('./lib/command');
+const { Preview, VIEW_TYPE } = require('./preview');
 
 const SETTING_FILE = 'setting.json';
 
@@ -27,6 +29,7 @@ let notFoundShown = false;
 function activate(context) {
   output = vscode.window.createOutputChannel('reportmd');
   diagnostics = vscode.languages.createDiagnosticCollection('reportmd');
+  Preview.extensionUri = context.extensionUri;
 
   buildItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   buildItem.command = 'reportmd.build';
@@ -41,6 +44,10 @@ function activate(context) {
     vscode.commands.registerCommand('reportmd.watch', (uri) => withDocument(uri, startWatch)),
     vscode.commands.registerCommand('reportmd.stopWatch', (uri) => withDocument(uri, (doc) => stopWatch(doc.uri.fsPath))),
     vscode.commands.registerCommand('reportmd.check', (uri) => withDocument(uri, (doc) => check(doc, true))),
+    vscode.commands.registerCommand('reportmd.preview', (uri) => withDocument(uri, preview)),
+    vscode.window.registerWebviewPanelSerializer(VIEW_TYPE, {
+      deserializeWebviewPanel: async (panel, state) => Preview.revive(panel, state),
+    }),
     vscode.commands.registerCommand('reportmd.showOutput', () => output.show(true)),
     vscode.workspace.onDidOpenTextDocument((doc) => isReport(doc) && checkOnSave() && check(doc)),
     vscode.workspace.onDidSaveTextDocument(onSave),
@@ -269,8 +276,10 @@ async function build(doc) {
   if (doc.isDirty) await doc.save();
   const args = ['build', path.basename(file)];
   if (openMode() === 'external') args.push('--open');
+  const pdf = pdfPath(file);
 
   buildItem.text = '$(sync~spin) PDF を生成中';
+  Preview.setStatus(pdf, 'building', 'PDF を生成しています…');
   const result = await vscode.window.withProgress(
     { location: vscode.ProgressLocation.Window, title: 'reportmd: PDF を生成しています' },
     () => run(args, path.dirname(file)),
@@ -280,36 +289,47 @@ async function build(doc) {
   log(`reportmd ${args.join(' ')}`, result.text);
   const errors = report(file, result.text);
   if (result.exitCode === 0) {
-    const pdf = pdfPath(file);
-    if (openMode() === 'vscode') openInVSCode(pdf);
-    else vscode.window.setStatusBarMessage(`$(check) ${path.basename(pdf)} を出力しました`, 5000);
+    vscode.window.setStatusBarMessage(`$(check) ${path.basename(pdf)} を出力しました`, 5000);
+    if (openMode() === 'preview') Preview.show(pdf);
   } else {
+    Preview.setStatus(pdf, 'error', 'PDF を生成できませんでした（「問題」パネルを確認してください）');
     const show = '出力を表示';
     const message = errors > 0 ? `PDF を生成できませんでした（エラー ${errors} 件）` : 'PDF を生成できませんでした';
     vscode.window.showErrorMessage(message, show).then((choice) => choice === show && output.show(true));
   }
 }
 
+// openMode は、生成した PDF を開く場所（設定 reportmd.openPdf）。
+// 'preview'（VS Code の中のプレビュー）・'external'（OS の PDF ビューア）・'none'
 function openMode() {
-  return config().get('openPdf', 'external');
+  const mode = config().get('openPdf', 'preview');
+  return mode === 'vscode' ? 'preview' : mode; // 'vscode' は以前の名前
 }
 
 function pdfPath(file) {
   return path.join(path.dirname(file), path.basename(file, path.extname(file)) + '.pdf');
 }
 
-// openInVSCode は、PDF を VS Code の横のタブで開く（PDF を表示する拡張機能が必要）。
-function openInVSCode(pdf) {
-  vscode.commands.executeCommand('vscode.open', vscode.Uri.file(pdf), {
-    viewColumn: vscode.ViewColumn.Beside,
-    preserveFocus: true,
-    preview: false,
-  });
+// --- preview --------------------------------------------------------------
+
+// preview は、PDF のプレビューを横に開き、監視を始める（保存のたびに生成し直して、プレビューも更新する）。
+// プレビューから始めた監視は、プレビューを閉じると止める。
+function preview(doc) {
+  const file = doc.uri.fsPath;
+  const panel = Preview.show(pdfPath(file));
+  if (!watches.has(file)) {
+    startWatch(doc, { fromPreview: true });
+    const watch = watches.get(file);
+    panel.onDispose.push(() => {
+      if (watches.get(file) === watch) stopWatch(file);
+    });
+  }
 }
 
 // --- watch ----------------------------------------------------------------
 
-function startWatch(doc) {
+// startWatch は、reportmd watch を起動する。fromPreview（プレビューから始めた）なら、PDF をほかで開かない。
+function startWatch(doc, { fromPreview = false } = {}) {
   const file = doc.uri.fsPath;
   if (watches.has(file)) {
     vscode.window.showInformationMessage(`${path.basename(file)} は監視中です`);
@@ -317,14 +337,17 @@ function startWatch(doc) {
   }
   if (doc.isDirty) doc.save();
   const args = ['watch', path.basename(file)];
-  if (openMode() === 'external') args.push('--open');
+  if (!fromPreview && openMode() === 'external') args.push('--open');
+  const pdf = pdfPath(file);
 
   const { child, wsl } = spawnReportmd(args, path.dirname(file));
-  const watch = { process: child, buffer: '', opened: false, wsl };
+  const watch = { process: child, buffer: '', opened: fromPreview, wsl };
   watches.set(file, watch);
   if (checks.has(file)) checks.get(file).kill();
   log(`reportmd ${args.join(' ')}`, '');
-  output.show(true);
+  // プレビューがあれば、出力パネルは前に出さない（プレビューに状態を表示する）
+  if (!fromPreview && openMode() !== 'preview') output.show(true);
+  Preview.setStatus(pdf, 'building', 'PDF を生成しています…');
 
   const onData = (data) => {
     const text = data.toString('utf8');
@@ -332,11 +355,20 @@ function startWatch(doc) {
     watch.buffer += text;
     // 「変更を検出しました」から先が、新しい生成の出力
     const restart = watch.buffer.lastIndexOf('変更を検出しました');
-    if (restart >= 0) watch.buffer = watch.buffer.slice(watch.buffer.indexOf('\n', restart) + 1);
-    report(file, watch.buffer);
-    if (/を出力しました/.test(text) && openMode() === 'vscode' && !watch.opened) {
-      watch.opened = true;
-      openInVSCode(pdfPath(file));
+    if (restart >= 0) {
+      watch.buffer = watch.buffer.slice(watch.buffer.indexOf('\n', restart) + 1);
+      Preview.setStatus(pdf, 'building', 'PDF を生成しています…');
+    }
+    const errors = report(file, watch.buffer);
+    if (/を出力しました/.test(text)) {
+      if (openMode() === 'preview' && !watch.opened) {
+        watch.opened = true;
+        Preview.show(pdf);
+      } else {
+        Preview.reloadIfOpen(pdf);
+      }
+    } else if (errors > 0) {
+      Preview.setStatus(pdf, 'error', `PDF を生成できませんでした（エラー ${errors} 件。「問題」パネルを確認してください）`);
     }
   };
   child.stdout.on('data', onData);

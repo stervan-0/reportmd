@@ -740,7 +740,7 @@ PDF生成時に一時ファイルを使用する場合は、一時ディレク�
 - **結合テスト**：`examples/report.reportmd` からPDFが生成できることを確認する（スモークテスト）。PDFの見た目そのものの比較は行わない。
 - **互換性のテスト**：Ruby 版（0.1.0）が同じ設定から生成したプリアンブルとメタデータ（`internal/build/testdata`）と、Go 版の出力が一致することを確認する。
 - テストは `go test ./...` で実行する。PandocやXeLaTeX・既定のフォントが必要なテストは、揃っていない環境では飛ばす。
-- VS Code 拡張機能のテストは 13.6 を参照。
+- VS Code 拡張機能のテストは 13.7 を参照。
 
 ### 10.2 確認する項目
 
@@ -793,7 +793,7 @@ PDF生成時に一時ファイルを使用する場合は、一時ディレク�
 - 2段階以上のインデント、リスト・引用内でのインデント
 - `#4` 以降の見出しレベル
 - 縦書き・段組み
-- VS Code 拡張機能の、`@名前` の補完・スニペット・PDF のプレビュー
+- VS Code 拡張機能の、`@名前` の補完・スニペット、プレビューと文書の位置の対応（SyncTeX）
 
 以上を初期仕様案とし、実装・テストで問題が見つかった場合は、本文の互換性を優先して仕様を改訂する。
 
@@ -824,29 +824,44 @@ PDF生成時に一時ファイルを使用する場合は、一時ディレク�
 | コマンド | 動作 |
 | --- | --- |
 | PDF を生成（`reportmd.build`） | 文書を保存し、`reportmd build <文書>` を実行する。結果のエラー・警告を表示する |
+| プレビューを横に表示（`reportmd.preview`） | PDF のプレビュー（13.4）を横に開き、監視していなければ監視を始める |
 | 監視を開始（`reportmd.watch`） | 文書を保存し、`reportmd watch <文書>` を起動する。出力は出力パネル「reportmd」に表示する |
 | 監視を停止（`reportmd.stopWatch`） | watch のプロセスを止める（拡張機能の終了時にも止める） |
 | 誤りを調べる（`reportmd.check`） | check を実行し、結果を通知でも知らせる |
 | 出力を表示（`reportmd.showOutput`） | 出力パネルを表示する |
 
-- エディタの右上（PDF を生成・監視の開始/停止）、ステータスバー（`PDF`・`監視`/`監視中`。`.reportmd` を開いているときだけ）、エクスプローラーの右クリック、コマンドパレットから実行できる。
-- 生成した PDF は、設定 `reportmd.openPdf` に従って開く。`external`（既定）は本体の `--open` で OS の PDF ビューアを開く。`vscode` は VS Code の横のタブで開く（PDF を表示する拡張機能が必要）。`none` は開かない。
+- エディタの右上（プレビュー・PDF を生成・監視の開始/停止）、ステータスバー（`PDF`・`監視`/`監視中`。`.reportmd` を開いているときだけ）、エクスプローラーの右クリック、コマンドパレットから実行できる。
+- 「PDF を生成」「監視を開始」で生成した PDF は、設定 `reportmd.openPdf` に従って開く。`preview`（既定）は VS Code の中のプレビュー（13.4）に表示する。`external` は本体の `--open` で OS の PDF ビューアを開く。`none` は開かない（以前の値 `vscode` は `preview` として扱う）。
 
-### 13.4 reportmd の実行
+### 13.4 PDF のプレビュー
+
+- VS Code の Webview に、pdf.js（`pdfjs-dist`。`npm install` と `.vsix` の作成のときに `media/pdfjs` へコピーする）で PDF のページを描く。PDF ごとに1つのプレビューとし、既にあれば前に出す。
+- PDF は拡張機能が読み、データを Webview に送る。PDF の先頭が `%PDF` でなければ（書き込みの途中）、少し待って読み直す。PDF がなければ、生成すると表示することを知らせる。
+- 次のときに表示し直す。表示していた位置（ページとページの中の割合）と倍率は保ち、描き終わるまで前の絵を残す。
+  - 監視（watch）が PDF を出力したとき
+  - PDF のファイルが変わったとき（VS Code のファイルの監視。ほかで生成した場合も含む）
+  - 「PDF を生成」が成功したとき（`openPdf` が `preview` なら、プレビューを開く）
+- 監視の出力の「変更を検出しました」で「生成中」、エラーがあれば「生成できませんでした」をプレビューの上の欄に表示する。エラーのときは、前の PDF を表示したままにする。
+- 画面に見えているページ（と前後）だけを描く。倍率は「幅に合わせる」（既定）・「ページ全体」・50%〜200%。Ctrl+マウスホイール、Ctrl+`+` / `-` / `0` でも変えられる。「幅に合わせる」「ページ全体」は、パネルの大きさが変わると倍率も変える。
+- 倍率と位置は Webview の状態に保存し、VS Code を再起動したときにプレビューを元に戻す（`registerWebviewPanelSerializer`）。
+- 「プレビューを横に表示」から始めた監視は、プレビューを閉じると止める。
+- Webview の Content Security Policy は、拡張機能の `media` の中のスクリプト・スタイルだけを許す。pdf.js の Worker は、Worker のスクリプトを読み込んで Blob から作る（Webview では別の場所のスクリプトから Worker を作れないため）。
+
+### 13.5 reportmd の実行
 
 - 設定 `reportmd.path` があれば、それを実行する。なければ `reportmd`。Linux・macOS で PATH に見つからず、`~/.local/bin/reportmd` があれば、それを使う（VS Code がログインシェルの PATH を引き継がないことがあるため）。
 - Windows の VS Code で WSL のフォルダ（`\\wsl.localhost\<ディストリビューション>\...` または `\\wsl$\...`）を開いている場合は、`wsl.exe -d <ディストリビューション> --cd <Linux のパス> -e bash -lc 'exec "$0" "$@"' reportmd ...` で、WSL の中の reportmd を実行する（ログインシェルで `~/.profile` の PATH を読む）。
 - WSL に接続した VS Code では、拡張機能は WSL の中で動く（`extensionKind` は `workspace`）。
 - reportmd が見つからない場合（起動できない、または WSL のシェルの終了コード 127）は、インストールか `reportmd.path` の設定を促す通知を、1回だけ表示する。
 
-### 13.5 setting.json の補完と検査
+### 13.6 setting.json の補完と検査
 
 - `schemas/setting.schema.json`（JSON Schema）を、`setting.json` という名前のファイルに結び付ける。項目と値の候補・説明・既定値を表示し、7.3 と同じ規則（列挙・範囲・長さの形式・フォント名に使えない文字・未知のキー）で印を付ける。
 - スキーマの項目と既定値が、本体の設定の規則と `default.json` に一致することを、Go のテスト（`internal/config/schema_test.go`）で確かめる。
 
-### 13.6 テストとパッケージ
+### 13.7 テストとパッケージ
 
-- `npm test`（`make vscode-test`）で実行する。色分け（vscode-textmate で VS Code 本体の文法とともに字句に分ける）、出力の読み取り、コマンドラインの組み立て、スキーマ（vscode-json-languageservice）、拡張機能の動作（VS Code の API の代わりの上で `extension.js` を動かし、実際に reportmd を実行する）をテストする。VS Code・reportmd・PDF の生成に必要なものがなければ、そのテストを飛ばす。
+- `npm test`（`make vscode-test`）で実行する。色分け（vscode-textmate で VS Code 本体の文法とともに字句に分ける）、出力の読み取り、コマンドラインの組み立て、スキーマ（vscode-json-languageservice）、拡張機能の動作（VS Code の API の代わりの上で `extension.js` を動かし、実際に reportmd を実行する）、プレビューの画面（ヘッドレスの Chrome / Edge で Webview の HTML を開き、pdf.js が PDF を描くこと・表示し直しで位置を保つこと・倍率の変更を確かめる）をテストする。VS Code・reportmd・PDF の生成に必要なもの・Chrome がなければ、そのテストを飛ばす。
 - `npm run package`（`make vscode`）で `.vsix` を作る。
 
 ---

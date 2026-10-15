@@ -47,7 +47,7 @@ test('拡張機能', { skip }, async (t) => {
   mock.settings.openPdf = 'none';
   const extension = require('../extension');
   const subscriptions = [];
-  extension.activate({ subscriptions });
+  extension.activate({ subscriptions, extensionUri: mock.vscode.Uri.file(path.join(__dirname, '..')) });
 
   const dir = fs.mkdtempSync(path.join(tempRoot(), 'reportmd-vscode-'));
   t.after(() => {
@@ -147,5 +147,66 @@ test('拡張機能', { skip }, async (t) => {
     assert.strictEqual(mock.contexts['reportmd.watching'], false);
     await waitFor(() => child.exitCode !== null || child.signalCode !== null, '監視のプロセスの終了', 10000);
     assert.ok(doc);
+  });
+
+  await t.test('プレビュー：横に表示し、監視して、生成し直すたびに表示し直す', { skip: pdfAvailable() ? false : 'PDF を生成できない環境のため飛ばす' }, async () => {
+    const file = write('preview.reportmd', '#1 はじめに\n\n本文\n');
+    const pdf = path.join(dir, 'preview.pdf');
+    await open(file);
+    await mock.commands.get('reportmd.preview')();
+    const panel = mock.record.panels.at(-1);
+    assert.strictEqual(panel.title, 'プレビュー: preview.pdf');
+    assert.match(panel.webview.html, /Content-Security-Policy/);
+    assert.match(panel.webview.html, /media\/preview\.js|media\\preview\.js/);
+
+    // Webview の準備ができると、PDF を送る（まだなければ、ないことを知らせる）
+    await panel.receive({ type: 'ready' });
+    const { watches } = extension._test;
+    assert.ok(watches.has(file), 'プレビューを開くと監視を始める');
+    const pdfMessages = () => panel.messages.filter((m) => m.type === 'pdf');
+    await waitFor(() => pdfMessages().length >= 1, '最初の PDF');
+    const first = pdfMessages()[0].data;
+    assert.strictEqual(Buffer.from(first.subarray(0, 4)).toString('latin1'), '%PDF');
+
+    // 書き直すと、監視が生成し直し、プレビューに新しい PDF を送る
+    const count = pdfMessages().length;
+    write('preview.reportmd', '#1 はじめに\n\n書き直した本文\n\n^\n\n2ページ目\n');
+    await waitFor(() => pdfMessages().length > count, '生成し直した PDF');
+    assert.ok(panel.messages.some((m) => m.type === 'status' && m.kind === 'building'), '生成中であることを知らせる');
+
+    // 誤りがあると、プレビューにエラーを表示する（PDF は前のまま）
+    write('preview.reportmd', '本文\n\n![t:表がない]\n');
+    await waitFor(() => panel.messages.some((m) => m.type === 'status' && m.kind === 'error'), 'エラーの表示');
+
+    // PDF のファイルが変わったら（ほかで生成した場合も）、表示し直す
+    const before = pdfMessages().length;
+    mock.record.watchers.find((w) => w.pattern.pattern === 'preview.pdf').change();
+    await waitFor(() => pdfMessages().length > before, 'ファイルの変更での表示し直し', 5000);
+
+    // 同じ PDF のプレビューは、もう1つ作らずに前に出す
+    await mock.commands.get('reportmd.preview')();
+    assert.strictEqual(mock.record.panels.filter((p) => p.title === 'プレビュー: preview.pdf').length, 1);
+    assert.ok(panel.revealed >= 1);
+
+    // プレビューを閉じると、プレビューから始めた監視も止まる
+    const child = watches.get(file).process;
+    panel.dispose();
+    assert.ok(!watches.has(file));
+    await waitFor(() => child.exitCode !== null || child.signalCode !== null, '監視のプロセスの終了', 10000);
+    assert.ok(fs.existsSync(pdf));
+  });
+
+  await t.test('プレビュー：PDF を生成すると、プレビューに表示する（openPdf が preview のとき）', { skip: pdfAvailable() ? false : 'PDF を生成できない環境のため飛ばす' }, async () => {
+    mock.settings.openPdf = 'preview';
+    const file = write('built.reportmd', '本文\n');
+    await open(file);
+    await mock.commands.get('reportmd.build')();
+    const panel = mock.record.panels.find((p) => p.title === 'プレビュー: built.pdf');
+    assert.ok(panel, 'プレビューを開く');
+    await panel.receive({ type: 'ready' });
+    await waitFor(() => panel.messages.some((m) => m.type === 'pdf'), 'PDF');
+    assert.ok(!extension._test.watches.has(file), 'PDF を生成するだけでは、監視は始めない');
+    panel.dispose();
+    mock.settings.openPdf = 'none';
   });
 });

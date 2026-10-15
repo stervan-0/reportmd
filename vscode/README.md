@@ -6,6 +6,11 @@ reportmd（Markdown で大学のレポートを書いて PDF にするツール�
 - **エラーの表示**：開いたときと保存するたびに `reportmd check` を実行し、誤りの箇所に波線を引きます（「問題」パネルにも一覧が出ます）。
   - 見つからない参照（`@名前`）は、その `@名前` の位置に表示します。
   - `setting.json` の誤りは、`setting.json` のその項目の位置に表示します。
+- **PDF のプレビュー**：エディタの右上のプレビューのボタン（またはコマンド「reportmd: プレビューを横に表示」）で、生成した PDF を VS Code の横に表示します。
+  - 開くと監視を始め、保存するたびに PDF を作り直して、プレビューも表示し直します（見ていた位置と倍率はそのまま）。
+  - 生成中・エラーは、プレビューの上の欄に表示します。エラーのときは、前の PDF を表示したままにします。
+  - 倍率は「幅に合わせる」「ページ全体」と 50%〜200%。Ctrl+マウスホイール、Ctrl+`+` / `-` / `0` でも変えられます。
+  - プレビューを閉じると、プレビューから始めた監視も止まります。
 - **PDF の生成**：エディタの右上のボタン、ステータスバー、コマンドパレット（`reportmd:` で始まるコマンド）から実行できます。
   - 「PDF を生成」：`reportmd build` を1回実行します。
   - 「監視」：`reportmd watch` を実行し、保存するたびに PDF を作り直します。もう一度押すと止まります。監視中は、生成したときのエラー（LaTeX のエラーを含む）を表示します。
@@ -39,15 +44,16 @@ VS Code の拡張機能ビューの「…」メニュー →「VSIX からのイ
 | --- | --- |
 | `reportmd.path` | reportmd コマンドのパス。空なら `reportmd`（PATH から探し、見つからなければ `~/.local/bin/reportmd`） |
 | `reportmd.checkOnSave` | 保存するたびに誤りを調べる（既定 `true`） |
-| `reportmd.openPdf` | 生成した PDF を開く場所。`external`（PDF ビューア。既定）・`vscode`（VS Code の横のタブ。PDF を表示する拡張機能が必要）・`none` |
+| `reportmd.openPdf` | 「PDF を生成」「監視を開始」で生成した PDF を開く場所。`preview`（VS Code の横のプレビュー。既定）・`external`（OS の PDF ビューア）・`none` |
 
 ## 開発
 
 ```bash
-npm install
-npm test       # 色分け・出力の読み取り・スキーマ・拡張機能の動作のテスト
+npm install    # テストに使うライブラリと、プレビューに使う pdf.js（media/pdfjs にコピーされる）
+npm test       # 色分け・出力の読み取り・スキーマ・拡張機能の動作・プレビューの画面のテスト
 ```
 
 - 色分けのテストは、VS Code 本体に入っている Markdown などの文法を使います（VS Code が見つからなければ飛ばします）。
 - 拡張機能の動作のテストは、VS Code の API の代わり（`test/vscode-mock.js`）の上で `extension.js` を動かし、実際に reportmd を実行します（reportmd を実行できなければ飛ばします。`REPORTMD_PATH` で指定できます）。
-- ビルドの手順はありません（JavaScript をそのまま使います）。
+- プレビューの画面のテストは、ヘッドレスの Chrome（または Edge）で実際に PDF を描かせます（見つからなければ飛ばします。`CHROME_PATH` で指定できます）。
+- ビルドの手順はありません（JavaScript をそのまま使います）。pdf.js（`media/pdfjs`）はコミットせず、`npm install` と `.vsix` を作るときにコピーします。

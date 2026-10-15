@@ -1,7 +1,7 @@
 {
   "name": "reportmd",
   "displayName": "reportmd",
-  "description": "reportmd（Markdown で大学のレポートを書いて PDF にするツール）の色分け・エラー表示・PDF 生成",
+  "description": "reportmd（Markdown で大学のレポートを書いて PDF にするツール）の色分け・エラー表示・PDF の生成とプレビュー",
   "version": "0.1.0",
   "publisher": "reportmd",
   "engines": {
@@ -16,10 +16,17 @@
     "workspace"
   ],
   "activationEvents": [
-    "onLanguage:reportmd"
+    "onLanguage:reportmd",
+    "onWebviewPanel:reportmd.preview"
   ],
   "contributes": {
     "commands": [
+      {
+        "command": "reportmd.preview",
+        "title": "プレビューを横に表示",
+        "category": "reportmd",
+        "icon": "$(open-preview)"
+      },
       {
         "command": "reportmd.build",
         "title": "PDF を生成",
@@ -52,6 +59,11 @@
     "menus": {
       "editor/title": [
         {
+          "command": "reportmd.preview",
+          "when": "resourceLangId == reportmd",
+          "group": "navigation@0"
+        },
+        {
           "command": "reportmd.build",
           "when": "resourceLangId == reportmd",
           "group": "navigation@1"
@@ -69,6 +81,11 @@
       ],
       "explorer/context": [
         {
+          "command": "reportmd.preview",
+          "when": "resourceExtname == .reportmd",
+          "group": "reportmd@0"
+        },
+        {
           "command": "reportmd.build",
           "when": "resourceExtname == .reportmd",
           "group": "reportmd@1"
@@ -80,6 +97,10 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "reportmd.preview",
+          "when": "editorLangId == reportmd"
+        },
         {
           "command": "reportmd.build",
           "when": "editorLangId == reportmd"
@@ -115,17 +136,17 @@
         "reportmd.openPdf": {
           "type": "string",
           "enum": [
+            "preview",
             "external",
-            "vscode",
             "none"
           ],
           "enumDescriptions": [
+            "VS Code の横のプレビューに表示する",
             "PDF ビューア（OS の既定のアプリ）で開く",
-            "VS Code の横のタブで開く（PDF を表示する拡張機能が必要）",
             "開かない"
           ],
-          "default": "external",
-          "description": "生成した PDF をどこで開くか"
+          "default": "preview",
+          "description": "「PDF を生成」「監視を開始」で生成した PDF をどこで開くか"
         }
       }
     },
@@ -166,10 +187,13 @@
     ]
   },
   "scripts": {
+    "postinstall": "node scripts/copy-pdfjs.js",
+    "vscode:prepublish": "node scripts/copy-pdfjs.js",
     "test": "node --test \"test/**/*.test.js\"",
     "package": "npx --yes @vscode/vsce@3 package --no-dependencies --allow-missing-repository --skip-license"
   },
   "devDependencies": {
+    "pdfjs-dist": "^6.4.299",
     "vscode-json-languageservice": "^5.7.2",
     "vscode-oniguruma": "^2.0.1",
     "vscode-textmate": "^9.2.0"
