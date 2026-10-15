@@ -9,9 +9,127 @@
     "vscode": "^1.85.0"
   },
   "categories": [
-    "Programming Languages"
+    "Programming Languages",
+    "Linters"
+  ],
+  "main": "./extension.js",
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [
+    "onLanguage:reportmd"
   ],
   "contributes": {
+    "commands": [
+      {
+        "command": "reportmd.build",
+        "title": "PDF を生成",
+        "category": "reportmd",
+        "icon": "$(file-pdf)"
+      },
+      {
+        "command": "reportmd.watch",
+        "title": "監視を開始（保存のたびに PDF を生成）",
+        "category": "reportmd",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "reportmd.stopWatch",
+        "title": "監視を停止",
+        "category": "reportmd",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "reportmd.check",
+        "title": "誤りを調べる",
+        "category": "reportmd"
+      },
+      {
+        "command": "reportmd.showOutput",
+        "title": "出力を表示",
+        "category": "reportmd"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "reportmd.build",
+          "when": "resourceLangId == reportmd",
+          "group": "navigation@1"
+        },
+        {
+          "command": "reportmd.watch",
+          "when": "resourceLangId == reportmd && !reportmd.watching",
+          "group": "navigation@2"
+        },
+        {
+          "command": "reportmd.stopWatch",
+          "when": "resourceLangId == reportmd && reportmd.watching",
+          "group": "navigation@2"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "reportmd.build",
+          "when": "resourceExtname == .reportmd",
+          "group": "reportmd@1"
+        },
+        {
+          "command": "reportmd.watch",
+          "when": "resourceExtname == .reportmd",
+          "group": "reportmd@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "reportmd.build",
+          "when": "editorLangId == reportmd"
+        },
+        {
+          "command": "reportmd.watch",
+          "when": "editorLangId == reportmd && !reportmd.watching"
+        },
+        {
+          "command": "reportmd.stopWatch",
+          "when": "editorLangId == reportmd && reportmd.watching"
+        },
+        {
+          "command": "reportmd.check",
+          "when": "editorLangId == reportmd"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "reportmd",
+      "properties": {
+        "reportmd.path": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "reportmd コマンドのパス。空なら `reportmd`（PATH から探す。見つからなければ `~/.local/bin/reportmd`）。Windows で WSL のフォルダを開いている場合は、WSL の中のパスを書く",
+          "scope": "machine-overridable"
+        },
+        "reportmd.checkOnSave": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "保存するたびに `reportmd check` を実行し、エラー・警告を表示する（監視中は、監視の結果を表示する）"
+        },
+        "reportmd.openPdf": {
+          "type": "string",
+          "enum": [
+            "external",
+            "vscode",
+            "none"
+          ],
+          "enumDescriptions": [
+            "PDF ビューア（OS の既定のアプリ）で開く",
+            "VS Code の横のタブで開く（PDF を表示する拡張機能が必要）",
+            "開かない"
+          ],
+          "default": "external",
+          "description": "生成した PDF をどこで開くか"
+        }
+      }
+    },
     "languages": [
       {
         "id": "reportmd",
