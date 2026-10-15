@@ -241,7 +241,8 @@ func WorkFiles(dir, markdown string, cfg *config.Config, source string) (map[str
 }
 
 // PandocArgs は、Pandoc の引数を作る。
-func PandocArgs(paths map[string]string, output string, format Format) []string {
+// title は HTML のページの題名（文書に title がない場合に使う）。
+func PandocArgs(paths map[string]string, output string, format Format, title string) []string {
 	args := []string{
 		paths["body.md"],
 		"-f", pandocReader,
@@ -261,7 +262,7 @@ func PandocArgs(paths map[string]string, output string, format Format) []string 
 			"--include-in-header="+paths["preamble.tex"],
 			"-V", "indent=true")
 	case HTML:
-		args = append(args, "-t", "html5", "-s", "--mathml")
+		args = append(args, "-t", "html5", "-s", "--mathml", "--metadata=pagetitle:"+title)
 	case Docx:
 		args = append(args, "-t", "docx")
 	}
@@ -273,7 +274,12 @@ func runPandoc(dir, markdown, output string, opts Options) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	cmd := exec.Command("pandoc", PandocArgs(paths, output, opts.Format)...)
+	title := opts.Config.Document.Title
+	if strings.TrimSpace(title) == "" {
+		base := filepath.Base(opts.Input)
+		title = strings.TrimSuffix(base, filepath.Ext(base))
+	}
+	cmd := exec.Command("pandoc", PandocArgs(paths, output, opts.Format, title)...)
 	// 画像などの相対パスは、入力ファイルのある場所を基準にする
 	cmd.Dir = filepath.Dir(opts.Input)
 	var stderr bytes.Buffer

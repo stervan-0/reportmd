@@ -28,7 +28,7 @@ func pandoc(t *testing.T, rmd, format string, settings map[string]any, extra ...
 	dir := t.TempDir()
 	filter := filepath.Join(dir, "filter.lua")
 	os.WriteFile(filter, filterLua, 0o644)
-	args := []string{"-f", pandocReader, "--lua-filter=" + filter, "-t", format}
+	args := []string{"-f", pandocReader, "--lua-filter=" + filter, "-t", format, "--wrap=none"}
 	if settings != nil {
 		meta, _ := json.Marshal(map[string]any{"reportmd": settings})
 		path := filepath.Join(dir, "meta.json")
@@ -112,6 +112,15 @@ var filterCases = []filterCase{
 	{name: "@{名前}", rmd: refDoc + "@{result}に示す。\n", format: "plain", has: []string{"表1に示す。"}},
 	{name: "[@a; @b]", rmd: refDoc + "[@sys; @result] を参照。\n", format: "plain", has: []string{"図1、表1 を参照。"}},
 	{name: "コードとメールアドレスは置き換えない", rmd: refDoc + "`@sys` と a@sys.com\n", format: "plain", has: []string{"@sys", "a@sys.com"}, hasNot: []string{"図1 と"}},
+
+	// 参照のリンク（PDF 内で、クリックすると参照先へ移動する）
+	{name: "参照は参照先へのリンク", rmd: refDoc + "$$ E $$ {#eq}\n\n@sys と @result と @eq\n", format: "latex", has: []string{
+		`\begin{samepage}\begin{center}\hypertarget{sys}{}`, `\protect\hypertarget{result}{}{}表1 結果`, `\protect\hypertarget{eq}{}{}\[ E`,
+		`\protect\hyperlink{sys}{図1} と \protect\hyperlink{result}{表1} と \protect\hyperlink{eq}{式(1)}`}},
+	{name: "名前のない図表には目印を置かない", rmd: "![f:図](a.png)\n\n![t:表]\n" + smallTable, format: "latex", hasNot: []string{"hypertarget"}},
+	{name: "直後の日本語はリンクの外", rmd: refDoc + "@sysに示す\n", format: "latex", has: []string{`\protect\hyperlink{sys}{図1}に示す`}},
+	{name: "同じ名前の2つ目には目印を置かない", rmd: "![f:a](a.png){#x}\n\n![f:b](b.png){#x}\n\n@x\n", format: "latex", has: []string{`\protect\hyperlink{x}{図1}`}, order: []string{`\hypertarget{x}`, "図1 a", "図2 b"}, hasNot: []string{"hypertarget{x}{}\\includegraphics"}},
+	{name: "HTML でもリンク", rmd: refDoc + "@sys\n", format: "html", has: []string{`id="sys"`, `href="#sys"`}},
 
 	// 数式
 	{name: "数式の通し番号", rmd: eqDoc, format: "latex", has: []string{"\\[\nK = \\frac{1}{2} m v^2 % 運動エネルギー\n\\tag{1}\\]", `\[ a + b \]`, "\\[ E = mc^2\n\\tag{2}\\]"}, hasNot: []string{"reportmd-equation"}},

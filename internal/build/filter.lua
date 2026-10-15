@@ -194,6 +194,34 @@ end
 
 local counters = { figure = 0, table = 0 }
 
+-- 参照先の位置。'figure1' / 'table2' / 'equation3'（数式は走査の通し番号）-> 名前。
+-- 名前を付けた図表・数式の位置に目印を置き、@名前 の参照から PDF 内のリンクで飛べるようにする。
+local targets = {}
+
+-- 参照先の目印（空のスパン。LaTeX では \label になる）。名前がなければ nil。
+local function anchor(key)
+  local id = targets[key]
+  if id == nil then
+    return nil
+  end
+  return pandoc.Span({}, { id = id })
+end
+
+-- 画像の属性から、名前（{#名前}）を取り除いた画像を作る（目印は anchor で別に置く）
+local function plain_image(image)
+  return pandoc.Image({}, image.src, image.title, pandoc.Attr('', image.classes, image.attributes))
+end
+
+-- インラインの並びの先頭に、目印を置く
+local function with_anchor(mark, inlines)
+  local result = pandoc.List({})
+  if mark ~= nil then
+    result:insert(mark)
+  end
+  result:extend(inlines)
+  return result
+end
+
 -- 「図1 タイトル」。タイトルがなければ番号だけ（「図1」）。
 local function make_caption(label, number, title)
   local inlines = pandoc.List({ pandoc.Str(label .. number) })
@@ -230,11 +258,16 @@ end
 
 -- LaTeX：浮動体（figure 環境）にせず、書いた位置に固定する。
 -- 画像とキャプションが別のページに分かれないように、samepage で囲む。
-local function latex_figure(image, caption, position)
-  local picture = pandoc.Plain({ pandoc.Image({}, image.src, image.title, image.attr) })
+-- 参照先の目印は、画像の行に置くと画像の下端の位置になるので、図の上端（行の外）に置く。
+local function latex_figure(image, caption, position, mark)
+  local picture = pandoc.Plain({ plain_image(image) })
   local text = pandoc.Plain(caption)
   local gap = pandoc.RawBlock('latex', '\\vspace{0.5\\baselineskip}')
-  local blocks = pandoc.List({ pandoc.RawBlock('latex', '\\begin{samepage}\\begin{center}') })
+  local opening = '\\begin{samepage}\\begin{center}'
+  if mark ~= nil then
+    opening = opening .. '\\hypertarget{' .. mark.identifier .. '}{}'
+  end
+  local blocks = pandoc.List({ pandoc.RawBlock('latex', opening) })
   if position == 'top' then
     blocks:extend({ text, gap, picture })
   else
@@ -253,11 +286,12 @@ local function convert_figure(div)
 
   counters.figure = counters.figure + 1
   local caption = make_caption(settings.figure_label, counters.figure, title)
+  local mark = anchor('figure' .. counters.figure)
   if FORMAT:match('latex') then
-    return latex_figure(image, caption, settings.figure_position)
+    return latex_figure(image, caption, settings.figure_position, mark)
   end
-  local plain_image = pandoc.Image({}, image.src, image.title, image.attr)
-  local figure = pandoc.Figure({ pandoc.Plain({ plain_image }) }, { long = { pandoc.Plain(caption) } })
+  local figure = pandoc.Figure({ pandoc.Plain(with_anchor(mark, { plain_image(image) })) },
+    { long = { pandoc.Plain(caption) } })
   return pandoc.List({ figure })
 end
 
@@ -503,7 +537,8 @@ local function convert_table(caption_div, tbl)
     title = pandoc.utils.blocks_to_inlines(caption_div.content)
   end
   counters.table = counters.table + 1
-  local caption = make_caption(settings.table_label, counters.table, title)
+  local caption = with_anchor(anchor('table' .. counters.table),
+    make_caption(settings.table_label, counters.table, title))
 
   if FORMAT:match('latex') then
     -- 表に付いていたキャプション（: タイトル）は使わない
@@ -587,6 +622,7 @@ local function collect_labels(doc)
         figure = figure + 1
         if id ~= '' and labels[id] == nil then
           labels[id] = settings.figure_label .. figure
+          targets['figure' .. figure] = id
         end
       end
     elseif block.t == 'Div' and has_class(block, 'reportmd-table-caption')
@@ -594,18 +630,19 @@ local function collect_labels(doc)
       tbl = tbl + 1
       if block.identifier ~= '' and labels[block.identifier] == nil then
         labels[block.identifier] = settings.table_label .. tbl
+        targets['table' .. tbl] = block.identifier
       end
     end
   end
 end
 
--- 名前に対応するラベルと、名前のあとに続いていた文字を返す。
+-- 名前に対応するラベルと、名前のあとに続いていた文字、使った名前を返す。
 -- 「@sysに示す」のように、名前の直後に日本語が続くと、Pandoc は「sysに示す」までを
 -- 名前として読む。そこで、名前が見つからなければ、先頭が一致する一番長い名前を使い、
 -- 残り（「に示す」）はそのまま本文に戻す。
 local function resolve_label(id)
   if labels[id] ~= nil then
-    return labels[id], ''
+    return labels[id], '', id
   end
   local best = nil
   for name, _ in pairs(labels) do
@@ -615,25 +652,29 @@ local function resolve_label(id)
     end
   end
   if best ~= nil then
-    return labels[best], id:sub(#best + 1)
+    return labels[best], id:sub(#best + 1), best
   end
   return nil
 end
 
 -- @名前（[@名前]、[@a; @b] も）を、「図1」などに置き換える。
 -- 見つからない名前は、警告して @名前 のまま残す。
+-- 置き換えた「図1」は、参照先へのリンク（PDF 内で、クリックするとその図表・数式へ移動する）にする。
 local function convert_cite(cite)
   local result = pandoc.List({})
   for i, citation in ipairs(cite.citations) do
     if i > 1 then
       result:insert(pandoc.Str('、'))
     end
-    local label, rest = resolve_label(citation.id)
+    local label, rest, name = resolve_label(citation.id)
     if label == nil then
       warn('参照先の図表・数式が見つかりません: @' .. citation.id .. '（{#' .. citation.id .. '} で名前を付けてください）')
       result:insert(pandoc.Str('@' .. citation.id))
     else
-      result:insert(pandoc.Str(label .. rest))
+      result:insert(pandoc.Link({ pandoc.Str(label) }, '#' .. name))
+      if rest ~= '' then
+        result:insert(pandoc.Str(rest))
+      end
     end
   end
   return result
@@ -696,6 +737,7 @@ local function number_equations(doc)
       equation_numbers[tostring(index)] = number
       if mark and mark.identifier ~= '' and labels[mark.identifier] == nil then
         labels[mark.identifier] = settings.equation_label .. '(' .. number .. ')'
+        targets['equation' .. index] = mark.identifier
       end
     elseif mark and mark.identifier ~= '' then
       warn('数式に番号を付けない設定（equation.numbering が false）なので、名前 #' .. mark.identifier
@@ -716,12 +758,13 @@ local function convert_span(span)
   if number == nil then
     return math
   end
+  local mark = anchor('equation' .. span.attributes.index)
   if FORMAT:match('latex') then
     -- 末尾の改行は取り除く（空行が入ると、数式の中で段落が切れてエラーになる）
     local text = math.text:gsub('%s+$', '')
-    return pandoc.RawInline('latex', '\\[' .. text .. '\n\\tag{' .. number .. '}\\]')
+    return with_anchor(mark, { pandoc.RawInline('latex', '\\[' .. text .. '\n\\tag{' .. number .. '}\\]') })
   end
-  return { math, pandoc.Space(), pandoc.Str('(' .. number .. ')') }
+  return with_anchor(mark, { math, pandoc.Space(), pandoc.Str('(' .. number .. ')') })
 end
 
 -- 設定を読み、図表・数式の名前と番号の対応を作る走査を先に行い、そのあとで変換の走査を行う。
