@@ -48,6 +48,7 @@ reportmd build report.rmd -o report.tex   # LaTeX のソース（.html .docx も
 | `-c`, `--config` | 設定ファイルのパス（省略時は入力ファイルと同じ場所の `setting.json`、なければ内蔵の既定値） |
 | `--keep-temp` | 一時ファイルを残す（前処理後の Markdown などを確認できる） |
 | `-w`, `--watch` | 生成したあと、変更を監視して生成し直す |
+| `--open` | 生成したファイルを PDF ビューアなどで開く（`reportmd watch report.rmd --open` が便利） |
 | `-v`, `--version` | バージョンを表示 |
 | `-h`, `--help` | ヘルプを表示 |
 
