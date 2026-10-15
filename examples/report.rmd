@@ -71,7 +71,7 @@ reportmd の処理の流れを @pipeline に示す。独自構文は前処理で
 ![t:変換の段階]{#stages}
 | 段階 | 担当 |
 | :--- | :--- |
-| 独自構文の変換 | `preprocessor.rb` |
+| 独自構文の変換 | `internal/preprocess` |
 | 図表番号・揃え | `filter.lua` |
 
 #1 考察
@@ -86,7 +86,7 @@ reportmd の処理の流れを @pipeline に示す。独自構文は前処理で
 
 #1 結論
 
-RubyからPandocを呼び出す構成を採用する。
+Go で書いた1つの実行ファイルから Pandoc を呼び出す構成を採用する。
 
 # 参考文献
 
