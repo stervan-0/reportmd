@@ -20,10 +20,10 @@ const Version = "0.2.0"
 
 const usage = `使い方:
   reportmd                                 （いちばん簡単な使い方。下を参照）
-  reportmd build [INPUT.rmd] [-o OUTPUT] [-c setting.json] [--keep-temp] [-w] [--open]
-  reportmd INPUT.rmd [オプション]          （build を省略した書き方）
-  reportmd watch [INPUT.rmd] [-o OUTPUT] [-c setting.json] [--open]
-  reportmd check INPUT.rmd [-c setting.json]
+  reportmd build [INPUT.reportmd] [-o OUTPUT] [-c setting.json] [--keep-temp] [-w] [--open]
+  reportmd INPUT.reportmd [オプション]          （build を省略した書き方）
+  reportmd watch [INPUT.reportmd] [-o OUTPUT] [-c setting.json] [--open]
+  reportmd check INPUT.reportmd [-c setting.json]
   reportmd init [DIR] [--force]
   reportmd fonts [--all]
   reportmd doctor [-c setting.json]
@@ -34,14 +34,15 @@ const usage = `使い方:
   build    PDF を生成する（-o の拡張子で .tex .html .docx も出力できる）
   watch    ファイルの変更を監視し、保存のたびに生成し直す（build -w と同じ）
   check    PDF を作らずに、構文・設定・参照の誤りだけを調べる（速い）
-  init     新しいレポートの雛形（report.rmd と setting.json）を作る
+  init     新しいレポートの雛形（report.reportmd と setting.json）を作る
   fonts    設定に書けるフォント名の一覧を表示する（既定は日本語フォントのみ）
   doctor   Pandoc・XeLaTeX・フォントなど、必要なものが揃っているか調べる
 
-INPUT.rmd を省略すると、カレントディレクトリにある .rmd（1つだけの場合）を使う。
+INPUT.reportmd を省略すると、カレントディレクトリにある .reportmd（1つだけの場合）を使う。
+0.1.0 の拡張子 .rmd も、.reportmd と同じように使える。
 
-引数なしの reportmd は、カレントディレクトリの .rmd を PDF にしてビューアで開き、
-保存するたびに作り直す（watch --open と同じ）。.rmd がなければ、雛形を作るか尋ねる。
+引数なしの reportmd は、カレントディレクトリの .reportmd を PDF にしてビューアで開き、
+保存するたびに作り直す（watch --open と同じ）。.reportmd がなければ、雛形を作るか尋ねる。
 
 オプション:
   -o, --output FILE   出力するファイルのパス（省略時は入力ファイルと同じ場所の PDF）
@@ -105,8 +106,8 @@ func (c *CLI) Run(args []string) int {
 	case "doctor":
 		return c.doctor(rest)
 	}
-	// 「reportmd report.rmd」のように、コマンドを省略して入力ファイルを書いたら build にする
-	if strings.HasSuffix(strings.ToLower(command), ".rmd") {
+	// 「reportmd report.reportmd」のように、コマンドを省略して入力ファイルを書いたら build にする
+	if isInputFile(command) {
 		return c.build(args, false)
 	}
 	fmt.Fprintf(c.Stderr, "error: 不明なコマンドです: %s\n", command)
@@ -259,22 +260,40 @@ func (c *CLI) reportWarnings(input string, warnings []preprocess.Warning) {
 // --- 入力の確認 -----------------------------------------------------------
 
 // singleInput は、位置引数がちょうど1つの入力ファイルであることを確認する。
-// 入力ファイルを省略した場合は、カレントディレクトリにある .rmd が1つだけなら、それを使う。
+// 入力ファイルを省略した場合は、カレントディレクトリにある入力ファイルが1つだけなら、それを使う。
 func (c *CLI) singleInput(opts *options, command string) (string, int) {
 	if len(opts.args) == 0 {
-		matches, _ := filepath.Glob("*.rmd")
-		if len(matches) == 1 {
+		if matches := findInputs(); len(matches) == 1 {
 			opts.args = matches
 		}
 	}
 	if len(opts.args) != 1 {
-		return "", c.fail(fmt.Sprintf("error: 入力ファイルを1つ指定してください（例: reportmd %s report.rmd）", command))
+		return "", c.fail(fmt.Sprintf("error: 入力ファイルを1つ指定してください（例: reportmd %s report.reportmd）", command))
 	}
 	input := opts.args[0]
 	if st, err := os.Stat(input); err != nil || st.IsDir() {
 		return "", c.fail(diagnostic(input, 0, "error", "入力ファイルが見つかりません"))
 	}
 	return input, 0
+}
+
+// inputExts は、入力ファイルの拡張子。.reportmd が標準で、.rmd は 0.1.0 との互換のために受け付ける
+// （.rmd は R Markdown の .Rmd と衝突するため、.reportmd に変えた）。
+var inputExts = []string{".reportmd", ".rmd"}
+
+// isInputFile は、名前が入力ファイルの拡張子で終わるかどうか（大文字・小文字は区別しない）。
+func isInputFile(name string) bool {
+	return hasString(inputExts, strings.ToLower(filepath.Ext(name)))
+}
+
+// findInputs は、カレントディレクトリにある入力ファイル（.reportmd と .rmd）を返す。
+func findInputs() []string {
+	var matches []string
+	for _, ext := range inputExts {
+		found, _ := filepath.Glob("*" + ext)
+		matches = append(matches, found...)
+	}
+	return matches
 }
 
 func defaultOutputPath(input string) string {

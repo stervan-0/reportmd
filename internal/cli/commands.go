@@ -177,7 +177,7 @@ func (c *CLI) init(args []string) int {
 	return 0
 }
 
-// writeTemplate は、雛形（report.rmd・setting.json・images/）を dir に書き出す。
+// writeTemplate は、雛形（report.reportmd・setting.json・images/）を dir に書き出す。
 // 既にあるファイルは、force なら上書きし、keepExisting ならそのまま残す。
 // どちらでもなければエラーにする（何も書かない）。
 func (c *CLI) writeTemplate(dir string, force, keepExisting bool) int {
@@ -189,7 +189,7 @@ func (c *CLI) writeTemplate(dir string, force, keepExisting bool) int {
 		name string
 		data []byte
 	}{
-		{"report.rmd", []byte(initReport)},
+		{"report.reportmd", []byte(initReport)},
 		{config.SettingFileName, config.DefaultJSON()},
 	}
 	var writes []string

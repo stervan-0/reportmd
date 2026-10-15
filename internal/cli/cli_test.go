@@ -142,7 +142,7 @@ func TestBuildInputErrors(t *testing.T) {
 	if code, _, err := runCLI("build", missing); code != 1 || !strings.HasPrefix(err, missing+": error: 入力ファイルが見つかりません") {
 		t.Errorf("存在しない入力ファイルは、そのファイル名つきで 1: %s", err)
 	}
-	input := writeFile(t, dir, "report.rmd", "本文\n")
+	input := writeFile(t, dir, "report.reportmd", "本文\n")
 	if code, _, err := runCLI("build", input, "--nope"); code != 1 || !strings.Contains(err, "--nope") {
 		t.Errorf("不明なオプションは 1: %s", err)
 	}
@@ -184,7 +184,7 @@ const twoPages = "# テスト\n\n1ページ目の本文です。\n\n^\n\n2ペー
 func TestBuildPDF(t *testing.T) {
 	pdfReady(t)
 	dir := t.TempDir()
-	input := writeFile(t, dir, "report.rmd", twoPages)
+	input := writeFile(t, dir, "report.reportmd", twoPages)
 
 	code, out, errOut := runCLI("build", input)
 	if code != 0 || errOut != "" {
@@ -217,7 +217,7 @@ func TestBuildPDF(t *testing.T) {
 func TestBuildConfigProblems(t *testing.T) {
 	pdfReady(t)
 	dir := t.TempDir()
-	input := writeFile(t, dir, "report.rmd", twoPages)
+	input := writeFile(t, dir, "report.reportmd", twoPages)
 
 	setting := writeFile(t, dir, "setting.json", `{ "font": { "main": "NoSuchFontXYZ" } }`)
 	code, _, errOut := runCLI("build", input)
@@ -236,7 +236,7 @@ func TestBuildConfigProblems(t *testing.T) {
 func TestBuildKeepTemp(t *testing.T) {
 	pdfReady(t)
 	dir := t.TempDir()
-	input := writeFile(t, dir, "report.rmd", twoPages)
+	input := writeFile(t, dir, "report.reportmd", twoPages)
 	code, _, errOut := runCLI("build", input, "--keep-temp")
 	if code != 0 {
 		t.Fatal(errOut)
@@ -256,7 +256,7 @@ func TestBuildKeepTemp(t *testing.T) {
 func TestBuildFrontMatter(t *testing.T) {
 	pdfReady(t)
 	dir := t.TempDir()
-	input := writeFile(t, dir, "report.rmd", "---\ntitle: 実験レポート\ngeometry: margin=1mm\n---\n\n本文\n")
+	input := writeFile(t, dir, "report.reportmd", "---\ntitle: 実験レポート\ngeometry: margin=1mm\n---\n\n本文\n")
 	code, _, errOut := runCLI("build", input)
 	if code != 0 {
 		t.Fatal(errOut)
@@ -272,7 +272,7 @@ func TestBuildNumbersAndReferences(t *testing.T) {
 	dir := t.TempDir()
 	source := "#1 はじめに\n\n#2 背景\n\n# 参考文献\n\n![t:結果]{#res}\n| a | b |\n|---|---|\n| 1 | 2 |\n\n" +
 		"$$\nE = mc^2\n$$ {#energy}\n\n@res と @energy を見よ。@none も。\n"
-	input := writeFile(t, dir, "report.rmd", source)
+	input := writeFile(t, dir, "report.reportmd", source)
 	code, _, errOut := runCLI("build", input)
 	if code != 0 {
 		t.Fatal(errOut)
@@ -292,7 +292,7 @@ func TestBuildNumbersAndReferences(t *testing.T) {
 func TestBuildOtherFormats(t *testing.T) {
 	pandocReady(t)
 	dir := t.TempDir()
-	input := writeFile(t, dir, "report.rmd", "#1 はじめに\n\n--> 右\n\n![t:表]\n| a | b |\n|---|---|\n| 1 | 2 |\n")
+	input := writeFile(t, dir, "report.reportmd", "#1 はじめに\n\n--> 右\n\n![t:表]\n| a | b |\n|---|---|\n| 1 | 2 |\n")
 
 	html := filepath.Join(dir, "report.html")
 	if code, _, errOut := runCLI("build", input, "-o", html); code != 0 {
@@ -354,23 +354,33 @@ func chdir(t *testing.T, dir string) {
 func TestInputShortcuts(t *testing.T) {
 	dir := t.TempDir()
 	chdir(t, dir)
-	writeFile(t, dir, "only.rmd", "本文\n")
+	writeFile(t, dir, "only.reportmd", "本文\n")
 
-	// build を省略して、入力ファイルだけを書ける
-	if code, _, errOut := runCLI("check", "only.rmd"); code != 0 {
+	// build を省略して、入力ファイルだけを書ける（0.1.0 の拡張子 .rmd も同じ）
+	if code, _, errOut := runCLI("check", "only.reportmd"); code != 0 {
 		t.Fatalf("check: %s", errOut)
 	}
-	if code, _, errOut := runCLI("nothing.rmd"); code != 1 || !strings.Contains(errOut, "nothing.rmd: error: 入力ファイルが見つかりません") {
-		t.Errorf("「reportmd X.rmd」は build として扱う: %s", errOut)
+	for _, name := range []string{"nothing.reportmd", "nothing.rmd", "NOTHING.REPORTMD"} {
+		if code, _, errOut := runCLI(name); code != 1 || !strings.Contains(errOut, name+": error: 入力ファイルが見つかりません") {
+			t.Errorf("「reportmd %s」は build として扱う: %s", name, errOut)
+		}
+	}
+	if code, _, errOut := runCLI("nothing.md"); code != 1 || !strings.Contains(errOut, "不明なコマンドです") {
+		t.Errorf("入力ファイルの拡張子でなければ、不明なコマンド: %s", errOut)
 	}
 
-	// 入力ファイルを省略したら、1つだけある .rmd を使う
-	if code, out, errOut := runCLI("check"); code != 0 || !strings.Contains(out, "only.rmd") {
-		t.Errorf(".rmd が1つなら、それを使う: %s %s", out, errOut)
+	// 入力ファイルを省略したら、1つだけある .reportmd を使う
+	if code, out, errOut := runCLI("check"); code != 0 || !strings.Contains(out, "only.reportmd") {
+		t.Errorf(".reportmd が1つなら、それを使う: %s %s", out, errOut)
 	}
+	// .reportmd と .rmd は合わせて数える
 	writeFile(t, dir, "second.rmd", "本文\n")
 	if code, _, errOut := runCLI("check"); code != 1 || !strings.Contains(errOut, "入力ファイルを1つ指定") {
-		t.Errorf(".rmd が2つ以上なら、指定を求める: %s", errOut)
+		t.Errorf("入力ファイルが2つ以上なら、指定を求める: %s", errOut)
+	}
+	os.Remove(filepath.Join(dir, "only.reportmd"))
+	if code, out, errOut := runCLI("check"); code != 0 || !strings.Contains(out, "second.rmd") {
+		t.Errorf(".rmd が1つだけなら、それを使う: %s %s", out, errOut)
 	}
 }
 
@@ -396,11 +406,11 @@ func TestStartWithOneReport(t *testing.T) {
 	pdfReady(t)
 	dir := t.TempDir()
 	chdir(t, dir)
-	writeFile(t, dir, "my.rmd", "本文\n")
+	writeFile(t, dir, "my.reportmd", "本文\n")
 
 	code, out, errOut, opened := runStart(t, true, "")
 	if code != 0 {
-		t.Fatalf("1つだけの .rmd を生成する: %s", errOut)
+		t.Fatalf("1つだけの .reportmd を生成する: %s", errOut)
 	}
 	contains(t, "標準出力", out, "my.pdf を出力しました")
 	contains(t, "標準エラー出力", errOut, "変更を監視しています")
@@ -412,11 +422,11 @@ func TestStartWithOneReport(t *testing.T) {
 func TestStartWithManyReports(t *testing.T) {
 	dir := t.TempDir()
 	chdir(t, dir)
-	writeFile(t, dir, "a.rmd", "本文\n")
+	writeFile(t, dir, "a.reportmd", "本文\n")
 	writeFile(t, dir, "b.rmd", "本文\n")
 	code, _, errOut, opened := runStart(t, true, "")
-	if code != 1 || !strings.Contains(errOut, "reportmd watch a.rmd --open") || !strings.Contains(errOut, "b.rmd") || len(opened) != 0 {
-		t.Errorf(".rmd が複数なら、ファイルの一覧を表示して 1: %s", errOut)
+	if code != 1 || !strings.Contains(errOut, "reportmd watch a.reportmd --open") || !strings.Contains(errOut, "reportmd watch b.rmd --open") || len(opened) != 0 {
+		t.Errorf("入力ファイルが複数なら、ファイルの一覧を表示して 1: %s", errOut)
 	}
 }
 
@@ -434,7 +444,7 @@ func TestStartWithoutReport(t *testing.T) {
 	if code != 0 || !strings.Contains(out, "雛形を作りますか") {
 		t.Errorf("n なら作らずに 0: %d %s", code, out)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "report.rmd")); err == nil {
+	if _, err := os.Stat(filepath.Join(dir, "report.reportmd")); err == nil {
 		t.Errorf("n なら雛形を作らない")
 	}
 }
@@ -450,7 +460,7 @@ func TestStartCreatesTemplate(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("雛形を作って生成する: %s", errOut)
 	}
-	contains(t, "標準出力", out, "report.rmd を作成しました")
+	contains(t, "標準出力", out, "report.reportmd を作成しました")
 	contains(t, "標準出力", out, "report.pdf を出力しました")
 	if strings.Contains(out, "setting.json を作成しました") {
 		t.Errorf("既にある setting.json は上書きしない")
@@ -470,8 +480,8 @@ func TestInit(t *testing.T) {
 	if code != 0 {
 		t.Fatal(errOut)
 	}
-	contains(t, "標準出力", out, "report.rmd")
-	for _, name := range []string{"report.rmd", "setting.json", "images"} {
+	contains(t, "標準出力", out, "report.reportmd")
+	for _, name := range []string{"report.reportmd", "setting.json", "images"} {
 		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
 			t.Errorf("%s を作る", name)
 		}
@@ -484,7 +494,7 @@ func TestInit(t *testing.T) {
 	}
 
 	// 雛形は、そのまま警告なしで通る
-	code, _, errOut = runCLI("check", filepath.Join(dir, "report.rmd"))
+	code, _, errOut = runCLI("check", filepath.Join(dir, "report.reportmd"))
 	if code != 0 || errOut != "" {
 		t.Errorf("雛形は警告なしで通る: %s", errOut)
 	}
@@ -495,7 +505,7 @@ func TestInit(t *testing.T) {
 func TestWatchRebuildsOnChange(t *testing.T) {
 	pandocReady(t)
 	dir := t.TempDir()
-	input := writeFile(t, dir, "report.rmd", "本文\n")
+	input := writeFile(t, dir, "report.reportmd", "本文\n")
 	output := filepath.Join(dir, "report.html")
 
 	var out, errOut syncBuffer
@@ -517,11 +527,11 @@ func TestWatchRebuildsOnChange(t *testing.T) {
 	}
 	// 構文のエラーがあっても、監視は続ける
 	time.Sleep(20 * time.Millisecond)
-	writeFile(t, dir, "report.rmd", "![f:パスなし]\n")
+	writeFile(t, dir, "report.reportmd", "![f:パスなし]\n")
 	if !waitFor(func() bool { return strings.Contains(errOut.String(), "画像のパスが必要です") }) {
 		t.Fatalf("変更を検出してエラーを表示する: %s", errOut.String())
 	}
-	writeFile(t, dir, "report.rmd", "直した本文\n")
+	writeFile(t, dir, "report.reportmd", "直した本文\n")
 	if !waitFor(func() bool { return strings.Count(out.String(), "を出力しました") >= 2 }) {
 		t.Fatalf("直したら生成し直す: %s", out.String())
 	}

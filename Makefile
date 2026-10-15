@@ -45,7 +45,7 @@ dist:
 
 # サンプルの PDF を作る
 example: build
-	./reportmd build examples/report.rmd
+	./reportmd build examples/report.reportmd
 
 clean:
 	rm -rf reportmd dist examples/*.pdf

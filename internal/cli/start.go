@@ -4,22 +4,21 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
-// start は、引数なしの「reportmd」。カレントディレクトリの .rmd を、変更を監視しながら
+// start は、引数なしの「reportmd」。カレントディレクトリの入力ファイル（.reportmd か .rmd）を、変更を監視しながら
 // PDF にし、PDF ビューアで開く（watch --open と同じ）。
-//   - .rmd が1つ  : それを監視する
-//   - .rmd がない : 雛形を作るか尋ね、作ったら監視を始める（端末でなければ尋ねずに使い方を表示）
-//   - .rmd が2つ以上 : どれを使うか決められないので、ファイルの一覧を表示する
+//   - 1つ     : それを監視する
+//   - ない   : 雛形を作るか尋ね、作ったら監視を始める（端末でなければ尋ねずに使い方を表示）
+//   - 2つ以上 : どれを使うか決められないので、ファイルの一覧を表示する
 func (c *CLI) start() int {
-	matches, _ := filepath.Glob("*.rmd")
+	matches := findInputs()
 	switch {
 	case len(matches) == 1:
 		return c.build([]string{matches[0], "--open"}, true)
 	case len(matches) > 1:
-		fmt.Fprintln(c.Stderr, "error: .rmd が複数あるため、どれを使うか決められません。ファイル名を指定してください:")
+		fmt.Fprintln(c.Stderr, "error: .reportmd（.rmd）が複数あるため、どれを使うか決められません。ファイル名を指定してください:")
 		for _, name := range matches {
 			fmt.Fprintf(c.Stderr, "  reportmd watch %s --open\n", name)
 		}
@@ -30,7 +29,7 @@ func (c *CLI) start() int {
 		fmt.Fprint(c.Stderr, usage)
 		return 1
 	}
-	fmt.Fprint(c.Stdout, "このフォルダに .rmd がありません。レポートの雛形を作りますか？ [Y/n] ")
+	fmt.Fprint(c.Stdout, "このフォルダに .reportmd がありません。レポートの雛形を作りますか？ [Y/n] ")
 	answer, _ := bufio.NewReader(c.Stdin).ReadString('\n')
 	switch strings.ToLower(strings.TrimSpace(answer)) {
 	case "", "y", "yes", "はい":
@@ -43,7 +42,7 @@ func (c *CLI) start() int {
 		return code
 	}
 	fmt.Fprintln(c.Stdout)
-	return c.build([]string{"report.rmd", "--open"}, true)
+	return c.build([]string{"report.reportmd", "--open"}, true)
 }
 
 // isTerminal は、ファイルが端末（キーボードからの入力）かどうか。

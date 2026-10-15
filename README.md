@@ -30,18 +30,20 @@ mkdir myreport && cd myreport
 reportmd
 ```
 
-- フォルダに `.rmd` がなければ、雛形（`report.rmd`・`setting.json`・`images/`）を作るか尋ねます。
-- `.rmd` を PDF にしてビューアで開き、あとは `.rmd`・画像・設定を保存するたびに PDF を作り直します（Ctrl+C で終了）。
+- フォルダに `.reportmd` がなければ、雛形（`report.reportmd`・`setting.json`・`images/`）を作るか尋ねます。
+- `.reportmd` を PDF にしてビューアで開き、あとは `.reportmd`・画像・設定を保存するたびに PDF を作り直します（Ctrl+C で終了）。
+
+文書の拡張子は `.reportmd` です。0.1.0 の `.rmd` もそのまま使えます（`.rmd` は R Markdown と同じ拡張子なので、0.2.0 で変えました）。
 
 個別のコマンドも使えます。
 
 ```bash
 reportmd init myreport            # 雛形を作る
-reportmd report.rmd               # report.pdf を1回だけ出力（build は省略できる）
-reportmd watch report.rmd         # 保存するたびに PDF を作り直す
-reportmd check report.rmd         # PDF を作らずに、誤りだけを調べる（速い）
-reportmd build report.rmd -o out.pdf -c setting.json
-reportmd build report.rmd -o report.tex   # LaTeX のソース（.html .docx も可）
+reportmd report.reportmd               # report.pdf を1回だけ出力（build は省略できる）
+reportmd watch report.reportmd         # 保存するたびに PDF を作り直す
+reportmd check report.reportmd         # PDF を作らずに、誤りだけを調べる（速い）
+reportmd build report.reportmd -o out.pdf -c setting.json
+reportmd build report.reportmd -o report.tex   # LaTeX のソース（.html .docx も可）
 ```
 
 | コマンド | 説明 |
@@ -59,7 +61,7 @@ reportmd build report.rmd -o report.tex   # LaTeX のソース（.html .docx も
 | `-c`, `--config` | 設定ファイルのパス（省略時は入力ファイルと同じ場所の `setting.json`、なければ内蔵の既定値） |
 | `--keep-temp` | 一時ファイルを残す（前処理後の Markdown などを確認できる） |
 | `-w`, `--watch` | 生成したあと、変更を監視して生成し直す |
-| `--open` | 生成したファイルを PDF ビューアなどで開く（`reportmd watch report.rmd --open` が便利） |
+| `--open` | 生成したファイルを PDF ビューアなどで開く（`reportmd watch report.reportmd --open` が便利） |
 | `-v`, `--version` | バージョンを表示 |
 | `-h`, `--help` | ヘルプを表示 |
 
@@ -82,7 +84,7 @@ reportmd build report.rmd -o report.tex   # LaTeX のソース（.html .docx も
 
 コードブロック・数式ブロック（`$$`）・YAML フロントマターの中は変換されません。フロントマターで使えるキーは `title` と `author` だけで（PDF のメタデータになります）、ほかのキーは警告を出して無視します。
 
-サンプルは [examples/report.rmd](examples/report.rmd) にあります（`make example` で PDF を作れます）。
+サンプルは [examples/report.reportmd](examples/report.reportmd) にあります（`make example` で PDF を作れます）。
 
 ## 設定
 
