@@ -2,7 +2,7 @@ VERSION := $(shell sed -n 's/^const Version = "\(.*\)"/\1/p' internal/cli/cli.go
 PREFIX ?= $(HOME)/.local
 TARGETS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
 
-.PHONY: build test install dist example clean
+.PHONY: build test install uninstall dist example clean
 
 # 実行ファイル reportmd を作る
 build:
@@ -17,6 +17,11 @@ test:
 install: build
 	install -d $(PREFIX)/bin
 	install -m 755 reportmd $(PREFIX)/bin/reportmd
+
+# install で入れたものを取り除く（reportmd が置くファイルは実行ファイルだけ）。
+# install と同じ PREFIX を指定する
+uninstall:
+	rm -f $(PREFIX)/bin/reportmd
 
 # 各 OS 向けの実行ファイルを dist/ に作る
 dist:
