@@ -67,6 +67,7 @@ class Preview {
     panel.webview.onDidReceiveMessage((message) => {
       if (message.type === 'ready') {
         this.ready = true;
+        this.sent = null; // Webview が作り直されたので、もう一度送る
         this.reload();
       }
     });
@@ -93,12 +94,19 @@ class Preview {
     this.timer = setTimeout(() => this.reload(), 300);
   }
 
+  // reload は、PDF を読み、Webview に送る。前回送ったものと同じ（更新時刻と大きさが同じ）なら送らない
+  // （監視の「出力しました」と、ファイルの変更の知らせの、両方で呼ばれるため）。
   async reload() {
     if (!this.ready) return;
     let data;
+    let stamp;
     try {
+      const stat = await fs.promises.stat(this.pdf);
+      stamp = `${stat.mtimeMs}:${stat.size}`;
+      if (stamp === this.sent) return;
       data = await fs.promises.readFile(this.pdf);
     } catch {
+      this.sent = null;
       this.panel.webview.postMessage({
         type: 'missing',
         text: `${path.basename(this.pdf)} がまだありません。PDF を生成すると、ここに表示します`,
@@ -110,6 +118,7 @@ class Preview {
       this.reloadSoon();
       return;
     }
+    this.sent = stamp;
     this.panel.webview.postMessage({ type: 'pdf', data: new Uint8Array(data.buffer, data.byteOffset, data.length) });
   }
 }

@@ -178,9 +178,15 @@ test('拡張機能', { skip }, async (t) => {
     write('preview.reportmd', '本文\n\n![t:表がない]\n');
     await waitFor(() => panel.messages.some((m) => m.type === 'status' && m.kind === 'error'), 'エラーの表示');
 
-    // PDF のファイルが変わったら（ほかで生成した場合も）、表示し直す
+    // PDF のファイルが変わったら（ほかで生成した場合も）、表示し直す。変わっていなければ送らない
+    const watcher = mock.record.watchers.find((w) => w.pattern.pattern === 'preview.pdf');
     const before = pdfMessages().length;
-    mock.record.watchers.find((w) => w.pattern.pattern === 'preview.pdf').change();
+    watcher.change();
+    await new Promise((r) => setTimeout(r, 800));
+    assert.strictEqual(pdfMessages().length, before, '同じ PDF は送り直さない');
+    const later = new Date(Date.now() + 5000);
+    fs.utimesSync(pdf, later, later);
+    watcher.change();
     await waitFor(() => pdfMessages().length > before, 'ファイルの変更での表示し直し', 5000);
 
     // 同じ PDF のプレビューは、もう1つ作らずに前に出す
