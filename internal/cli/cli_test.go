@@ -336,6 +336,40 @@ func TestCheck(t *testing.T) {
 	contains(t, "標準出力", out, "警告を確認してください")
 }
 
+// --- 入力の省略 -----------------------------------------------------------
+
+func chdir(t *testing.T, dir string) {
+	t.Helper()
+	old, _ := os.Getwd()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(old) })
+}
+
+func TestInputShortcuts(t *testing.T) {
+	dir := t.TempDir()
+	chdir(t, dir)
+	writeFile(t, dir, "only.rmd", "本文\n")
+
+	// build を省略して、入力ファイルだけを書ける
+	if code, _, errOut := runCLI("check", "only.rmd"); code != 0 {
+		t.Fatalf("check: %s", errOut)
+	}
+	if code, _, errOut := runCLI("nothing.rmd"); code != 1 || !strings.Contains(errOut, "nothing.rmd: error: 入力ファイルが見つかりません") {
+		t.Errorf("「reportmd X.rmd」は build として扱う: %s", errOut)
+	}
+
+	// 入力ファイルを省略したら、1つだけある .rmd を使う
+	if code, out, errOut := runCLI("check"); code != 0 || !strings.Contains(out, "only.rmd") {
+		t.Errorf(".rmd が1つなら、それを使う: %s %s", out, errOut)
+	}
+	writeFile(t, dir, "second.rmd", "本文\n")
+	if code, _, errOut := runCLI("check"); code != 1 || !strings.Contains(errOut, "入力ファイルを1つ指定") {
+		t.Errorf(".rmd が2つ以上なら、指定を求める: %s", errOut)
+	}
+}
+
 // --- init -----------------------------------------------------------------
 
 func TestInit(t *testing.T) {
