@@ -16,7 +16,7 @@ import (
 )
 
 // Version は reportmd のバージョン。
-const Version = "0.5.0"
+const Version = "0.5.1"
 
 const usage = `使い方:
   reportmd build INPUT.rmd [-o OUTPUT] [-c setting.json] [--keep-temp] [-w]
