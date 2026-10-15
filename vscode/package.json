@@ -2,7 +2,7 @@
   "name": "reportmd",
   "displayName": "reportmd",
   "description": "reportmd（Markdown で大学のレポートを書いて PDF にするツール）の色分け・エラー表示・PDF 生成",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "reportmd",
   "license": "MIT",
   "engines": {
@@ -142,6 +142,12 @@
         "configuration": "./language-configuration.json"
       }
     ],
+    "jsonValidation": [
+      {
+        "fileMatch": "setting.json",
+        "url": "./schemas/setting.schema.json"
+      }
+    ],
     "grammars": [
       {
         "language": "reportmd",
@@ -164,6 +170,7 @@
     "test": "node --test \"test/**/*.test.js\""
   },
   "devDependencies": {
+    "vscode-json-languageservice": "^5.7.2",
     "vscode-oniguruma": "^2.0.1",
     "vscode-textmate": "^9.2.0"
   }
