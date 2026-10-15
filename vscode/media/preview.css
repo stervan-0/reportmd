@@ -1,0 +1,104 @@
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  background: var(--vscode-editor-background, #1e1e1e);
+  color: var(--vscode-foreground, #ccc);
+  font-family: var(--vscode-font-family, sans-serif);
+  font-size: var(--vscode-font-size, 13px);
+}
+
+#toolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+  background: var(--vscode-editorWidget-background, transparent);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+#toolbar button,
+#toolbar select {
+  font: inherit;
+  color: var(--vscode-dropdown-foreground, inherit);
+  background: var(--vscode-dropdown-background, transparent);
+  border: 1px solid var(--vscode-dropdown-border, rgba(128, 128, 128, 0.5));
+  border-radius: 2px;
+  padding: 1px 6px;
+}
+
+#toolbar button {
+  min-width: 26px;
+  cursor: pointer;
+}
+
+#toolbar button:hover {
+  background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.2));
+}
+
+#pages {
+  margin-left: 6px;
+  opacity: 0.85;
+}
+
+#status {
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.85;
+}
+
+#status.building {
+  color: var(--vscode-progressBar-background, #0e70c0);
+  opacity: 1;
+}
+
+#status.error {
+  color: var(--vscode-errorForeground, #f48771);
+  opacity: 1;
+}
+
+#viewer {
+  flex: 1;
+  overflow: auto;
+  padding: 12px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: safe center;
+  gap: 12px;
+}
+
+.page {
+  flex: none;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+.page canvas {
+  display: block;
+}
+
+#message {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  opacity: 0.8;
+}
+
+#message[hidden],
+#viewer[hidden] {
+  display: none;
+}
