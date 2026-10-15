@@ -2,6 +2,8 @@ package cli
 
 import (
 	"bytes"
+	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -541,4 +543,111 @@ func TestWatchRebuildsOnChange(t *testing.T) {
 	}
 	data, _ := os.ReadFile(output)
 	contains(t, "HTML", string(data), "直した本文")
+}
+
+// --- --stdin --------------------------------------------------------------
+
+func TestLiveSourceMessages(t *testing.T) {
+	r, w := io.Pipe()
+	live := newLiveSource(r)
+	go func() {
+		w.Write([]byte("6\n本文")) // 「本文」は6バイト
+		w.Write([]byte("-\n"))
+		w.Write([]byte("0\n"))
+		w.Close()
+	}()
+	live.waitFirst()
+	// 最後まで読ませてから確かめる（空の内容は、nil ではなく空）
+	time.Sleep(50 * time.Millisecond)
+	if got := live.get(); got == nil || len(got) != 0 {
+		t.Errorf("最後のメッセージ（空の内容）になるはず: %q", got)
+	}
+}
+
+func TestLiveSourceClosedStdin(t *testing.T) {
+	live := newLiveSource(strings.NewReader(""))
+	done := make(chan struct{})
+	go func() { live.waitFirst(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("標準入力が閉じられたら、最初のメッセージを待たない")
+	}
+	if live.get() != nil {
+		t.Error("メッセージがなければ、ファイルの内容を使う")
+	}
+}
+
+func TestBuildAndCheckFromStdin(t *testing.T) {
+	pandocReady(t)
+	dir := t.TempDir()
+	input := writeFile(t, dir, "report.reportmd", "ファイルの本文\n")
+	output := filepath.Join(dir, "report.html")
+
+	var out, errOut syncBuffer
+	c := &CLI{Stdout: &out, Stderr: &errOut, Stdin: strings.NewReader("保存前の本文\n")}
+	if code := c.Run([]string{"build", input, "-o", output, "--stdin"}); code != 0 {
+		t.Fatalf("build --stdin: %s", errOut.String())
+	}
+	data, _ := os.ReadFile(output)
+	contains(t, "HTML", string(data), "保存前の本文")
+
+	// check も、標準入力の内容を調べる（行番号は標準入力の行）
+	c = &CLI{Stdout: &out, Stderr: &errOut, Stdin: strings.NewReader("本文\n\n![f:パスなし]\n")}
+	if code := c.Run([]string{"check", input, "--stdin"}); code != 1 {
+		t.Fatalf("check --stdin はエラーを見つける: %s", errOut.String())
+	}
+	contains(t, "エラー", errOut.String(), "report.reportmd:3: error:")
+}
+
+func TestWatchFromStdin(t *testing.T) {
+	pandocReady(t)
+	dir := t.TempDir()
+	input := writeFile(t, dir, "report.reportmd", "ファイルの本文\n")
+	output := filepath.Join(dir, "report.html")
+
+	r, w := io.Pipe()
+	send := func(text string) { fmt.Fprintf(w, "%d\n%s", len(text), text) }
+	var out, errOut syncBuffer
+	stop := make(chan struct{})
+	done := make(chan int)
+	c := &CLI{Stdout: &out, Stderr: &errOut, Stdin: r, watchStop: stop}
+	go func() { done <- c.Run([]string{"watch", input, "-o", output, "--stdin"}) }()
+
+	waitFor := func(cond func() bool) bool {
+		for deadline := time.Now().Add(20 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+			if cond() {
+				return true
+			}
+		}
+		return false
+	}
+	html := func() string { data, _ := os.ReadFile(output); return string(data) }
+
+	// 最初のメッセージを受け取ってから、その内容で生成する
+	send("編集中の本文\n")
+	if !waitFor(func() bool { return strings.Contains(html(), "編集中の本文") }) {
+		t.Fatalf("最初の生成から、受け取った内容を使う: %s", errOut.String())
+	}
+	send("書き足した本文\n")
+	if !waitFor(func() bool { return strings.Contains(html(), "書き足した本文") }) {
+		t.Fatalf("受け取るたびに生成し直す: %s", errOut.String())
+	}
+	// 保存して、ファイルが受け取った内容と同じになっただけなら、生成し直さない
+	writeFile(t, dir, "report.reportmd", "書き足した本文\n")
+	fmt.Fprint(w, "-\n")
+	time.Sleep(time.Second)
+	if n := strings.Count(out.String(), "を出力しました"); n != 2 {
+		t.Errorf("保存しただけでは生成し直さない（%d 回）", n)
+	}
+	// 置き換えをやめたあとは、ファイルの変更で生成し直す
+	writeFile(t, dir, "report.reportmd", "保存した本文\n")
+	if !waitFor(func() bool { return strings.Contains(html(), "保存した本文") }) {
+		t.Fatalf("ファイルの変更で生成し直す: %s", errOut.String())
+	}
+	close(stop)
+	w.Close()
+	if code := <-done; code != 0 {
+		t.Errorf("止めたら 0 を返す")
+	}
 }
