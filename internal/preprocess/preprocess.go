@@ -143,6 +143,7 @@ type processor struct {
 
 	state          state
 	regionStart    int
+	mathBody       []string // 数式ブロックの中身（括弧の対応を調べるため）
 	fenceChar      byte
 	fenceLen       int
 	afterGenerated bool
@@ -267,9 +268,12 @@ func (p *processor) inFrontMatter(line string, lineno int) {
 // 数式の中身は変更しない。閉じの $$ の行の後ろの属性だけを変換する。
 func (p *processor) inMath(line string, lineno int) error {
 	if !strings.Contains(line, "$$") {
+		p.mathBody = append(p.mathBody, line)
 		p.output = append(p.output, line)
 		return nil
 	}
+	p.mathBody = append(p.mathBody, line[:strings.Index(line, "$$")])
+	p.checkBraces(p.mathBody, p.regionStart)
 	closed, err := p.mathClose(line, lineno)
 	if err != nil {
 		return err
@@ -277,6 +281,36 @@ func (p *processor) inMath(line string, lineno int) error {
 	p.output = append(p.output, closed)
 	p.state = stateNormal
 	return nil
+}
+
+// checkBraces は、数式の { } の対応を調べ、取れていなければ警告する。
+// \{ \} のようにエスケープした括弧と、% から行末までのコメントは数えない。
+// （LaTeX のエラーは .rmd のどこが悪いのかわかりにくいので、先に知らせる）
+func (p *processor) checkBraces(lines []string, lineno int) {
+	depth, unmatched := 0, false
+	for _, line := range lines {
+		for i := 0; i < len(line); i++ {
+			switch line[i] {
+			case '\\':
+				i++ // 次の1文字はエスケープされている
+			case '%':
+				i = len(line)
+			case '{':
+				depth++
+			case '}':
+				depth--
+				if depth < 0 {
+					unmatched = true
+					depth = 0
+				}
+			}
+		}
+	}
+	if depth > 0 {
+		p.warn(lineno, "数式の括弧 { } の対応が取れていません（閉じていない { が %d 個あります）", depth)
+	} else if unmatched {
+		p.warn(lineno, "数式の括弧 { } の対応が取れていません（対応する { のない } があります）")
+	}
 }
 
 func (p *processor) inNormal(line string, lineno int) error {
@@ -311,9 +345,14 @@ func (p *processor) inNormal(line string, lineno int) error {
 		p.state = stateMath
 		p.regionStart = lineno
 		p.inList = false
+		_, after, _ := strings.Cut(line, "$$")
+		p.mathBody = []string{after}
 		p.emit(line)
 	case strings.HasPrefix(lstrip(line), "$$"):
-		closed, err := p.mathClose(line, lineno) // 1行の数式（$$ 式 $$ {#名前}）
+		// 1行の数式（$$ 式 $$ {#名前}）
+		parts := strings.Split(line, "$$")
+		p.checkBraces(parts[1:len(parts)-1], lineno)
+		closed, err := p.mathClose(line, lineno)
 		if err != nil {
 			return err
 		}

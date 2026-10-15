@@ -219,7 +219,7 @@ func (c *CLI) reportError(input string, err error) int {
 		if file == "" {
 			file = input
 		}
-		return c.fail(diagnostic(file, 0, "error", bld.Message))
+		return c.fail(diagnostic(file, bld.Line, "error", bld.Message))
 	}
 	return c.fail(diagnostic(input, 0, "error", err.Error()))
 }

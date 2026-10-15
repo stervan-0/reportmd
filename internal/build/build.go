@@ -25,6 +25,7 @@ var filterLua []byte
 // 空なら、入力ファイルの問題として表示する。
 type Error struct {
 	File    string
+	Line    int // 入力ファイルの行番号（推定。わからなければ 0）
 	Message string
 }
 
@@ -123,7 +124,7 @@ func Run(opts Options) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	toolOutput, err := runPandoc(dir, pre.Text, output, opts)
+	toolOutput, err := runPandoc(dir, pre.Text, output, opts, string(source))
 	result.ToolOutput = toolOutput
 	if err != nil {
 		return result, err
@@ -269,7 +270,8 @@ func PandocArgs(paths map[string]string, output string, format Format, title str
 	return append(args, "-o", output)
 }
 
-func runPandoc(dir, markdown, output string, opts Options) (string, error) {
+// source は元の .rmd の内容（LaTeX のエラーの位置を推定するために使う）。
+func runPandoc(dir, markdown, output string, opts Options, source string) (string, error) {
 	paths, err := WorkFiles(dir, markdown, opts.Config, opts.Input)
 	if err != nil {
 		return "", err
@@ -304,5 +306,13 @@ func runPandoc(dir, markdown, output string, opts Options) (string, error) {
 	if len(lines) > pandocErrorLines {
 		lines = lines[len(lines)-pandocErrorLines:]
 	}
-	return "", &Error{Message: fmt.Sprintf("文書の生成に失敗しました（pandoc の終了コード: %d）\n%s", code, strings.Join(lines, "\n"))}
+	message := fmt.Sprintf("文書の生成に失敗しました（pandoc の終了コード: %d）", code)
+	hint, line := explainLaTeXError(text, strings.ReplaceAll(source, "\r\n", "\n"))
+	if hint != "" {
+		message += "\n  原因の候補: " + hint
+	}
+	if line > 0 {
+		message += "\n  （行番号は、エラーの箇所の文字から推定したものです）"
+	}
+	return "", &Error{Line: line, Message: message + "\n" + strings.Join(lines, "\n")}
 }
