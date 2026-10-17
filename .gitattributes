@@ -1,0 +1,5 @@
+# 改行コードを LF に統一する（Windows の core.autocrlf に左右されないようにする）
+* text=auto eol=lf
+
+*.png binary
+*.pdf binary
