@@ -107,16 +107,13 @@ func snapshot(input, configPath string, ignore map[string]bool) string {
 const initReport = `---
 title: レポートのタイトル
 author: 氏名
+cover:
+  副題: 副題
+  科目: 科目名
+  担当教員: 担当教員名
+  提出日: 2026年10月15日
+  学籍番号: 0000000
 ---
-
-<-> **レポートのタイトル**
-<-> 副題
-
---> 2026年10月15日
---> 学籍番号 0000000
---> 氏名
-
-^
 
 #1 目的
 

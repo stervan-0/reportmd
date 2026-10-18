@@ -139,6 +139,7 @@ func TestValidation(t *testing.T) {
 		"table.header.align":      `{"table": {"header": {"align": "top"}}}`,
 		"table.rules.top":         `{"table": {"rules": {"top": true}}}`,
 		"equation.numbering":      `{"equation": {"numbering": 1}}`,
+		"cover.layout":            `{"cover": {"layout": {"text": "a"}}}`,
 	}
 	for name, json := range cases {
 		t.Run(name, func(t *testing.T) {

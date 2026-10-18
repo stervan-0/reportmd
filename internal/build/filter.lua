@@ -16,7 +16,8 @@
 --   2 スペース始まりの段落   ->  字下げ 1 文字分（paragraph_indent の置き換え）
 --   見出し                    ->  #1〜#3（.reportmd-num）は番号付き、
 --                                 標準の #（クラスなし）は番号なしにする
---   title / author            ->  PDF のメタデータにだけ使い、本文には出さない
+--   title / author            ->  PDF のメタデータに使う。本文には、表紙（cover）でだけ出す
+--   cover                     ->  文書の先頭に表紙を置く（レイアウトは cover.json）
 --   そのほかのメタデータ      ->  取り除く（フロントマターの対応外のキーを無視する）
 --
 -- 設定（internal/build が metadata の reportmd に入れて渡す）:
@@ -25,6 +26,8 @@
 --   source                           警告に表示する入力ファイル名
 --   table_width / table_header_align 表の幅（auto / full）と見出し行の揃え
 --   equation_numbering / equation_label 数式の番号の有無と、参照のラベル（既定：式）
+--
+-- 表紙のレイアウト（設定の cover.layout）は、このファイルと同じ場所の cover.json で受け取る。
 
 local function has_class(el, name)
   for _, class in ipairs(el.classes) do
@@ -106,9 +109,9 @@ local function move_to_pdf_metadata(meta, key)
   end
 end
 
--- フロントマターで使えるのは title と author だけ。ほかのキー（geometry、
+-- フロントマターで使えるのは title・author・cover だけ。ほかのキー（geometry、
 -- header-includes など）は、Pandoc のテンプレートに反映されないように取り除く。
--- （警告は前処理が行番号つきで出している）
+-- （警告は前処理が行番号つきで出している。cover は、最初の走査で表紙の値を読んでから取り除く）
 local META_KEYS = { title = true, author = true }
 
 local function drop_unsupported_meta(meta)
@@ -128,6 +131,241 @@ local function move_title_and_author(meta)
   move_to_pdf_metadata(meta, 'title')
   move_to_pdf_metadata(meta, 'author')
   return meta
+end
+
+-- ---------------------------------------------------------------------
+-- 表紙
+-- ---------------------------------------------------------------------
+--
+-- フロントマターに cover があれば、文書の先頭に表紙を置く。
+--   cover:
+--     科目: 情報工学実験 II
+--     学籍番号: 1234567
+-- レイアウト（cover.json）の文字列の {名前} に、cover の値（title と author は
+-- フロントマターの値）を差し込む。差し込む値がどれも空の行は、表紙に出さない。
+
+local cover_values = nil -- 名前 -> Inlines。cover がなければ nil
+
+-- メタデータの値を Inlines にする（リストは「、」でつなぐ）
+local function meta_to_inlines(value)
+  local kind = pandoc.utils.type(value)
+  if kind == 'Inlines' then
+    return value
+  elseif kind == 'Blocks' then
+    return pandoc.utils.blocks_to_inlines(value)
+  elseif kind == 'List' then
+    local result = pandoc.Inlines({})
+    for i, item in ipairs(value) do
+      if i > 1 then
+        result:insert(pandoc.Str('、'))
+      end
+      result:extend(meta_to_inlines(item))
+    end
+    return result
+  end
+  return pandoc.Inlines({ pandoc.Str(pandoc.utils.stringify(value)) })
+end
+
+local function read_cover(meta)
+  local cover = meta.cover
+  if cover == nil or cover == false then
+    return
+  end
+  cover_values = {}
+  if pandoc.utils.type(cover) == 'table' then
+    for key, value in pairs(cover) do
+      cover_values[key] = meta_to_inlines(value)
+    end
+  end
+  for _, key in ipairs({ 'title', 'author' }) do
+    if meta[key] ~= nil and cover_values[key] == nil then
+      cover_values[key] = meta_to_inlines(meta[key])
+    end
+  end
+end
+
+local function read_cover_layout()
+  local path = pandoc.path.join({ pandoc.path.directory(PANDOC_SCRIPT_FILE), 'cover.json' })
+  local file = io.open(path, 'r')
+  if file == nil then
+    return nil
+  end
+  local text = file:read('a')
+  file:close()
+  if pandoc.json == nil then
+    warn('表紙を作るには、Pandoc 3.1.1 以上が必要です（表紙は付けません）')
+    return nil
+  end
+  return pandoc.json.decode(text, false).layout
+end
+
+-- 文字列（文字と {名前} の並び）を Inlines にする。
+-- {名前} があり、その値がどれも空なら、空（nil）を返す。
+local function fill_template(parts, used)
+  local result = pandoc.Inlines({})
+  local has_var, has_value = false, false
+  for _, part in ipairs(parts) do
+    if part.var ~= nil then
+      has_var = true
+      used[part.var] = true
+      local value = cover_values[part.var]
+      if value ~= nil and pandoc.utils.stringify(value):match('%S') then
+        has_value = true
+        result:extend(value)
+      end
+    else
+      result:insert(pandoc.Str(part.text))
+    end
+  end
+  if has_var and not has_value then
+    return nil
+  end
+  return result
+end
+
+local LATEX_ALIGN = { center = '\\centering', left = '\\raggedright', right = '\\raggedleft' }
+
+-- 項目の書式（揃え・文字サイズ・太字）を始める LaTeX
+local function latex_style(line)
+  local tex = '{\\noindent' .. LATEX_ALIGN[line.align]
+  if line.size ~= nil then
+    tex = tex .. '\\fontsize{' .. line.size .. 'pt}{' .. line.leading .. 'pt}\\selectfont'
+  end
+  if line.bold then
+    tex = tex .. '\\bfseries'
+  end
+  return tex .. ' '
+end
+
+local function html_style(line)
+  local style = 'text-align: ' .. line.align .. ';'
+  if line.size ~= nil then
+    style = style .. ' font-size: ' .. line.size .. 'pt;'
+  end
+  if line.bold then
+    style = style .. ' font-weight: bold;'
+  end
+  return style
+end
+
+-- fields の行のうち、値が空でない行の { 項目名, 値 } を返す
+local function field_rows(line, used)
+  local rows = {}
+  for _, row in ipairs(line.rows) do
+    local label = fill_template(row[1], used) or pandoc.Inlines({})
+    local value = fill_template(row[2], used)
+    if value ~= nil and #value > 0 then
+      rows[#rows + 1] = { label, value }
+    end
+  end
+  return rows
+end
+
+local function latex_cover(layout, used)
+  local blocks = pandoc.List({
+    -- 表紙と本文の 1 ページ目が、PDF 内のリンクで同じ名前（page.1）にならないようにする
+    pandoc.RawBlock('latex', '\\ifdefined\\hypersetup\\hypersetup{pageanchor=false}\\fi\n\\begin{titlepage}'),
+  })
+  for _, line in ipairs(layout) do
+    if line.kind == 'space' then
+      local space = line.space == 'fill' and '\\fill' or line.space
+      blocks:insert(pandoc.RawBlock('latex', '\\vspace*{' .. space .. '}'))
+    elseif line.kind == 'text' then
+      local inlines = fill_template(line.parts, used)
+      if inlines ~= nil then
+        local content = pandoc.Inlines({ pandoc.RawInline('latex', latex_style(line)) })
+        content:extend(inlines)
+        content:insert(pandoc.RawInline('latex', '\\par}'))
+        blocks:insert(pandoc.Plain(content))
+      end
+    else
+      local rows = field_rows(line, used)
+      if #rows > 0 then
+        local content = pandoc.Inlines({ pandoc.RawInline('latex',
+          latex_style(line) .. '\\begin{tabular}{@{}l@{\\hspace{2em}}l@{}}\n') })
+        for _, row in ipairs(rows) do
+          content:extend(row[1])
+          content:insert(pandoc.RawInline('latex', ' & '))
+          content:extend(row[2])
+          content:insert(pandoc.RawInline('latex', ' \\\\\n'))
+        end
+        content:insert(pandoc.RawInline('latex', '\\end{tabular}\\par}'))
+        blocks:insert(pandoc.Plain(content))
+      end
+    end
+  end
+  -- titlepage を閉じると改ページし、本文のページ番号は 1 から始まる（表紙には番号を付けない）
+  blocks:insert(pandoc.RawBlock('latex', '\\end{titlepage}\n\\ifdefined\\hypersetup\\hypersetup{pageanchor=true}\\fi'))
+  return blocks
+end
+
+-- LaTeX 以外：各行を段落にする。HTML では揃え・文字サイズ・太字と固定の空きを反映し、
+-- Word では表紙のあとで改ページする
+local function other_cover(layout, used)
+  local blocks = pandoc.List({})
+  for _, line in ipairs(layout) do
+    if line.kind == 'space' then
+      if FORMAT:match('^html') and line.space ~= 'fill' then
+        blocks:insert(pandoc.Div({}, { style = 'height: ' .. line.space .. ';' }))
+      end
+    else
+      local paras = pandoc.List({})
+      if line.kind == 'text' then
+        local inlines = fill_template(line.parts, used)
+        if inlines ~= nil then
+          paras:insert(pandoc.Para(inlines))
+        end
+      else
+        for _, row in ipairs(field_rows(line, used)) do
+          local inlines = pandoc.Inlines(row[1])
+          inlines:insert(pandoc.Str('　'))
+          inlines:extend(row[2])
+          paras:insert(pandoc.Para(inlines))
+        end
+      end
+      if #paras > 0 then
+        blocks:insert(pandoc.Div(paras, FORMAT:match('^html') and { style = html_style(line) } or {}))
+      end
+    end
+  end
+  if FORMAT:match('^html') then
+    return pandoc.List({ pandoc.Div(blocks, { class = 'reportmd-cover', style = 'break-after: page;' }) })
+  end
+  if FORMAT == 'docx' then
+    blocks:insert(pandoc.RawBlock('openxml', '<w:p><w:r><w:br w:type="page"/></w:r></w:p>'))
+  end
+  return blocks
+end
+
+local function add_cover(doc)
+  if cover_values == nil then
+    return nil
+  end
+  local layout = read_cover_layout()
+  if layout == nil then
+    return nil
+  end
+  local used = {}
+  local blocks
+  if FORMAT:match('latex') then
+    blocks = latex_cover(layout, used)
+  else
+    blocks = other_cover(layout, used)
+  end
+  -- 書き間違い（レイアウトの名前と違う）に気付けるよう、使わなかった cover の値を知らせる
+  local unused = {}
+  for key, _ in pairs(cover_values) do
+    if not used[key] and key ~= 'title' and key ~= 'author' then
+      unused[#unused + 1] = key
+    end
+  end
+  table.sort(unused)
+  for _, key in ipairs(unused) do
+    warn('フロントマターの cover の「' .. key .. '」は、表紙のレイアウト（設定の cover.layout）で使われていません')
+  end
+  blocks:extend(doc.blocks)
+  doc.blocks = blocks
+  return doc
 end
 
 -- ---------------------------------------------------------------------
@@ -770,7 +1008,10 @@ end
 -- 設定を読み、図表・数式の名前と番号の対応を作る走査を先に行い、そのあとで変換の走査を行う。
 return {
   {
-    Meta = function(meta) read_settings(meta) end,
+    Meta = function(meta)
+      read_settings(meta)
+      read_cover(meta)
+    end,
     Pandoc = function(doc)
       collect_labels(doc)
       return number_equations(doc)
@@ -784,5 +1025,9 @@ return {
     Span = convert_span,
     Cite = convert_cite,
     Blocks = convert_blocks,
+  },
+  -- 表紙は、本文の変換が終わってから先頭に置く（表紙の値は本文の変換の対象にしない）
+  {
+    Pandoc = add_cover,
   },
 }

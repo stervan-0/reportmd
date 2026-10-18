@@ -2,7 +2,7 @@
 //
 // 対応している構文:
 //   - 保護領域の判定（フロントマター、コードブロック、数式ブロック）
-//   - フロントマターの対応外のキー（title・author 以外）の警告
+//   - フロントマターの対応外のキー（title・author・cover 以外）の警告
 //   - 図表・数式の参照用の名前（{#名前}）の記録と、重複の警告
 //   - 数式の閉じの $$ の後ろの {#名前} / {-}（番号なし）
 //   - 改ページ（行だけの ^）
@@ -107,7 +107,7 @@ const (
 var pageBreakBlock = []string{"::: {.reportmd-pagebreak}", ":::"}
 
 // フロントマターで使えるキー。ほかのキーは警告して無視する（filter.lua が取り除く）
-var frontMatterKeys = map[string]bool{"title": true, "author": true}
+var frontMatterKeys = map[string]bool{"title": true, "author": true, "cover": true}
 
 type alignKind int
 
@@ -261,7 +261,7 @@ func (p *processor) inFrontMatter(line string, lineno int) {
 	}
 	key := m[1] + m[2] + m[3]
 	if !frontMatterKeys[key] {
-		p.warn(lineno, "対応外のフロントマターのキーを無視します: %s（使えるのは title と author です）", key)
+		p.warn(lineno, "対応外のフロントマターのキーを無視します: %s（使えるのは title・author・cover です）", key)
 	}
 }
 

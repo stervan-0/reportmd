@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"reportmd/internal/config"
 	"reportmd/internal/preprocess"
 )
 
@@ -17,6 +18,12 @@ import (
 // Pandoc が入っていない環境では飛ばす。
 
 func pandoc(t *testing.T, rmd, format string, settings map[string]any, extra ...string) (string, string) {
+	t.Helper()
+	return pandocWithConfig(t, rmd, format, settings, config.Default(), extra...)
+}
+
+// pandocWithConfig は、表紙のレイアウト（cover.json）を cfg から作る。
+func pandocWithConfig(t *testing.T, rmd, format string, settings map[string]any, cfg *config.Config, extra ...string) (string, string) {
 	t.Helper()
 	if _, err := exec.LookPath("pandoc"); err != nil {
 		t.Skip("pandoc が見つかりません")
@@ -28,6 +35,11 @@ func pandoc(t *testing.T, rmd, format string, settings map[string]any, extra ...
 	dir := t.TempDir()
 	filter := filepath.Join(dir, "filter.lua")
 	os.WriteFile(filter, filterLua, 0o644)
+	cover, err := CoverJSON(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(dir, coverFileName), cover, 0o644)
 	args := []string{"-f", pandocReader, "--lua-filter=" + filter, "-t", format, "--wrap=none"}
 	if settings != nil {
 		meta, _ := json.Marshal(map[string]any{"reportmd": settings})
@@ -59,6 +71,7 @@ type filterCase struct {
 const smallTable = "| 条件 | 結果 |\n|---|---|\n| A | 10 |\n"
 const threeRows = "| 条件 | 結果 |\n|:---|---:|\n| A | 10 |\n| B | 20 |\n| C | 30 |\n"
 const refDoc = "![f:構成](a.png){#sys}\n\n![f:二つ目](b.png)\n\n![t:結果]{#result}\n" + smallTable + "\n![f:三つ目](c.png){#third width=50%}\n\n"
+const coverDoc = "---\ntitle: 実験レポート\nauthor: 山田 太郎\ncover:\n  副題: \"**副題**\"\n  科目: 情報工学実験\n  学籍番号: 1234567\n---\n\n本文\n"
 const eqDoc = "次の式\n$$\nK = \\frac{1}{2} m v^2 % 運動エネルギー\n$$ {#kinetic}\nとなる。\n\n$$ a + b $$ {-}\n\n$$ E = mc^2 $$ {#energy}\n\n"
 
 var filterCases = []filterCase{
@@ -79,6 +92,20 @@ var filterCases = []filterCase{
 	// タイトルと著者
 	{name: "タイトルは本文に出さない", rmd: "---\ntitle: 題名\nauthor: 著者\n---\n\n本文\n", format: "latex", hasNot: []string{`\maketitle`}},
 	{name: "対応外のメタデータは反映しない", rmd: "---\ntitle: a\nheader-includes: XYZHEADER\n---\n\n本文\n", format: "latex", hasNot: []string{"XYZHEADER"}},
+
+	// 表紙
+	{name: "cover がなければ表紙を付けない", rmd: "---\ntitle: 題名\n---\n\n本文\n", format: "latex", hasNot: []string{"titlepage", "題名"}},
+	{name: "cover: false なら表紙を付けない", rmd: "---\ntitle: 題名\ncover: false\n---\n\n本文\n", format: "latex", hasNot: []string{"titlepage"}},
+	{name: "表紙は本文の前の titlepage", rmd: coverDoc, format: "latex", order: []string{
+		`\hypersetup{pageanchor=false}`, `\begin{titlepage}`, `\vspace*{40mm}`,
+		`{\noindent\centering\fontsize{24pt}{28.8pt}\selectfont\bfseries 実験レポート\par}`,
+		`{\noindent\centering\fontsize{14pt}{16.8pt}\selectfont \textbf{副題}\par}`, `\vspace*{\fill}`,
+		`\begin{tabular}{@{}l@{\hspace{2em}}l@{}}`, "科目 & 情報工学実験 \\\\", "学籍番号 & 1234567 \\\\", "氏名 & 山田 太郎 \\\\", `\end{tabular}`,
+		`\end{titlepage}`, `\hypersetup{pageanchor=true}`, "本文"}},
+	{name: "値のない行は表紙に出さない", rmd: coverDoc, format: "latex", hasNot: []string{"担当教員", "提出日", "所属"}},
+	{name: "cover: true なら title と author だけ", rmd: "---\ntitle: 題名\nauthor: [山田, 佐藤]\ncover: true\n---\n\n本文\n", format: "latex", has: []string{`\bfseries 題名\par}`, "氏名 & 山田、佐藤 \\\\"}},
+	{name: "HTML の表紙", rmd: coverDoc, format: "html", has: []string{`class="reportmd-cover"`, "font-size: 24pt; font-weight: bold;", "学籍番号　1234567"}, hasNot: []string{"titlepage"}},
+	{name: "表紙の値は本文の変換を受けない", rmd: "---\ntitle: \"![f:図](a.png)\"\ncover: true\n---\n", format: "latex", hasNot: []string{"図1"}},
 
 	// 図表の番号（HTML）
 	{name: "図は出現順に採番", rmd: "![f:一つ目](a.png)\n\n![f:二つ目](b.png)\n", format: "html", has: []string{">図1 一つ目</figcaption>", ">図2 二つ目</figcaption>"}},
@@ -174,6 +201,39 @@ func TestFilterWarnings(t *testing.T) {
 	_, stderr = pandoc(t, eqDoc, "latex", map[string]any{"source": "a.rmd", "equation_numbering": false})
 	if !strings.Contains(stderr, "a.rmd:4: warning: 数式に番号を付けない設定") {
 		t.Errorf("番号なしの設定で名前を付けた数式は警告する: %s", stderr)
+	}
+}
+
+func TestFilterCoverLayout(t *testing.T) {
+	cfg, err := config.New(map[string]any{"cover": map[string]any{"layout": []any{
+		map[string]any{"text": "{{第 {回} 回}} {title}", "align": "right", "size": "10pt"},
+		map[string]any{"space": "1cm"},
+		map[string]any{"fields": []any{[]any{"{ラベル}", "{author}"}}, "align": "left", "bold": true},
+	}}}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rmd := "---\ntitle: 題名\nauthor: 山田\ncover:\n  回: 3\n  ラベル: 氏名\n---\n"
+	out, _ := pandocWithConfig(t, rmd, "latex", nil, cfg)
+	for _, want := range []string{
+		`{\noindent\raggedleft\fontsize{10pt}{12pt}\selectfont \{第 3 回\} 題名\par}`,
+		`\vspace*{1cm}`,
+		"{\\noindent\\raggedright\\bfseries \\begin{tabular}{@{}l@{\\hspace{2em}}l@{}}\n氏名 & 山田 \\\\",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("%q が含まれるはず:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, `\vspace*{40mm}`) {
+		t.Errorf("既定のレイアウトは使わない")
+	}
+}
+
+func TestFilterCoverWarnings(t *testing.T) {
+	_, stderr := pandoc(t, "---\ntitle: a\ncover:\n  学生番号: 1\n  科目: b\n---\n", "latex", map[string]any{"source": "a.rmd"})
+	if !strings.Contains(stderr, "a.rmd: warning: フロントマターの cover の「学生番号」は、表紙のレイアウト（設定の cover.layout）で使われていません") ||
+		strings.Contains(stderr, "科目") {
+		t.Errorf("レイアウトで使わない cover の値は警告する: %s", stderr)
 	}
 }
 

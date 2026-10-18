@@ -56,5 +56,26 @@
   "equation": {
     "numbering": true,
     "label": "式"
+  },
+  "cover": {
+    "layout": [
+      { "space": "40mm" },
+      { "text": "{title}", "size": "24pt", "bold": true },
+      { "space": "8mm" },
+      { "text": "{副題}", "size": "14pt" },
+      { "space": "fill" },
+      {
+        "fields": [
+          ["科目", "{科目}"],
+          ["担当教員", "{担当教員}"],
+          ["提出日", "{提出日}"],
+          ["所属", "{所属}"],
+          ["学籍番号", "{学籍番号}"],
+          ["氏名", "{author}"]
+        ],
+        "size": "12pt"
+      },
+      { "space": "30mm" }
+    ]
   }
 }

@@ -96,11 +96,25 @@ type Config struct {
 		Numbering bool   `json:"numbering"`
 		Label     string `json:"label"`
 	} `json:"equation"`
+	Cover struct {
+		Layout []CoverItem `json:"layout"`
+	} `json:"cover"`
 
 	// Source は読み込んだ設定ファイルのパス（内蔵の既定値だけなら空）。
 	Source string `json:"-"`
 	// Warnings は、未知のキーなどの警告。
 	Warnings []string `json:"-"`
+}
+
+// CoverItem は、表紙のレイアウト（cover.layout）の1項目。
+// Text（1行の文字）・Space（縦の空き）・Fields（項目名と値の表）のどれか1つを持つ。
+type CoverItem struct {
+	Text   *string    `json:"text,omitempty"`
+	Space  *string    `json:"space,omitempty"`
+	Fields [][]string `json:"fields,omitempty"`
+	Align  string     `json:"align,omitempty"` // 空なら center
+	Size   string     `json:"size,omitempty"`  // 空なら本文と同じ
+	Bold   bool       `json:"bold,omitempty"`
 }
 
 // Rule は罫線の太さを返す。線を引かないなら空文字。
@@ -247,6 +261,10 @@ func New(user map[string]any, source string) (*Config, error) {
 	if err := validate(merged, source); err != nil {
 		return nil, err
 	}
+	coverWarnings, err := validateCoverLayout(dig(merged, "cover.layout").([]any), source)
+	if err != nil {
+		return nil, err
+	}
 
 	data, err := json.Marshal(merged)
 	if err != nil {
@@ -260,6 +278,7 @@ func New(user map[string]any, source string) (*Config, error) {
 	for _, name := range unknownKeys(defaults, user, nil) {
 		cfg.Warnings = append(cfg.Warnings, "未知の設定キーを無視します: "+name)
 	}
+	cfg.Warnings = append(cfg.Warnings, coverWarnings...)
 	return cfg, nil
 }
 
@@ -450,7 +469,11 @@ var rules = []rule{
 	{"table.rules.sides", ruleExpect, orFalse(isLength)},
 	{"equation.numbering", "true または false", isBool},
 	{"equation.label", "文字列", isString},
+	// 各項目の中身は validateCoverLayout で調べる
+	{"cover.layout", "表紙の項目（{ ... }）の配列", isArray},
 }
+
+func isArray(v any) bool { _, ok := v.([]any); return ok }
 
 func dig(values map[string]any, path string) any {
 	var current any = values
