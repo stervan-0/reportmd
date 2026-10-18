@@ -254,11 +254,16 @@ func WorkFiles(dir, markdown string, cfg *config.Config, source string) (map[str
 	if err != nil {
 		return nil, err
 	}
+	cover, err := CoverJSON(cfg)
+	if err != nil {
+		return nil, err
+	}
 	files := map[string][]byte{
 		"body.md":      []byte(markdown),
 		"meta.json":    meta,
 		"preamble.tex": []byte(Preamble(cfg)),
 		"filter.lua":   filterLua,
+		coverFileName:  cover,
 	}
 	paths := map[string]string{}
 	for name, data := range files {

@@ -38,6 +38,60 @@
       "type": "string",
       "enum": ["top", "bottom"],
       "enumDescriptions": ["上", "下"]
+    },
+    "coverText": {
+      "type": "string",
+      "pattern": "^(?:[^{}]|\\{\\{|\\}\\}|\\{[^{}]*[^{}\\s][^{}]*\\})*$",
+      "patternErrorMessage": "{ と } の対応が取れていません（{名前} で値を差し込みます。文字の { } は {{ }} と書きます）"
+    },
+    "coverItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "defaultSnippets": [
+        { "label": "文字", "body": { "text": "$1" } },
+        { "label": "空き", "body": { "space": "${1:20mm}" } },
+        { "label": "項目の表", "body": { "fields": [["${1:氏名}", "${2:{author\\}}"]] } }
+      ],
+      "properties": {
+        "text": { "description": "1行の文字。{名前} でフロントマターの値を差し込む", "$ref": "#/definitions/coverText" },
+        "space": {
+          "description": "縦の空き。\"fill\" は残りの空きを埋める（複数あれば等分する）",
+          "oneOf": [
+            { "const": "fill" },
+            { "$ref": "#/definitions/length" }
+          ]
+        },
+        "fields": {
+          "description": "[\"項目名\", \"値\"] の組の配列。項目名をそろえた表にする。値が空の行は出さない",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": { "$ref": "#/definitions/coverText" }
+          }
+        },
+        "align": {
+          "description": "揃え（既定は center）",
+          "type": "string",
+          "enum": ["center", "left", "right"],
+          "enumDescriptions": ["中央", "左", "右"]
+        },
+        "size": {
+          "description": "文字サイズ（\"6pt\"〜\"72pt\"。既定は本文と同じ）",
+          "type": "string",
+          "pattern": "^\\d+(\\.\\d+)?pt$",
+          "patternErrorMessage": "\"6pt\"〜\"72pt\" の文字サイズ",
+          "examples": ["12pt", "14pt", "18pt", "24pt", "32pt"]
+        },
+        "bold": { "description": "太字にするか（既定は false）", "type": "boolean" }
+      },
+      "oneOf": [
+        { "required": ["text"] },
+        { "required": ["space"] },
+        { "required": ["fields"] }
+      ]
     }
   },
   "properties": {
@@ -221,6 +275,37 @@
       "properties": {
         "numbering": { "description": "独立した数式に番号を付けるか", "type": "boolean", "default": true },
         "label": { "description": "数式の参照の前の文字（@名前 が「式(1)」になるときの「式」）", "type": "string", "default": "式" }
+      }
+    },
+    "cover": {
+      "description": "表紙（文書のフロントマターに cover を書くと付く）",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "layout": {
+          "description": "表紙の項目を上から順に並べた配列。text（1行の文字）・space（縦の空き）・fields（項目名と値の表）のどれか1つを書く。文字の {名前} には、フロントマターの cover の値（{title} と {author} はフロントマターの値）が入り、値がどれも空の行は出さない",
+          "type": "array",
+          "items": { "$ref": "#/definitions/coverItem" },
+          "default": [
+            { "space": "40mm" },
+            { "text": "{title}", "size": "24pt", "bold": true },
+            { "space": "8mm" },
+            { "text": "{副題}", "size": "14pt" },
+            { "space": "fill" },
+            {
+              "fields": [
+                ["科目", "{科目}"],
+                ["担当教員", "{担当教員}"],
+                ["提出日", "{提出日}"],
+                ["所属", "{所属}"],
+                ["学籍番号", "{学籍番号}"],
+                ["氏名", "{author}"]
+              ],
+              "size": "12pt"
+            },
+            { "space": "30mm" }
+          ]
+        }
       }
     }
   }
