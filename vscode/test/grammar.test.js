@@ -118,7 +118,7 @@ test('色分け', { skip: vscodeExtensions ? false : 'VS Code が見つからな
   grammar = await registry.loadGrammar('text.reportmd');
 
   await t.test('改ページ・右揃え・中央揃え', () => {
-    const lines = tokenize('^\n\n--> 2026年10月12日\n<-> **題名**\n> --> 引用の中\n-->\n^ ではない');
+    const lines = tokenize('^\n\n--> 2026年10月12日\n<-> **題名**\n> --> 引用の中\n-->\n^ ではない\n-> 新しい記号\n- -> リストの中\n->text');
     hasScope(lines, 0, '^', 'keyword.control.page-break.reportmd');
     hasScope(lines, 2, '-->', 'keyword.operator.align.reportmd');
     hasScope(lines, 2, '2026', 'meta.align.reportmd');
@@ -127,6 +127,9 @@ test('色分け', { skip: vscodeExtensions ? false : 'VS Code が見つからな
     hasScope(lines, 4, '-->', 'keyword.operator.align.reportmd');
     hasScope(lines, 5, '-->', 'keyword.operator.align.reportmd');
     lacksScope(lines, 6, '^', 'keyword.control.page-break.reportmd');
+    hasScope(lines, 7, '->', 'keyword.operator.align.reportmd');
+    hasScope(lines, 8, '->', 'keyword.operator.align.reportmd');
+    lacksScope(lines, 9, '->', 'keyword.operator.align.reportmd');
   });
 
   await t.test('番号付き見出しと、通常の見出し', () => {

@@ -2,7 +2,7 @@
 
 reportmd（Markdown で大学のレポートを書いて PDF にするツール）を、VS Code で使いやすくする拡張機能です。
 
-- **色分け**：`.reportmd` の独自記法（`^` `-->` `<->` `#1` `![f:…]` `![t:…]` `$$ … $$ {#名前}` `@名前`）に色を付けます。そのほかは Markdown と同じ色分けです。
+- **色分け**：`.reportmd` の独自記法（`^` `->` `<->` `#1` `![f:…]` `![t:…]` `$$ … $$ {#名前}` `@名前`）に色を付けます。そのほかは Markdown と同じ色分けです。
 - **エラーの表示**：開いたときと保存するたびに `reportmd check` を実行し、誤りの箇所に波線を引きます（「問題」パネルにも一覧が出ます）。
   - 見つからない参照（`@名前`）は、その `@名前` の位置に表示します。
   - `setting.json` の誤りは、`setting.json` のその項目の位置に表示します。
@@ -27,7 +27,7 @@ reportmd（Markdown で大学のレポートを書いて PDF にするツール�
 
 ```bash
 cd vscode
-npm run package     # reportmd-0.5.0.vsix ができる（Node.js が必要。リポジトリの最上位で make vscode でも可）
+npm run package     # reportmd-0.6.0.vsix ができる（Node.js が必要。リポジトリの最上位で make vscode でも可）
 ```
 
 VS Code の拡張機能ビューの「…」メニュー →「VSIX からのインストール...」で、できた `.vsix` を選びます。WSL に接続した VS Code で行うと、WSL の側に入ります。
