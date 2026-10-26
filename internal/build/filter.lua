@@ -231,8 +231,10 @@ local function latex_style(line)
   if line.size ~= nil then
     tex = tex .. '\\fontsize{' .. line.size .. 'pt}{' .. line.leading .. 'pt}\\selectfont'
   end
-  if line.bold then
-    tex = tex .. '\\bfseries'
+  -- 太字は \bfseries にせず、疑似太字の強さ（文字サイズに比例させた値）を直接指定する。
+  -- \bfseries はプリアンブルの強さ（本文用）になり、大きな文字ではほとんど太く見えないため
+  if line.bold ~= nil then
+    tex = tex .. '\\addfontfeatures{FakeBold=' .. line.bold .. '}\\addCJKfontfeatures{FakeBold=' .. line.bold .. '}'
   end
   return tex .. ' '
 end
@@ -242,7 +244,7 @@ local function html_style(line)
   if line.size ~= nil then
     style = style .. ' font-size: ' .. line.size .. 'pt;'
   end
-  if line.bold then
+  if line.bold ~= nil then
     style = style .. ' font-weight: bold;'
   end
   return style

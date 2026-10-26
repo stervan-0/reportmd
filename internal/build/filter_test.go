@@ -98,12 +98,12 @@ var filterCases = []filterCase{
 	{name: "cover: false なら表紙を付けない", rmd: "---\ntitle: 題名\ncover: false\n---\n\n本文\n", format: "latex", hasNot: []string{"titlepage"}},
 	{name: "表紙は本文の前の titlepage", rmd: coverDoc, format: "latex", order: []string{
 		`\hypersetup{pageanchor=false}`, `\begin{titlepage}`, `\vspace*{40mm}`,
-		`{\noindent\centering\fontsize{24pt}{28.8pt}\selectfont\bfseries 実験レポート\par}`,
+		`{\noindent\centering\fontsize{24pt}{28.8pt}\selectfont\addfontfeatures{FakeBold=5.714}\addCJKfontfeatures{FakeBold=5.714} 実験レポート\par}`,
 		`{\noindent\centering\fontsize{14pt}{16.8pt}\selectfont \textbf{副題}\par}`, `\vspace*{\fill}`,
 		`\begin{tabular}{@{}l@{\hspace{2em}}l@{}}`, "科目 & 情報工学実験 \\\\", "学籍番号 & 1234567 \\\\", "氏名 & 山田 太郎 \\\\", `\end{tabular}`,
 		`\end{titlepage}`, `\hypersetup{pageanchor=true}`, "本文"}},
 	{name: "値のない行は表紙に出さない", rmd: coverDoc, format: "latex", hasNot: []string{"担当教員", "提出日", "所属"}},
-	{name: "cover: true なら title と author だけ", rmd: "---\ntitle: 題名\nauthor: [山田, 佐藤]\ncover: true\n---\n\n本文\n", format: "latex", has: []string{`\bfseries 題名\par}`, "氏名 & 山田、佐藤 \\\\"}},
+	{name: "cover: true なら title と author だけ", rmd: "---\ntitle: 題名\nauthor: [山田, 佐藤]\ncover: true\n---\n\n本文\n", format: "latex", has: []string{`{FakeBold=5.714} 題名\par}`, "氏名 & 山田、佐藤 \\\\"}},
 	{name: "HTML の表紙", rmd: coverDoc, format: "html", has: []string{`class="reportmd-cover"`, "font-size: 24pt; font-weight: bold;", "学籍番号　1234567"}, hasNot: []string{"titlepage"}},
 	{name: "表紙の値は本文の変換を受けない", rmd: "---\ntitle: \"![f:図](a.png)\"\ncover: true\n---\n", format: "latex", hasNot: []string{"図1"}},
 
@@ -218,7 +218,8 @@ func TestFilterCoverLayout(t *testing.T) {
 	for _, want := range []string{
 		`{\noindent\raggedleft\fontsize{10pt}{12pt}\selectfont \{第 3 回\} 題名\par}`,
 		`\vspace*{1cm}`,
-		"{\\noindent\\raggedright\\bfseries \\begin{tabular}{@{}l@{\\hspace{2em}}l@{}}\n氏名 & 山田 \\\\",
+		// 文字サイズの指定がなければ、本文の文字サイズ（10.5pt）の強さ
+		"{\\noindent\\raggedright\\addfontfeatures{FakeBold=2.5}\\addCJKfontfeatures{FakeBold=2.5} \\begin{tabular}{@{}l@{\\hspace{2em}}l@{}}\n氏名 & 山田 \\\\",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("%q が含まれるはず:\n%s", want, out)

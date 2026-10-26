@@ -10,6 +10,14 @@ import (
 // メタデータで渡すと、文字列が Markdown として読まれてしまうため、JSON のファイルで渡す。
 const coverFileName = "cover.json"
 
+// 表紙の太字は、疑似太字の強さを文字サイズに比例させる。XeTeX の疑似太字（FakeBold）は、
+// 線を太らせる量が文字サイズに比例しないので、本文と同じ強さ（プリアンブルの AutoFakeBold=2.5）では、
+// 大きな文字がほとんど太く見えない。本文の 10.5pt で 2.5 になるようにする。
+const (
+	fakeBold     = 2.5
+	fakeBoldSize = 10.5
+)
+
 // coverLine は、filter.lua に渡す表紙の1項目。文字列は、文字と {名前} の差し込みに分けておく。
 type coverLine struct {
 	Kind    string                     `json:"kind"` // text / space / fields
@@ -19,21 +27,25 @@ type coverLine struct {
 	Align   string                     `json:"align"`
 	Size    string                     `json:"size,omitempty"`    // pt の数（空なら本文と同じ）
 	Leading string                     `json:"leading,omitempty"` // 行送り（pt の数）
-	Bold    bool                       `json:"bold,omitempty"`
+	Bold    string                     `json:"bold,omitempty"`    // 太字なら疑似太字の強さ（空なら太字にしない）
 }
 
 // CoverJSON は、表紙のレイアウト（cover.layout）を filter.lua 用の JSON にする。
 func CoverJSON(cfg *config.Config) ([]byte, error) {
 	lines := []coverLine{}
 	for _, item := range cfg.Cover.Layout {
-		line := coverLine{Align: item.Align, Bold: item.Bold}
+		line := coverLine{Align: item.Align}
 		if line.Align == "" {
 			line.Align = "center"
 		}
+		size := points(cfg.Text.FontSize)
 		if item.Size != "" {
-			size := points(item.Size)
+			size = points(item.Size)
 			line.Size = number(size)
 			line.Leading = number(size * baselineRatio)
+		}
+		if item.Bold {
+			line.Bold = number(fakeBold * size / fakeBoldSize)
 		}
 		switch {
 		case item.Text != nil:
