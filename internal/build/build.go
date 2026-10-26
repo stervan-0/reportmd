@@ -88,7 +88,8 @@ type Result struct {
 }
 
 // pandocReader は、生 HTML・生 TeX を解釈しない Markdown（仕様 5.1）。
-const pandocReader = "markdown-raw_html-raw_tex"
+// 段落の途中の改行は、前後がどちらも日本語の文字なら詰める（仕様 5.3。HTML・Word などで空白にしない）。
+const pandocReader = "markdown-raw_html-raw_tex+east_asian_line_breaks"
 
 // pandocErrorLines は、失敗時に表示する Pandoc の出力の行数。
 const pandocErrorLines = 25

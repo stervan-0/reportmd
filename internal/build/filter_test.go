@@ -159,6 +159,9 @@ var filterCases = []filterCase{
 	{name: "equation_numbering false", rmd: eqDoc, format: "latex", settings: map[string]any{"equation_numbering": false}, hasNot: []string{`\tag`}},
 	{name: "インライン数式は番号なし", rmd: "本文 $x^2$ の式\n", format: "latex", has: []string{`\(x^2\)`}, hasNot: []string{`\tag`}},
 
+	// 段落の途中の改行
+	{name: "日本語どうしの改行は詰める", rmd: "日本語の\n文章。\n\n日本語\nEnglish\n", format: "html", has: []string{"日本語の文章。", "日本語 English"}},
+
 	// 字下げ
 	{name: "2スペースの字下げ", rmd: "  段落です\n", format: "latex", has: []string{`\noindent\hspace*{\reportmdchar}段落です`}, hasNot: []string{"reportmd-indent"}},
 }
@@ -328,6 +331,7 @@ func TestFilterPptx(t *testing.T) {
 		{"図は画像とキャプション", "#1 a\n\n![f:構成](a.png){#sys}\n\n@sysに示す\n", []string{"1 a|[画像]|図1 構成|図1に示す"}},
 		{"表は番号つき", "![t:結果]{#r}\n| a | b |\n|---|---|\n| 1 | 2 |\n\n@r\n", []string{"[表]|a|b|1|2|表1 結果", "表1"}}, // 表のあとは、Pandoc が次のスライドにする
 		{"脚注は最後の「注」のスライド", "#1 a\n\n本文[^1]と[^2]\n\n[^1]: 一つ目\n[^2]: 二つ目\n", []string{"1 a|本文|1|と|2", "注|一つ目|二つ目"}},
+		{"日本語どうしの改行は詰める", "生成する\nレポート\n", []string{"生成するレポート"}},
 		{"表紙だけで1枚", "---\ntitle: 題名\ncover: true\n---\n\n本文\n", []string{"題名", "本文"}},
 	}
 	for _, c := range cases {
