@@ -6,6 +6,9 @@
 \setCJKmainfont{IPAexMincho}[AutoFakeBold=2.5]
 \setmonofont{Noto Sans Mono CJK JP}
 \setCJKmonofont{Noto Sans Mono CJK JP}
+% コード（等幅）の中では、欧文と和文のあいだにアキを入れない（mcp__名前__ツール のような名前を、書いたとおりに出す）
+\NewCommandCopy{\reportmdttfamily}{\ttfamily}
+\DeclareRobustCommand{\ttfamily}{\reportmdttfamily\xeCJKsetup{CJKecglue={}}}
 \usepackage{indentfirst}
 \newlength{\reportmdchar}
 \setlength{\reportmdchar}{10.5pt}

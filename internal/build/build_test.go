@@ -13,6 +13,7 @@ import (
 
 // testdata の preamble_*.tex と meta_*.json は、Ruby 版 reportmd が同じ設定から
 // 生成したもの。Go 版でも、同じプリアンブルとメタデータになることを確かめる。
+// Go 版で加えた行（コードの中の欧文と和文のアキをなくす設定）は、preamble_*.tex にも足してある。
 var goldenCases = []string{"default", "grid", "custom", "misc"}
 
 func loadCase(t *testing.T, name string) *config.Config {
