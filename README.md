@@ -43,12 +43,12 @@ reportmd report.reportmd               # report.pdf を1回だけ出力（build 
 reportmd watch report.reportmd         # 保存するたびに PDF を作り直す
 reportmd check report.reportmd         # PDF を作らずに、誤りだけを調べる（速い）
 reportmd build report.reportmd -o out.pdf -c setting.json
-reportmd build report.reportmd -o report.tex   # LaTeX のソース（.html .docx も可）
+reportmd build report.reportmd -o report.tex   # LaTeX のソース（.html .docx .pptx も可）
 ```
 
 | コマンド | 説明 |
 | --- | --- |
-| `build` | PDF を生成する（`-o` の拡張子で `.tex` `.html` `.docx` も出力できる） |
+| `build` | PDF を生成する（`-o` の拡張子で `.tex` `.html` `.docx` `.pptx` も出力できる） |
 | `watch` | ファイルの変更を監視し、保存のたびに生成し直す（`build -w` と同じ） |
 | `check` | PDF を作らずに、構文・設定・参照（`@名前`）の誤りを調べる |
 | `init` | 新しいレポートの雛形を作る（`--force` で上書き） |

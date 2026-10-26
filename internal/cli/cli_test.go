@@ -311,6 +311,14 @@ func TestBuildOtherFormats(t *testing.T) {
 	data, _ = os.ReadFile(tex)
 	contains(t, "LaTeX", string(data), `\begin{flushright}`)
 	contains(t, "LaTeX", string(data), `\usepackage{xeCJK}`)
+
+	pptx := filepath.Join(dir, "report.pptx")
+	if code, _, errOut := runCLI("build", input, "-o", pptx); code != 0 {
+		t.Fatal(errOut)
+	}
+	if data, _ = os.ReadFile(pptx); !bytes.HasPrefix(data, []byte("PK")) {
+		t.Errorf("PowerPoint のファイル（zip）ができるはず")
+	}
 }
 
 // --- check ----------------------------------------------------------------

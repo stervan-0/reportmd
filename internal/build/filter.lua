@@ -18,6 +18,8 @@
 --                                 標準の #（クラスなし）は番号なしにする
 --   title / author            ->  PDF のメタデータに使う。本文には、表紙（cover）でだけ出す
 --   cover                     ->  文書の先頭に表紙を置く（レイアウトは cover.json）
+--   PowerPoint（pptx）        ->  見出しごとに1枚のスライド（見出しの番号は文字で付ける）。
+--                                 改ページは新しいスライド、脚注は最後の「注」のスライド
 --   そのほかのメタデータ      ->  取り除く（フロントマターの対応外のキーを無視する）
 --
 -- 設定（internal/build が metadata の reportmd に入れて渡す）:
@@ -335,6 +337,8 @@ local function other_cover(layout, used)
   end
   if FORMAT == 'docx' then
     blocks:insert(pandoc.RawBlock('openxml', '<w:p><w:r><w:br w:type="page"/></w:r></w:p>'))
+  elseif FORMAT == 'pptx' then
+    blocks:insert(pandoc.HorizontalRule()) -- 表紙だけで1枚のスライドにする
   end
   return blocks
 end
@@ -392,8 +396,10 @@ local function convert_div(el)
   if has_class(el, 'reportmd-pagebreak') then
     if FORMAT:match('latex') then
       return pandoc.RawBlock('latex', '\\newpage')
+    elseif FORMAT == 'pptx' then
+      return pandoc.HorizontalRule() -- 新しいスライドにする
     end
-    return {} -- LaTeX 以外の出力では、改ページブロックを取り除く
+    return {} -- そのほかの出力では、改ページブロックを取り除く
   end
 
   local align = alignment_of(el)
@@ -418,7 +424,33 @@ end
 -- 前処理が #1〜#3 を「.reportmd-num」つきの見出しに変換している。
 -- Pandoc を --number-sections で実行すると全ての見出しに番号が付くので、
 -- 標準の見出し（.reportmd-num がないもの）に .unnumbered を付けて、番号なしにする。
+--
+-- PowerPoint は --number-sections の番号を出力しないので、番号を文字で付ける。
+-- また、見出しごとに1枚のスライドにするため、見出しをすべて最上位にする
+-- （Pandoc は --slide-level=1 で実行する）。
+local section_numbers = {} -- 階層ごとの番号（PowerPoint 用）
+
+local function pptx_header(el)
+  if has_class(el, 'reportmd-num') then
+    section_numbers[el.level] = (section_numbers[el.level] or 0) + 1
+    for level = el.level + 1, #section_numbers do
+      section_numbers[level] = nil
+    end
+    local parts = {}
+    for level = 1, el.level do
+      parts[level] = tostring(section_numbers[level] or 0)
+    end
+    el.content:insert(1, pandoc.Space())
+    el.content:insert(1, pandoc.Str(table.concat(parts, '.')))
+  end
+  el.level = 1
+  return el
+end
+
 local function convert_header(el)
+  if FORMAT == 'pptx' then
+    return pptx_header(el)
+  end
   if has_class(el, 'reportmd-num') then
     return nil
   end
@@ -529,6 +561,12 @@ local function convert_figure(div)
   local mark = anchor('figure' .. counters.figure)
   if FORMAT:match('latex') then
     return latex_figure(image, caption, settings.figure_position, mark)
+  end
+  if FORMAT == 'pptx' then
+    -- PowerPoint は、画像の前に目印があると画像を出力せず、キャプションには画像の代替テキストを使う
+    local picture = plain_image(image)
+    picture.caption = caption
+    return pandoc.List({ pandoc.Figure({ pandoc.Plain({ picture }) }, { long = { pandoc.Plain(caption) } }) })
   end
   local figure = pandoc.Figure({ pandoc.Plain(with_anchor(mark, { plain_image(image) })) },
     { long = { pandoc.Plain(caption) } })
@@ -911,7 +949,11 @@ local function convert_cite(cite)
       warn('参照先の図表・数式が見つかりません: @' .. citation.id .. '（{#' .. citation.id .. '} で名前を付けてください）')
       result:insert(pandoc.Str('@' .. citation.id))
     else
-      result:insert(pandoc.Link({ pandoc.Str(label) }, '#' .. name))
+      if FORMAT == 'pptx' then
+        result:insert(pandoc.Str(label)) -- PowerPoint では、図表・数式の位置へのリンクにできない
+      else
+        result:insert(pandoc.Link({ pandoc.Str(label) }, '#' .. name))
+      end
       if rest ~= '' then
         result:insert(pandoc.Str(rest))
       end
@@ -1007,6 +1049,32 @@ local function convert_span(span)
   return with_anchor(mark, { math, pandoc.Space(), pandoc.Str('(' .. number .. ')') })
 end
 
+-- ---------------------------------------------------------------------
+-- 脚注（PowerPoint）
+-- ---------------------------------------------------------------------
+--
+-- Pandoc は、脚注を最後の「Notes」という題名のスライドにまとめる。
+-- 題名を「注」にするため、脚注を番号（上付き）に置き換え、最後に自分でスライドを作る。
+
+local notes = pandoc.List({}) -- 脚注の内容（Blocks）を、文書の順に
+
+local function convert_note(note)
+  if FORMAT ~= 'pptx' then
+    return nil
+  end
+  notes:insert(note.content)
+  return pandoc.Superscript({ pandoc.Str(tostring(#notes)) })
+end
+
+local function add_notes(doc)
+  if #notes == 0 then
+    return nil
+  end
+  doc.blocks:insert(pandoc.Header(1, { pandoc.Str('注') }))
+  doc.blocks:insert(pandoc.OrderedList(notes))
+  return doc
+end
+
 -- 設定を読み、図表・数式の名前と番号の対応を作る走査を先に行い、そのあとで変換の走査を行う。
 return {
   {
@@ -1026,10 +1094,14 @@ return {
     Para = convert_para,
     Span = convert_span,
     Cite = convert_cite,
+    Note = convert_note,
     Blocks = convert_blocks,
   },
   -- 表紙は、本文の変換が終わってから先頭に置く（表紙の値は本文の変換の対象にしない）
   {
-    Pandoc = add_cover,
+    Pandoc = function(doc)
+      doc = add_cover(doc) or doc
+      return add_notes(doc) or doc
+    end,
   },
 }

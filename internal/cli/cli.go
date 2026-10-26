@@ -18,7 +18,7 @@ import (
 )
 
 // Version は reportmd のバージョン。
-const Version = "0.15.3"
+const Version = "0.16.0"
 
 const usage = `使い方:
   reportmd                                 （いちばん簡単な使い方。下を参照）
@@ -33,7 +33,7 @@ const usage = `使い方:
   reportmd --help
 
 コマンド:
-  build    PDF を生成する（-o の拡張子で .tex .html .docx も出力できる）
+  build    PDF を生成する（-o の拡張子で .tex .html .docx .pptx も出力できる）
   watch    ファイルの変更を監視し、保存のたびに生成し直す（build -w と同じ）
   check    PDF を作らずに、構文・設定・参照の誤りだけを調べる（速い）
   init     新しいレポートの雛形（report.reportmd と setting.json）を作る
@@ -329,7 +329,7 @@ func (c *CLI) build(args []string, watch bool) int {
 	}
 	format, ok := build.FormatFromPath(output)
 	if !ok {
-		return c.fail(diagnostic(output, 0, "error", "出力ファイルの拡張子は .pdf .tex .html .docx のどれかにしてください"))
+		return c.fail(diagnostic(output, 0, "error", "出力ファイルの拡張子は .pdf .tex .html .docx .pptx のどれかにしてください"))
 	}
 
 	watching := watch || opts.watch

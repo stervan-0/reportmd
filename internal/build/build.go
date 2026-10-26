@@ -1,5 +1,5 @@
 // Package build は、入力ファイルを読み、前処理 → Pandoc（filter.lua）→ XeLaTeX の順に実行して
-// PDF（または LaTeX・HTML・Word の文書）を作る。
+// PDF（または LaTeX・HTML・Word・PowerPoint の文書）を作る。
 package build
 
 import (
@@ -39,6 +39,7 @@ const (
 	LaTeX Format = "latex"
 	HTML  Format = "html"
 	Docx  Format = "docx"
+	Pptx  Format = "pptx"
 )
 
 // FormatFromPath は、出力ファイルの拡張子から形式を決める。
@@ -52,6 +53,8 @@ func FormatFromPath(path string) (Format, bool) {
 		return HTML, true
 	case ".docx":
 		return Docx, true
+	case ".pptx":
+		return Pptx, true
 	}
 	return "", false
 }
@@ -296,6 +299,9 @@ func PandocArgs(paths map[string]string, output string, format Format, title str
 		args = append(args, "-t", "html5", "-s", "--mathml", "--metadata=pagetitle:"+title)
 	case Docx:
 		args = append(args, "-t", "docx")
+	case Pptx:
+		// 見出しごとに1枚のスライドにする（filter.lua が見出しをすべて最上位にする）
+		args = append(args, "-t", "pptx", "--slide-level=1")
 	}
 	return append(args, "-o", output)
 }

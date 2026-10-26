@@ -1,8 +1,11 @@
 package build
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -247,5 +250,92 @@ func TestFilterEquationOrder(t *testing.T) {
 	}
 	if strings.Join(pairs, " ") != "a1 b2 n3 c4" {
 		t.Errorf("番号は文書の順（強調の中や脚注も数える）: %v", pairs)
+	}
+}
+
+// pptxSlides は、前処理 → Pandoc（filter.lua）で PowerPoint を作り、スライドごとの文字を返す。
+// 文字は「|」で区切り、画像は [画像]、表は [表] と書く。
+func pptxSlides(t *testing.T, rmd string) []string {
+	t.Helper()
+	if _, err := exec.LookPath("pandoc"); err != nil {
+		t.Skip("pandoc が見つかりません")
+	}
+	pre, err := preprocess.Run(rmd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	paths, err := WorkFiles(dir, pre.Text, config.Default(), "a.reportmd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 画像は、中身が壊れていても Pandoc が読めるように、本物の PNG を使う
+	png, err := os.ReadFile(filepath.Join("..", "..", "examples", "images", "pipeline.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(dir, "a.png"), png, 0o644)
+	output := filepath.Join(dir, "out.pptx")
+	cmd := exec.Command("pandoc", PandocArgs(paths, output, Pptx, "a")...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("pandoc が失敗しました: %s", out)
+	}
+
+	r, err := zip.OpenReader(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	files := map[string]*zip.File{}
+	for _, f := range r.File {
+		files[f.Name] = f
+	}
+	token := regexp.MustCompile(`<a:t>([^<]*)</a:t>|<p:pic>|<a:tbl>`)
+	var slides []string
+	for i := 1; files[fmt.Sprintf("ppt/slides/slide%d.xml", i)] != nil; i++ {
+		rc, err := files[fmt.Sprintf("ppt/slides/slide%d.xml", i)].Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		xml, _ := io.ReadAll(rc)
+		rc.Close()
+		var parts []string
+		for _, m := range token.FindAllStringSubmatch(string(xml), -1) {
+			switch m[0] {
+			case "<p:pic>":
+				parts = append(parts, "[画像]")
+			case "<a:tbl>":
+				parts = append(parts, "[表]")
+			default:
+				parts = append(parts, m[1])
+			}
+		}
+		slides = append(slides, strings.Join(parts, "|"))
+	}
+	return slides
+}
+
+func TestFilterPptx(t *testing.T) {
+	cases := []struct {
+		name string
+		rmd  string
+		want []string
+	}{
+		{"見出しごとに1枚。番号は文字で付ける", "#1 目的\n\n本文\n\n#1 原理\n\n#2 前提\n\n説明\n\n#3 細目\n\n# 番号なし\n\n#2 次\n",
+			[]string{"1 目的|本文", "2 原理", "2.1 前提|説明", "2.1.1 細目", "番号なし", "2.2 次"}},
+		{"改ページは新しいスライド", "#1 a\n\n前\n\n^\n\n後\n", []string{"1 a|前", "後"}},
+		{"図は画像とキャプション", "#1 a\n\n![f:構成](a.png){#sys}\n\n@sysに示す\n", []string{"1 a|[画像]|図1 構成|図1に示す"}},
+		{"表は番号つき", "![t:結果]{#r}\n| a | b |\n|---|---|\n| 1 | 2 |\n\n@r\n", []string{"[表]|a|b|1|2|表1 結果", "表1"}}, // 表のあとは、Pandoc が次のスライドにする
+		{"脚注は最後の「注」のスライド", "#1 a\n\n本文[^1]と[^2]\n\n[^1]: 一つ目\n[^2]: 二つ目\n", []string{"1 a|本文|1|と|2", "注|一つ目|二つ目"}},
+		{"表紙だけで1枚", "---\ntitle: 題名\ncover: true\n---\n\n本文\n", []string{"題名", "本文"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := strings.Join(pptxSlides(t, c.rmd), "\n")
+			if want := strings.Join(c.want, "\n"); got != want {
+				t.Errorf("スライド:\n%s\nのはず:\n%s", got, want)
+			}
+		})
 	}
 }

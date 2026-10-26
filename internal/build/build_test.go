@@ -92,7 +92,7 @@ func TestMetadataTitleAndAuthor(t *testing.T) {
 }
 
 func TestFormatFromPath(t *testing.T) {
-	cases := map[string]Format{"a.pdf": PDF, "a.PDF": PDF, "b.tex": LaTeX, "c.html": HTML, "d.docx": Docx}
+	cases := map[string]Format{"a.pdf": PDF, "a.PDF": PDF, "b.tex": LaTeX, "c.html": HTML, "d.docx": Docx, "e.pptx": Pptx}
 	for path, want := range cases {
 		if got, ok := FormatFromPath(path); !ok || got != want {
 			t.Errorf("%s -> %s（期待 %s）", path, got, want)
