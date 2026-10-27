@@ -20,6 +20,9 @@
 --   cover                     ->  文書の先頭に表紙を置く（レイアウトは cover.json）
 --   PowerPoint（pptx）        ->  見出しごとに1枚のスライド（見出しの番号は文字で付ける）。
 --                                 改ページは新しいスライド、脚注は最後の「注」のスライド
+--   Word（docx）              ->  右揃え・字下げ・キャプションなどに、雛形（internal/build/docx.go）の
+--                                 スタイルをあてる。見出しの番号は文字で付け、番号の付く数式は
+--                                 罫線のない3列の表（空き・数式・番号）にする
 --   そのほかのメタデータ      ->  取り除く（フロントマターの対応外のキーを無視する）
 --
 -- 設定（internal/build が metadata の reportmd に入れて渡す）:
@@ -30,6 +33,7 @@
 --   equation_numbering / equation_label 数式の番号の有無と、参照のラベル（既定：式）
 --
 -- 表紙のレイアウト（設定の cover.layout）は、このファイルと同じ場所の cover.json で受け取る。
+-- Word の寸法（本文の高さ、表紙のあとのセクションの区切り）は、同じ場所の docx.json で受け取る。
 
 local function has_class(el, name)
   for _, class in ipairs(el.classes) do
@@ -51,6 +55,52 @@ local function warn(message, line)
     location = location .. ':' .. line
   end
   io.stderr:write(location .. ': warning: ' .. message .. '\n')
+end
+
+-- このファイルと同じ場所の JSON ファイルを読む（なければ nil）
+local function read_json(name)
+  local path = pandoc.path.join({ pandoc.path.directory(PANDOC_SCRIPT_FILE), name })
+  local file = io.open(path, 'r')
+  if file == nil then
+    return nil
+  end
+  local text = file:read('a')
+  file:close()
+  if pandoc.json == nil then
+    return nil
+  end
+  return pandoc.json.decode(text, false)
+end
+
+-- ---------------------------------------------------------------------
+-- Word の部品
+-- ---------------------------------------------------------------------
+
+-- 雛形のスタイル（名前）をあてたブロック
+local function styled(name, blocks)
+  return pandoc.Div(blocks, { ['custom-style'] = name })
+end
+
+-- 高さ pt の空き（中身のない段落）
+local function docx_space(pt)
+  return pandoc.RawBlock('openxml', string.format('<w:p><w:pPr><w:pStyle w:val="reportmdSpace"/>'
+    .. '<w:spacing w:before="0" w:after="0" w:line="%d" w:lineRule="exact"/></w:pPr></w:p>', math.floor(pt * 20 + 0.5)))
+end
+
+-- 図表・中央揃えなどの前後の空き（PDF の trivlist の \topsep と同じ 8pt）
+local DOCX_SKIP = 8
+
+-- 改ページ（改ページの前後に残る段落は、高さ 1pt にする）
+local DOCX_PAGEBREAK = '<w:p><w:pPr><w:pStyle w:val="reportmdSpace"/>'
+  .. '<w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/></w:pPr><w:r><w:br w:type="page"/></w:r></w:p>'
+
+-- 罫線のない表（internal/build が、最初のセルの段落のスタイルを見て、表のスタイルを差し替える）。
+-- rows はセル（Blocks）の並びの並び、widths は列の幅（本文幅に対する割合。0 なら内容に合わせる）、
+-- aligns は列の揃え。表のセルの段落は Para にする（Plain だと、Pandoc がスタイルを Compact にする）。
+local function plain_table(rows, widths, aligns)
+  local tbl = pandoc.utils.from_simple_table(pandoc.SimpleTable({}, aligns, widths, {}, rows))
+  tbl.attr = pandoc.Attr('', { 'reportmd-plain' })
+  return tbl
 end
 
 -- ---------------------------------------------------------------------
@@ -187,18 +237,12 @@ local function read_cover(meta)
 end
 
 local function read_cover_layout()
-  local path = pandoc.path.join({ pandoc.path.directory(PANDOC_SCRIPT_FILE), 'cover.json' })
-  local file = io.open(path, 'r')
-  if file == nil then
-    return nil
-  end
-  local text = file:read('a')
-  file:close()
   if pandoc.json == nil then
     warn('表紙を作るには、Pandoc 3.1.1 以上が必要です（表紙は付けません）')
     return nil
   end
-  return pandoc.json.decode(text, false).layout
+  local cover = read_json('cover.json')
+  return cover and cover.layout
 end
 
 -- 文字列（文字と {名前} の並び）を Inlines にする。
@@ -336,10 +380,70 @@ local function other_cover(layout, used)
     return pandoc.List({ pandoc.Div(blocks, { class = 'reportmd-cover', style = 'break-after: page;' }) })
   end
   if FORMAT == 'docx' then
-    blocks:insert(pandoc.RawBlock('openxml', '<w:p><w:r><w:br w:type="page"/></w:r></w:p>'))
+    blocks:insert(pandoc.RawBlock('openxml', DOCX_PAGEBREAK))
   elseif FORMAT == 'pptx' then
     blocks:insert(pandoc.HorizontalRule()) -- 表紙だけで1枚のスライドにする
   end
+  return blocks
+end
+
+-- 単位つきの長さ（"40mm" など。設定の検証済み）を pt にする
+local function length_pt(s)
+  local value, unit = s:match('^([%d.]+)(%a+)$')
+  local scale = { mm = 72 / 25.4, cm = 720 / 25.4, pt = 1, ['in'] = 72 }
+  return tonumber(value) * scale[unit]
+end
+
+-- Word：各項目に、雛形の表紙のスタイル（項目ごとの揃え・文字サイズ・太字・行送り）をあてる。
+-- fields は罫線のない表にする。fill の空きは、本文の高さから、ほかの項目の高さを引いて等分する
+-- （1行に収まる前提。少し余らせて、表紙が2ページにならないようにする）。
+-- 表紙のあとはセクションを区切る（表紙にはページ番号を付けず、本文を1ページ目にする）。
+local DOCX_COVER_MARGIN = 2
+
+local function docx_cover(layout, used, docx)
+  local items = {}
+  local height, fills = 0, 0
+  for i, line in ipairs(layout) do
+    local style = 'reportmd Cover ' .. i
+    local line_height = (tonumber(line.leading) or docx.font_size * 1.2) * docx.line_spacing
+    if line.kind == 'space' then
+      if line.space == 'fill' then
+        items[#items + 1] = 'fill'
+        fills = fills + 1
+      else
+        height = height + length_pt(line.space)
+        items[#items + 1] = docx_space(length_pt(line.space))
+      end
+    elseif line.kind == 'text' then
+      local inlines = fill_template(line.parts, used)
+      if inlines ~= nil then
+        items[#items + 1] = styled(style, { pandoc.Para(inlines) })
+        height = height + line_height
+      end
+    else
+      local rows = {}
+      for _, row in ipairs(field_rows(line, used)) do
+        rows[#rows + 1] = { { styled(style .. ' Label', { pandoc.Para(row[1]) }) }, { styled(style, { pandoc.Para(row[2]) }) } }
+      end
+      if #rows > 0 then
+        items[#items + 1] = plain_table(rows, { 0, 0 }, { pandoc.AlignLeft, pandoc.AlignLeft })
+        height = height + #rows * line_height
+      end
+    end
+  end
+  local fill = 0
+  if fills > 0 then
+    fill = math.max(docx.text_height - height - DOCX_COVER_MARGIN, 0) / fills
+  end
+  local blocks = pandoc.List({})
+  for _, item in ipairs(items) do
+    if item ~= 'fill' then
+      blocks:insert(item)
+    elseif fill > 0 then
+      blocks:insert(docx_space(fill))
+    end
+  end
+  blocks:insert(pandoc.RawBlock('openxml', docx.cover_section))
   return blocks
 end
 
@@ -353,8 +457,11 @@ local function add_cover(doc)
   end
   local used = {}
   local blocks
+  local docx = FORMAT == 'docx' and read_json('docx.json') or nil
   if FORMAT:match('latex') then
     blocks = latex_cover(layout, used)
+  elseif docx ~= nil then
+    blocks = docx_cover(layout, used, docx)
   else
     blocks = other_cover(layout, used)
   end
@@ -379,8 +486,8 @@ end
 -- ---------------------------------------------------------------------
 
 local ALIGNMENTS = {
-  ['reportmd-right']  = { latex = 'flushright', css = 'right' },
-  ['reportmd-center'] = { latex = 'center',     css = 'center' },
+  ['reportmd-right']  = { latex = 'flushright', css = 'right',  docx = 'reportmd Right' },
+  ['reportmd-center'] = { latex = 'center',     css = 'center', docx = 'reportmd Center' },
 }
 
 local function alignment_of(el)
@@ -398,6 +505,8 @@ local function convert_div(el)
       return pandoc.RawBlock('latex', '\\newpage')
     elseif FORMAT == 'pptx' then
       return pandoc.HorizontalRule() -- 新しいスライドにする
+    elseif FORMAT == 'docx' then
+      return pandoc.RawBlock('openxml', DOCX_PAGEBREAK)
     end
     return {} -- そのほかの出力では、改ページブロックを取り除く
   end
@@ -412,6 +521,8 @@ local function convert_div(el)
     elseif FORMAT:match('^html') then
       el.attributes['style'] = 'text-align: ' .. align.css .. ';'
       return el
+    elseif FORMAT == 'docx' then
+      return styled(align.docx, el.content)
     end
     return el.content -- そのほかの出力では、揃えずに内容だけを残す
   end
@@ -428,20 +539,26 @@ end
 -- PowerPoint は --number-sections の番号を出力しないので、番号を文字で付ける。
 -- また、見出しごとに1枚のスライドにするため、見出しをすべて最上位にする
 -- （Pandoc は --slide-level=1 で実行する）。
-local section_numbers = {} -- 階層ごとの番号（PowerPoint 用）
+-- Word も、番号を文字で付ける（Pandoc は番号のあとにタブを入れるが、PDF と同じ全角1字にする）。
+local section_numbers = {} -- 階層ごとの番号（PowerPoint・Word 用）
+
+-- 番号付き見出しの番号（「2.1」）。飛ばしたレベルは 0 にする
+local function section_number(el)
+  section_numbers[el.level] = (section_numbers[el.level] or 0) + 1
+  for level = el.level + 1, #section_numbers do
+    section_numbers[level] = nil
+  end
+  local parts = {}
+  for level = 1, el.level do
+    parts[level] = tostring(section_numbers[level] or 0)
+  end
+  return table.concat(parts, '.')
+end
 
 local function pptx_header(el)
   if has_class(el, 'reportmd-num') then
-    section_numbers[el.level] = (section_numbers[el.level] or 0) + 1
-    for level = el.level + 1, #section_numbers do
-      section_numbers[level] = nil
-    end
-    local parts = {}
-    for level = 1, el.level do
-      parts[level] = tostring(section_numbers[level] or 0)
-    end
     el.content:insert(1, pandoc.Space())
-    el.content:insert(1, pandoc.Str(table.concat(parts, '.')))
+    el.content:insert(1, pandoc.Str(section_number(el)))
   end
   el.level = 1
   return el
@@ -450,6 +567,11 @@ end
 local function convert_header(el)
   if FORMAT == 'pptx' then
     return pptx_header(el)
+  end
+  if FORMAT == 'docx' and has_class(el, 'reportmd-num') then
+    el.content:insert(1, pandoc.Str(section_number(el) .. '　'))
+    el.classes:insert('unnumbered')
+    return el
   end
   if has_class(el, 'reportmd-num') then
     return nil
@@ -567,6 +689,15 @@ local function convert_figure(div)
     local picture = plain_image(image)
     picture.caption = caption
     return pandoc.List({ pandoc.Figure({ pandoc.Plain({ picture }) }, { long = { pandoc.Plain(caption) } }) })
+  end
+  if FORMAT == 'docx' then
+    -- Pandoc の図（1マスの表になる）にせず、画像とキャプションの段落を設定の順に並べる
+    local picture = styled('reportmd Figure', { pandoc.Para(with_anchor(mark, { plain_image(image) })) })
+    local text = styled('reportmd Figure Caption', { pandoc.Para(caption) })
+    if settings.figure_position == 'top' then
+      return pandoc.List({ text, picture })
+    end
+    return pandoc.List({ picture, text })
   end
   local figure = pandoc.Figure({ pandoc.Plain(with_anchor(mark, { plain_image(image) })) },
     { long = { pandoc.Plain(caption) } })
@@ -799,14 +930,95 @@ local function latex_table(tbl, caption, position)
   return blocks
 end
 
+-- Pandoc 標準のキャプション（: タイトル）。なければ nil
+local function own_caption(tbl)
+  if #tbl.caption.long > 0 then
+    return pandoc.utils.blocks_to_inlines(tbl.caption.long)
+  end
+  return nil
+end
+
+-- ---------------------------------------------------------------------
+-- 表の組版（Word）
+-- ---------------------------------------------------------------------
+--
+-- 罫線・配置・セルの余白は、雛形の表のスタイル（Table）で決まる。ここでは、セルの段落に
+-- 文字サイズと行の高さのスタイルをあて、見出し行の揃えと表の幅を設定に合わせる。
+
+local DOCX_HEADER_ALIGN = { left = 'AlignLeft', right = 'AlignRight', center = 'AlignCenter' }
+
+-- セルの段落にスタイルをあてる（Plain のままだと、Pandoc がスタイルを Compact にするので Para にする）
+local function docx_cells(rows, style, align)
+  for _, row in ipairs(rows) do
+    for _, cell in ipairs(row.cells) do
+      local contents = pandoc.Blocks({})
+      for _, block in ipairs(cell.contents) do
+        contents:insert(block.t == 'Plain' and pandoc.Para(block.content) or block)
+      end
+      cell.contents = pandoc.Blocks({ styled(style, contents) })
+      if align ~= nil then
+        cell.alignment = align
+      end
+    end
+  end
+end
+
+-- width が full なら、列の幅（本文幅に対する割合）の合計を 1 にする。
+-- 幅の指定がない列は、残りを等分する（PDF の tabularx の X 列）。
+local function docx_full_width(tbl)
+  local defs = column_defs(tbl)
+  local total, missing = 0, 0
+  for _, def in ipairs(defs) do
+    if def.width == nil then
+      missing = missing + 1
+    else
+      total = total + def.width
+    end
+  end
+  if missing > 0 and total >= 1 then
+    return
+  end
+  for i, colspec in ipairs(tbl.colspecs) do
+    local width = defs[i].width
+    if missing == 0 then
+      width = width / total
+    elseif width == nil then
+      width = (1 - total) / missing
+    end
+    tbl.colspecs[i] = { colspec[1], width }
+  end
+end
+
+-- 表とキャプションを、設定の位置に並べる。キャプションのない側には、PDF と同じ空きを置く。
+local function docx_table(tbl, caption, position)
+  docx_cells(tbl.head.rows, 'reportmd Table Header', DOCX_HEADER_ALIGN[settings.table_header_align])
+  for _, body in ipairs(tbl.bodies) do
+    docx_cells(body.head, 'reportmd Table Text')
+    docx_cells(body.body, 'reportmd Table Text')
+  end
+  docx_cells(tbl.foot.rows, 'reportmd Table Text')
+  if settings.table_width == 'full' then
+    docx_full_width(tbl)
+  end
+  tbl.caption.long = pandoc.Blocks({})
+
+  if caption == nil then
+    return pandoc.List({ docx_space(DOCX_SKIP), tbl, docx_space(DOCX_SKIP) })
+  end
+  local text = styled('reportmd Table Caption', { pandoc.Para(caption) })
+  if position == 'bottom' then
+    return pandoc.List({ docx_space(DOCX_SKIP), tbl, text })
+  end
+  return pandoc.List({ text, tbl, docx_space(DOCX_SKIP) })
+end
+
 -- 番号を付けない表（![t:...] のない表）も、同じ書式で組む。
 -- Pandoc 標準のキャプション（: タイトル）があれば、番号なしでそのまま使う。
-local function latex_plain_table(tbl)
-  local caption = nil
-  if #tbl.caption.long > 0 then
-    caption = pandoc.utils.blocks_to_inlines(tbl.caption.long)
+local function numberless_table(tbl)
+  if FORMAT == 'docx' then
+    return docx_table(tbl, own_caption(tbl), settings.table_position)
   end
-  return latex_table(tbl, caption, settings.table_position)
+  return latex_table(tbl, own_caption(tbl), settings.table_position)
 end
 
 local function convert_table(caption_div, tbl)
@@ -818,9 +1030,11 @@ local function convert_table(caption_div, tbl)
   local caption = with_anchor(anchor('table' .. counters.table),
     make_caption(settings.table_label, counters.table, title))
 
+  -- 表に付いていたキャプション（: タイトル）は使わない
   if FORMAT:match('latex') then
-    -- 表に付いていたキャプション（: タイトル）は使わない
     return latex_table(tbl, caption, settings.table_position)
+  elseif FORMAT == 'docx' then
+    return docx_table(tbl, caption, settings.table_position)
   end
   tbl.caption.long = pandoc.Blocks({ pandoc.Plain(caption) })
   return tbl
@@ -850,8 +1064,9 @@ local function convert_blocks(blocks)
         warn('表の見出し ![t:...] の直後に、表が見つかりませんでした（番号は付けません）')
       end
       changed = true
-    elseif block.t == 'Table' and FORMAT:match('latex') then
-      result:extend(latex_plain_table(block))
+    elseif block.t == 'Table' and (FORMAT:match('latex') or FORMAT == 'docx')
+        and not has_class(block, 'reportmd-plain') then
+      result:extend(numberless_table(block))
       changed = true
     else
       result:insert(block)
@@ -861,21 +1076,6 @@ local function convert_blocks(blocks)
   if changed then
     return result
   end
-end
-
--- 先頭の 2 スペース（前処理が []{.reportmd-indent} にしたもの）を、
--- 字下げ 1 文字分の段落に変換する。paragraph_indent は使わない（置き換え）。
-local function convert_para(para)
-  local first = para.content[1]
-  if first == nil or first.t ~= 'Span' or not has_class(first, 'reportmd-indent') then
-    return nil
-  end
-  local content = pandoc.List(para.content)
-  content:remove(1)
-  if FORMAT:match('latex') then
-    content:insert(1, pandoc.RawInline('latex', '\\noindent\\hspace*{\\reportmdchar}'))
-  end
-  return pandoc.Para(content)
 end
 
 -- ---------------------------------------------------------------------
@@ -1032,7 +1232,8 @@ end
 -- 番号の付いた数式を、右端に (番号) のある数式にする。
 -- 数式の最後の行が % のコメントでも番号が消えないように、\tag の前で改行する。
 local function convert_span(span)
-  if not has_class(span, EQUATION_CLASS) then
+  -- Word では、数式を含む段落ごと変換する（convert_para）
+  if not has_class(span, EQUATION_CLASS) or FORMAT == 'docx' then
     return nil
   end
   local math = span.content[1]
@@ -1047,6 +1248,96 @@ local function convert_span(span)
     return with_anchor(mark, { pandoc.RawInline('latex', '\\[' .. text .. '\n\\tag{' .. number .. '}\\]') })
   end
   return with_anchor(mark, { math, pandoc.Space(), pandoc.Str('(' .. number .. ')') })
+end
+
+-- Word：独立した数式を、中央揃えの段落にする。番号が付く数式は、罫線のない3列の表
+-- （空き・数式・番号）にして、番号を右端に置く（Word の数式は、ほかの文字と同じ段落に置くと
+-- 文中の数式の小さな組み方になるため）。
+local function docx_equation(span)
+  local equation = styled('reportmd Equation', { pandoc.Para({ span.content[1] }) })
+  local number = equation_numbers[span.attributes.index]
+  if number == nil then
+    return equation
+  end
+  local label = with_anchor(anchor('equation' .. span.attributes.index), { pandoc.Str('(' .. number .. ')') })
+  return plain_table({ {
+    {},
+    { equation },
+    { styled('reportmd Equation Number', { pandoc.Para(label) }) },
+  } }, { 0.15, 0.7, 0.15 }, { pandoc.AlignDefault, pandoc.AlignCenter, pandoc.AlignRight })
+end
+
+-- 段落の先頭・末尾の空白と改行を取り除く
+local function trim_inlines(inlines)
+  local blank = { Space = true, SoftBreak = true, LineBreak = true }
+  while #inlines > 0 and blank[inlines[1].t] do
+    inlines:remove(1)
+  end
+  while #inlines > 0 and blank[inlines[#inlines].t] do
+    inlines:remove(#inlines)
+  end
+  return inlines
+end
+
+-- Word：段落を、独立した数式の前後で分ける（style は最初の部分のスタイル。nil なら標準）。
+-- 数式のあとに続く部分は、PDF では同じ段落の続きなので、字下げしない。
+-- 数式がなく、style も nil なら nil を返す。
+local function docx_paragraphs(make, content, style)
+  local blocks = pandoc.List({})
+  local part = pandoc.List({})
+  local found = false
+  local function flush()
+    trim_inlines(part)
+    if #part > 0 then
+      local block = make(part)
+      blocks:insert(style and styled(style, { block }) or block)
+    end
+    part = pandoc.List({})
+    style = 'reportmd Continuation'
+  end
+  for _, el in ipairs(content) do
+    if el.t == 'Span' and has_class(el, EQUATION_CLASS) then
+      found = true
+      flush()
+      blocks:insert(docx_equation(el))
+    else
+      part:insert(el)
+    end
+  end
+  if not found and style == nil then
+    return nil
+  end
+  flush()
+  return blocks
+end
+
+-- 先頭の 2 スペース（前処理が []{.reportmd-indent} にしたもの）を、
+-- 字下げ 1 文字分の段落に変換する。paragraph_indent は使わない（置き換え）。
+local function convert_para(para)
+  local content = para.content
+  local first = content[1]
+  local indented = first ~= nil and first.t == 'Span' and has_class(first, 'reportmd-indent')
+  if indented then
+    content = pandoc.List(content)
+    content:remove(1)
+  end
+  if FORMAT == 'docx' then
+    return docx_paragraphs(pandoc.Para, content, indented and 'reportmd Indent' or nil)
+  end
+  if not indented then
+    return nil
+  end
+  if FORMAT:match('latex') then
+    content:insert(1, pandoc.RawInline('latex', '\\noindent\\hspace*{\\reportmdchar}'))
+  end
+  return pandoc.Para(content)
+end
+
+-- リストの項目などの段落（Plain）も、Word では数式の前後で分ける
+local function convert_plain(plain)
+  if FORMAT == 'docx' then
+    return docx_paragraphs(pandoc.Plain, plain.content, nil)
+  end
 end
 
 -- ---------------------------------------------------------------------
@@ -1092,6 +1383,7 @@ return {
     Div = convert_div,
     Header = convert_header,
     Para = convert_para,
+    Plain = convert_plain,
     Span = convert_span,
     Cite = convert_cite,
     Note = convert_note,

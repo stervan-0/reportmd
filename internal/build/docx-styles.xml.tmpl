@@ -1,0 +1,525 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- reportmd が生成した Word の雛形のスタイル（設定ファイルの内容を反映。寸法は PDF と同じ計算） -->
+<w:styles xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:docDefaults>
+    <w:rPrDefault>
+      <w:rPr>
+        <w:rFonts w:ascii="{{xml .FontMain}}" w:hAnsi="{{xml .FontMain}}" w:eastAsia="{{xml .FontMain}}" w:cs="{{xml .FontMain}}"/>
+        <w:sz w:val="{{.Size}}"/>
+        <w:szCs w:val="{{.Size}}"/>
+        <w:lang w:val="en-US" w:eastAsia="ja-JP" w:bidi="ar-SA"/>
+      </w:rPr>
+    </w:rPrDefault>
+    <w:pPrDefault>
+      <w:pPr>
+        <w:spacing w:before="0" w:after="0" w:line="{{.Line}}" w:lineRule="exact"/>
+      </w:pPr>
+    </w:pPrDefault>
+  </w:docDefaults>
+  <w:latentStyles w:defLockedState="0" w:defUIPriority="0" w:defSemiHidden="0" w:defUnhideWhenUsed="0" w:defQFormat="0" w:count="276"/>
+  <w:style w:type="paragraph" w:default="1" w:styleId="Normal">
+    <w:name w:val="Normal"/>
+    <w:qFormat/>
+  </w:style>
+  <!-- 本文。段落の先頭を text.paragraph_indent 字だけ下げる（見出しのあとの段落も同じ） -->
+  <w:style w:type="paragraph" w:styleId="BodyText">
+    <w:name w:val="Body Text"/>
+    <w:basedOn w:val="Normal"/>
+    <w:link w:val="BodyTextChar"/>
+    <w:qFormat/>
+    <w:pPr>
+      <w:ind w:firstLine="{{.ParIndent}}"/>
+    </w:pPr>
+  </w:style>
+  <w:style w:type="paragraph" w:customStyle="1" w:styleId="FirstParagraph">
+    <w:name w:val="First Paragraph"/>
+    <w:basedOn w:val="BodyText"/>
+    <w:next w:val="BodyText"/>
+    <w:qFormat/>
+  </w:style>
+  <w:style w:type="paragraph" w:customStyle="1" w:styleId="Compact">
+    <w:name w:val="Compact"/>
+    <w:basedOn w:val="BodyText"/>
+    <w:qFormat/>
+    <w:pPr>
+      <w:ind w:firstLine="0"/>
+    </w:pPr>
+  </w:style>
+  <!-- 2 スペースで始めた段落（1字下げ） -->
+  <w:style w:type="paragraph" w:customStyle="1" w:styleId="reportmdIndent">
+    <w:name w:val="reportmd Indent"/>
+    <w:basedOn w:val="BodyText"/>
+    <w:qFormat/>
+    <w:pPr>
+      <w:ind w:firstLine="{{.Char}}"/>
+    </w:pPr>
+  </w:style>
+  <!-- 独立した数式のあとに続く本文（PDF では同じ段落なので、字下げしない） -->
+  <w:style w:type="paragraph" w:customStyle="1" w:styleId="reportmdContinuation">
+    <w:name w:val="reportmd Continuation"/>
+    <w:basedOn w:val="BodyText"/>
+    <w:qFormat/>
+    <w:pPr>
+      <w:ind w:firstLine="0"/>
+    </w:pPr>
+  </w:style>
+  <w:style w:type="paragraph" w:customStyle="1" w:styleId="reportmdRight">
+    <w:name w:val="reportmd Right"/>
+    <w:basedOn w:val="BodyText"/>
+    <w:qFormat/>
+    <w:pPr>
+      <w:spacing w:before="{{.ListSkip}}" w:after="{{.ListSkip}}"/>
+      <w:ind w:firstLine="0"/>
+      <w:jc w:val="right"/>
+    </w:pPr>
+  </w:style>
+  <w:style w:type="paragraph" w:customStyle="1" w:styleId="reportmdCenter">
+    <w:name w:val="reportmd Center"/>
+    <w:basedOn w:val="BodyText"/>
+    <w:qFormat/>
+    <w:pPr>
+      <w:spacing w:before="{{.ListSkip}}" w:after="{{.ListSkip}}"/>
+      <w:ind w:firstLine="0"/>
+      <w:jc w:val="center"/>
+    </w:pPr>
+  </w:style>
+{{- range .Headings}}
+  <w:style w:type="paragraph" w:styleId="Heading{{.Level}}">
+    <w:name w:val="Heading {{.Level}}"/>
+    <w:basedOn w:val="Normal"/>
+    <w:next w:val="BodyText"/>
+    <w:uiPriority w:val="9"/>
+    <w:qFormat/>
+    <w:pPr>
+      <w:keepNext/>
+      <w:keepLines/>
+      <w:spacing w:before="{{$.HeadingBefore}}" w:after="{{$.HeadingAfter}}" w:line="{{.Line}}" w:lineRule="exact"/>
+      <w:ind w:firstLine="{{.Indent}}"/>
+      <w:outlineLvl w:val="{{.Outline}}"/>
+    </w:pPr>
+    <w:rPr>
+      <w:rFonts w:ascii="{{xml $.HeadingFont}}" w:hAnsi="{{xml $.HeadingFont}}" w:eastAsia="{{xml $.HeadingFont}}" w:cs="{{xml $.HeadingFont}}"/>
+      {{- if $.HeadingBold}}
+      <w:b/>
+      <w:bCs/>
+      {{- end}}
+      <w:sz w:val="{{.Size}}"/>
+      <w:szCs w:val="{{.Size}}"/>
+    </w:rPr>
+  </w:style>
+{{- end}}
+  <!-- #### 以降（PDF では LaTeX の標準のまま：本文の大きさの太字） -->
+  <w:style w:type="paragraph" w:styleId="Heading4">
+    <w:name w:val="Heading 4"/>
+    <w:basedOn w:val="Normal"/>
+    <w:next w:val="BodyText"/>
+    <w:uiPriority w:val="9"/>
+    <w:qFormat/>
+    <w:pPr>
+      <w:keepNext/>
+      <w:keepLines/>
+      <w:spacing w:before="{{.HeadingBefore}}"/>
+      <w:outlineLvl w:val="3"/>
+    </w:pPr>
+    <w:rPr>
+      <w:b/>
+      <w:bCs/>
+    </w:rPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="Heading5">
+    <w:name w:val="Heading 5"/>
+    <w:basedOn w:val="Heading4"/>
+    <w:next w:val="BodyText"/>
+    <w:uiPriority w:val="9"/>
+    <w:qFormat/>
+    <w:pPr>
+      <w:outlineLvl w:val="4"/>
+    </w:pPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="Heading6">
+    <w:name w:val="Heading 6"/>
+    <w:basedOn w:val="Heading4"/>
+    <w:next w:val="BodyText"/>
+    <w:uiPriority w:val="9"/>
+    <w:qFormat/>
+    <w:pPr>
+      <w:outlineLvl w:val="5"/>
+    </w:pPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="Title">
+    <w:name w:val="Title"/>
+    <w:basedOn w:val="Normal"/>
+    <w:next w:val="BodyText"/>
+    <w:qFormat/>
+    <w:pPr>
+      <w:jc w:val="center"/>
+    </w:pPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="Subtitle">
+    <w:name w:val="Subtitle"/>
+    <w:basedOn w:val="Title"/>
+    <w:next w:val="BodyText"/>
+    <w:qFormat/>
+  </w:style>
+  <w:style w:type="paragraph" w:customStyle="1" w:styleId="Author">
+    <w:name w:val="Author"/>
+    <w:basedOn w:val="Title"/>
+    <w:next w:val="BodyText"/>
+    <w:qFormat/>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="Date">
+    <w:name w:val="Date"/>
+    <w:basedOn w:val="Title"/>
+    <w:next w:val="BodyText"/>
+    <w:qFormat/>
+  </w:style>
+  <w:style w:type="paragraph" w:customStyle="1" w:styleId="AbstractTitle">
+    <w:name w:val="Abstract Title"/>
+    <w:basedOn w:val="Title"/>
+    <w:next w:val="Abstract"/>
+    <w:qFormat/>
+  </w:style>
+  <w:style w:type="paragraph" w:customStyle="1" w:styleId="Abstract">
+    <w:name w:val="Abstract"/>
+    <w:basedOn w:val="Normal"/>
+    <w:next w:val="BodyText"/>
+    <w:qFormat/>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="Bibliography">
+    <w:name w:val="Bibliography"/>
+    <w:basedOn w:val="Normal"/>
+    <w:next w:val="Bibliography"/>
+    <w:qFormat/>
+  </w:style>
+  <!-- 引用 -->
+  <w:style w:type="paragraph" w:styleId="BlockText">
+    <w:name w:val="Block Text"/>
+    <w:basedOn w:val="BodyText"/>
+    <w:next w:val="BodyText"/>
+    <w:uiPriority w:val="9"/>
+    <w:qFormat/>
+    <w:pPr>
+      <w:spacing w:before="{{.ListSkip}}" w:after="{{.ListSkip}}"/>
+      <w:ind w:firstLine="0" w:left="{{.QuoteIndent}}" w:right="{{.QuoteIndent}}"/>
+    </w:pPr>
+  </w:style>
+  <!-- コードブロック（等幅。欧文と和文の間を空けない） -->
+  <w:style w:type="paragraph" w:customStyle="1" w:styleId="SourceCode">
+    <w:name w:val="Source Code"/>
+    <w:basedOn w:val="Normal"/>
+    <w:link w:val="VerbatimChar"/>
+    <w:pPr>
+      <w:wordWrap w:val="off"/>
+      <w:autoSpaceDE w:val="0"/>
+      <w:autoSpaceDN w:val="0"/>
+      <w:spacing w:before="{{.ListSkip}}" w:after="{{.ListSkip}}"/>
+    </w:pPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="FootnoteText">
+    <w:name w:val="Footnote Text"/>
+    <w:basedOn w:val="Normal"/>
+    <w:next w:val="FootnoteText"/>
+    <w:uiPriority w:val="9"/>
+    <w:qFormat/>
+    <w:pPr>
+      <w:spacing w:line="{{.FootnoteLine}}" w:lineRule="exact"/>
+    </w:pPr>
+    <w:rPr>
+      <w:sz w:val="{{.FootnoteSize}}"/>
+      <w:szCs w:val="{{.FootnoteSize}}"/>
+    </w:rPr>
+  </w:style>
+  <!-- ページ番号（下中央） -->
+  <w:style w:type="paragraph" w:styleId="Footer">
+    <w:name w:val="footer"/>
+    <w:basedOn w:val="Normal"/>
+    <w:pPr>
+      <w:jc w:val="center"/>
+    </w:pPr>
+  </w:style>
+  <w:style w:type="character" w:default="1" w:styleId="DefaultParagraphFont">
+    <w:name w:val="Default Paragraph Font"/>
+    <w:semiHidden/>
+    <w:unhideWhenUsed/>
+  </w:style>
+  <!-- 表（Pandoc はすべての表にこのスタイルを使う）。罫線・配置・セルの余白は table の設定 -->
+  <w:style w:type="table" w:default="1" w:styleId="Table">
+    <w:name w:val="Table"/>
+    <w:qFormat/>
+    <w:tblPr>
+      <w:jc w:val="{{.TableAlign}}"/>
+      <w:tblInd w:w="0" w:type="dxa"/>
+      <w:tblBorders>
+        {{- if .RuleTop}}
+        <w:top w:val="single" w:sz="{{.RuleTop}}" w:space="0" w:color="000000"/>
+        {{- end}}
+        {{- if .RuleSides}}
+        <w:left w:val="single" w:sz="{{.RuleSides}}" w:space="0" w:color="000000"/>
+        {{- end}}
+        {{- if .RuleBottom}}
+        <w:bottom w:val="single" w:sz="{{.RuleBottom}}" w:space="0" w:color="000000"/>
+        {{- end}}
+        {{- if .RuleSides}}
+        <w:right w:val="single" w:sz="{{.RuleSides}}" w:space="0" w:color="000000"/>
+        {{- end}}
+        {{- if .RuleRows}}
+        <w:insideH w:val="single" w:sz="{{.RuleRows}}" w:space="0" w:color="000000"/>
+        {{- end}}
+        {{- if .RuleVertical}}
+        <w:insideV w:val="single" w:sz="{{.RuleVertical}}" w:space="0" w:color="000000"/>
+        {{- end}}
+      </w:tblBorders>
+      <w:tblCellMar>
+        <w:top w:w="0" w:type="dxa"/>
+        <w:left w:w="{{.TableCellPad}}" w:type="dxa"/>
+        <w:bottom w:w="0" w:type="dxa"/>
+        <w:right w:w="{{.TableCellPad}}" w:type="dxa"/>
+      </w:tblCellMar>
+    </w:tblPr>
+    <w:trPr>
+      <w:cantSplit/>
+    </w:trPr>
+    <w:tblStylePr w:type="firstRow">
+      <w:tcPr>
+        <w:tcBorders>
+          {{- if .RuleHeader}}
+          <w:bottom w:val="single" w:sz="{{.RuleHeader}}" w:space="0" w:color="000000"/>
+          {{- else}}
+          <w:bottom w:val="nil"/>
+          {{- end}}
+        </w:tcBorders>
+      </w:tcPr>
+    </w:tblStylePr>
+  </w:style>
+  <!-- 表の中の段落（表の中は本文の行間を使わず、row_spacing で行の高さを決める） -->
+  <w:style w:type="paragraph" w:customStyle="1" w:styleId="reportmdTableText">
+    <w:name w:val="reportmd Table Text"/>
+    <w:basedOn w:val="Normal"/>
+    <w:qFormat/>
+    <w:pPr>
+      <w:keepNext/>
+      <w:spacing w:before="{{.TableRowPad}}" w:after="{{.TableRowPad}}" w:line="{{.TableLine}}" w:lineRule="exact"/>
+    </w:pPr>
+    <w:rPr>
+      <w:sz w:val="{{.TableSize}}"/>
+      <w:szCs w:val="{{.TableSize}}"/>
+    </w:rPr>
+  </w:style>
+  <w:style w:type="paragraph" w:customStyle="1" w:styleId="reportmdTableHeader">
+    <w:name w:val="reportmd Table Header"/>
+    <w:basedOn w:val="reportmdTableText"/>
+    <w:qFormat/>
+    {{- if .TableHeaderBold}}
+    <w:rPr>
+      <w:b/>
+      <w:bCs/>
+    </w:rPr>
+    {{- end}}
+  </w:style>
+  <!-- 図表のキャプション。キャプションと図表の間は本文の半行ぶん、図表のまとまりの前後は PDF と同じ空き -->
+  <w:style w:type="paragraph" w:customStyle="1" w:styleId="reportmdFigure">
+    <w:name w:val="reportmd Figure"/>
+    <w:basedOn w:val="Normal"/>
+    <w:qFormat/>
+    <w:pPr>
+      {{- if not .FigureCaptionTop}}
+      <w:keepNext/>
+      {{- end}}
+      <w:spacing w:before="{{if .FigureCaptionTop}}0{{else}}{{.ListSkip}}{{end}}" w:after="{{if .FigureCaptionTop}}{{.ListSkip}}{{else}}{{.CaptionGap}}{{end}}" w:line="240" w:lineRule="auto"/>
+      <w:jc w:val="center"/>
+    </w:pPr>
+  </w:style>
+  <w:style w:type="paragraph" w:customStyle="1" w:styleId="reportmdFigureCaption">
+    <w:name w:val="reportmd Figure Caption"/>
+    <w:basedOn w:val="Normal"/>
+    <w:qFormat/>
+    <w:pPr>
+      {{- if .FigureCaptionTop}}
+      <w:keepNext/>
+      {{- end}}
+      <w:spacing w:before="{{if .FigureCaptionTop}}{{.ListSkip}}{{else}}0{{end}}" w:after="{{if .FigureCaptionTop}}{{.CaptionGap}}{{else}}{{.ListSkip}}{{end}}"/>
+      <w:jc w:val="center"/>
+    </w:pPr>
+  </w:style>
+  <w:style w:type="paragraph" w:customStyle="1" w:styleId="reportmdTableCaption">
+    <w:name w:val="reportmd Table Caption"/>
+    <w:basedOn w:val="Normal"/>
+    <w:qFormat/>
+    <w:pPr>
+      {{- if .TableCaptionTop}}
+      <w:keepNext/>
+      {{- end}}
+      <w:spacing w:before="{{if .TableCaptionTop}}{{.ListSkip}}{{else}}{{.CaptionGap}}{{end}}" w:after="{{if .TableCaptionTop}}{{.CaptionGap}}{{else}}{{.ListSkip}}{{end}}"/>
+      <w:jc w:val="{{.TableAlign}}"/>
+    </w:pPr>
+  </w:style>
+  <!-- 独立した数式。番号の付く数式は、罫線のない3列の表（空き・数式・番号）にする -->
+  <w:style w:type="paragraph" w:customStyle="1" w:styleId="reportmdEquation">
+    <w:name w:val="reportmd Equation"/>
+    <w:basedOn w:val="Normal"/>
+    <w:qFormat/>
+    <w:pPr>
+      <w:spacing w:before="{{.DisplaySkip}}" w:after="{{.DisplaySkip}}" w:line="240" w:lineRule="auto"/>
+      <w:jc w:val="center"/>
+    </w:pPr>
+  </w:style>
+  <w:style w:type="paragraph" w:customStyle="1" w:styleId="reportmdEquationNumber">
+    <w:name w:val="reportmd Equation Number"/>
+    <w:basedOn w:val="reportmdEquation"/>
+    <w:qFormat/>
+    <w:pPr>
+      <w:jc w:val="right"/>
+    </w:pPr>
+  </w:style>
+  <w:style w:type="table" w:customStyle="1" w:styleId="reportmdEquationTable">
+    <w:name w:val="reportmd Equation Table"/>
+    <w:tblPr>
+      <w:jc w:val="center"/>
+      <w:tblInd w:w="0" w:type="dxa"/>
+      <w:tblCellMar>
+        <w:top w:w="0" w:type="dxa"/>
+        <w:left w:w="0" w:type="dxa"/>
+        <w:bottom w:w="0" w:type="dxa"/>
+        <w:right w:w="0" w:type="dxa"/>
+      </w:tblCellMar>
+    </w:tblPr>
+    <w:tcPr>
+      <w:vAlign w:val="center"/>
+    </w:tcPr>
+  </w:style>
+  <!-- 区切りの空き（表のあとの空き・改ページ） -->
+  <w:style w:type="paragraph" w:customStyle="1" w:styleId="reportmdSpace">
+    <w:name w:val="reportmd Space"/>
+    <w:basedOn w:val="Normal"/>
+    <w:qFormat/>
+    <w:rPr>
+      <w:sz w:val="2"/>
+      <w:szCs w:val="2"/>
+    </w:rPr>
+  </w:style>
+  <!-- 表紙（cover.layout の項目ごと。行送りは文字サイズの1.2倍に line_spacing を掛けたもの） -->
+{{- range .Covers}}
+  <w:style w:type="paragraph" w:customStyle="1" w:styleId="reportmdCover{{.Index}}">
+    <w:name w:val="reportmd Cover {{.Index}}"/>
+    <w:basedOn w:val="Normal"/>
+    <w:qFormat/>
+    <w:pPr>
+      <w:spacing w:line="{{.Line}}" w:lineRule="exact"/>
+      <w:jc w:val="{{if .Fields}}left{{else}}{{.Align}}{{end}}"/>
+    </w:pPr>
+    <w:rPr>
+      {{- if .Bold}}
+      <w:b/>
+      <w:bCs/>
+      {{- end}}
+      <w:sz w:val="{{.Size}}"/>
+      <w:szCs w:val="{{.Size}}"/>
+    </w:rPr>
+  </w:style>
+  {{- if .Fields}}
+  <w:style w:type="paragraph" w:customStyle="1" w:styleId="reportmdCover{{.Index}}Label">
+    <w:name w:val="reportmd Cover {{.Index}} Label"/>
+    <w:basedOn w:val="reportmdCover{{.Index}}"/>
+    <w:qFormat/>
+    <w:pPr>
+      <w:ind w:right="{{.LabelRight}}"/>
+    </w:pPr>
+  </w:style>
+  <w:style w:type="table" w:customStyle="1" w:styleId="reportmdCoverTable{{.Index}}">
+    <w:name w:val="reportmd Cover Table {{.Index}}"/>
+    <w:tblPr>
+      <w:jc w:val="{{.Align}}"/>
+      <w:tblInd w:w="0" w:type="dxa"/>
+      <w:tblCellMar>
+        <w:top w:w="0" w:type="dxa"/>
+        <w:left w:w="0" w:type="dxa"/>
+        <w:bottom w:w="0" w:type="dxa"/>
+        <w:right w:w="0" w:type="dxa"/>
+      </w:tblCellMar>
+    </w:tblPr>
+  </w:style>
+  {{- end}}
+{{- end}}
+  <w:style w:type="paragraph" w:customStyle="1" w:styleId="DefinitionTerm">
+    <w:name w:val="Definition Term"/>
+    <w:basedOn w:val="Normal"/>
+    <w:next w:val="Definition"/>
+    <w:pPr>
+      <w:keepNext/>
+      <w:keepLines/>
+    </w:pPr>
+    <w:rPr>
+      <w:b/>
+    </w:rPr>
+  </w:style>
+  <w:style w:type="paragraph" w:customStyle="1" w:styleId="Definition">
+    <w:name w:val="Definition"/>
+    <w:basedOn w:val="Normal"/>
+    <w:pPr>
+      <w:ind w:left="{{.QuoteIndent}}"/>
+    </w:pPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="Caption">
+    <w:name w:val="Caption"/>
+    <w:basedOn w:val="Normal"/>
+    <w:pPr>
+      <w:jc w:val="center"/>
+    </w:pPr>
+  </w:style>
+  <w:style w:type="paragraph" w:customStyle="1" w:styleId="TableCaption">
+    <w:name w:val="Table Caption"/>
+    <w:basedOn w:val="reportmdTableCaption"/>
+  </w:style>
+  <w:style w:type="paragraph" w:customStyle="1" w:styleId="ImageCaption">
+    <w:name w:val="Image Caption"/>
+    <w:basedOn w:val="reportmdFigureCaption"/>
+  </w:style>
+  <w:style w:type="paragraph" w:customStyle="1" w:styleId="Figure">
+    <w:name w:val="Figure"/>
+    <w:basedOn w:val="reportmdFigure"/>
+  </w:style>
+  <w:style w:type="paragraph" w:customStyle="1" w:styleId="CaptionedFigure">
+    <w:name w:val="Captioned Figure"/>
+    <w:basedOn w:val="reportmdFigure"/>
+  </w:style>
+  <w:style w:type="character" w:customStyle="1" w:styleId="BodyTextChar">
+    <w:name w:val="Body Text Char"/>
+    <w:basedOn w:val="DefaultParagraphFont"/>
+    <w:link w:val="BodyText"/>
+  </w:style>
+  <w:style w:type="character" w:customStyle="1" w:styleId="VerbatimChar">
+    <w:name w:val="Verbatim Char"/>
+    <w:basedOn w:val="DefaultParagraphFont"/>
+    <w:link w:val="SourceCode"/>
+    <w:rPr>
+      <w:rFonts w:ascii="{{xml .FontMono}}" w:hAnsi="{{xml .FontMono}}" w:eastAsia="{{xml .FontMono}}" w:cs="{{xml .FontMono}}"/>
+    </w:rPr>
+  </w:style>
+  <w:style w:type="character" w:customStyle="1" w:styleId="SectionNumber">
+    <w:name w:val="Section Number"/>
+    <w:basedOn w:val="DefaultParagraphFont"/>
+  </w:style>
+  <w:style w:type="character" w:styleId="FootnoteReference">
+    <w:name w:val="Footnote Reference"/>
+    <w:basedOn w:val="DefaultParagraphFont"/>
+    <w:rPr>
+      <w:vertAlign w:val="superscript"/>
+    </w:rPr>
+  </w:style>
+  <!-- リンク（PDF と同じく、色を付けない） -->
+  <w:style w:type="character" w:styleId="Hyperlink">
+    <w:name w:val="Hyperlink"/>
+    <w:basedOn w:val="DefaultParagraphFont"/>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="TOCHeading">
+    <w:name w:val="TOC Heading"/>
+    <w:basedOn w:val="Heading1"/>
+    <w:next w:val="BodyText"/>
+    <w:uiPriority w:val="39"/>
+    <w:unhideWhenUsed/>
+    <w:qFormat/>
+    <w:pPr>
+      <w:outlineLvl w:val="9"/>
+    </w:pPr>
+  </w:style>
+</w:styles>

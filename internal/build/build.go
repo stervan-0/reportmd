@@ -262,12 +262,17 @@ func WorkFiles(dir, markdown string, cfg *config.Config, source string) (map[str
 	if err != nil {
 		return nil, err
 	}
+	docx, err := DocxJSON(cfg)
+	if err != nil {
+		return nil, err
+	}
 	files := map[string][]byte{
 		"body.md":      []byte(markdown),
 		"meta.json":    meta,
 		"preamble.tex": []byte(Preamble(cfg)),
 		"filter.lua":   filterLua,
 		coverFileName:  cover,
+		docxFileName:   docx,
 	}
 	paths := map[string]string{}
 	for name, data := range files {
@@ -299,7 +304,8 @@ func PandocArgs(paths map[string]string, output string, format Format, title str
 	case HTML:
 		args = append(args, "-t", "html5", "-s", "--mathml", "--metadata=pagetitle:"+title)
 	case Docx:
-		args = append(args, "-t", "docx")
+		// 設定を反映した雛形（docx.go）のスタイルを使う
+		args = append(args, "-t", "docx", "--reference-doc="+paths[referenceDocxName])
 	case Pptx:
 		// 見出しごとに1枚のスライドにする（filter.lua が見出しをすべて最上位にする）
 		args = append(args, "-t", "pptx", "--slide-level=1")
@@ -313,6 +319,16 @@ func runPandoc(dir, markdown, output string, format Format, opts Options, source
 	if err != nil {
 		return "", err
 	}
+	if format == Docx {
+		reference, err := ReferenceDocx(opts.Config)
+		if err != nil {
+			return "", err
+		}
+		paths[referenceDocxName] = filepath.Join(dir, referenceDocxName)
+		if err := os.WriteFile(paths[referenceDocxName], reference, 0o644); err != nil {
+			return "", &Error{Message: fmt.Sprintf("一時ファイルを書き込めません（%v）", err)}
+		}
+	}
 	title := opts.Config.Document.Title
 	if strings.TrimSpace(title) == "" {
 		base := filepath.Base(opts.Input)
@@ -325,6 +341,11 @@ func runPandoc(dir, markdown, output string, format Format, opts Options, source
 	cmd.Stderr = &stderr
 	err = cmd.Run()
 	text := strings.TrimSpace(stderr.String())
+	if err == nil && format == Docx {
+		if err := fixDocxTables(output); err != nil {
+			return "", &Error{Message: fmt.Sprintf("Word の文書を書き換えられません（%v）", err)}
+		}
+	}
 	if err == nil {
 		return text, nil
 	}
