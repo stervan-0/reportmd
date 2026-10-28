@@ -387,16 +387,10 @@ local function other_cover(layout, used)
   return blocks
 end
 
--- 単位つきの長さ（"40mm" など。設定の検証済み）を pt にする
-local function length_pt(s)
-  local value, unit = s:match('^([%d.]+)(%a+)$')
-  local scale = { mm = 72 / 25.4, cm = 720 / 25.4, pt = 1, ['in'] = 72 }
-  return tonumber(value) * scale[unit]
-end
-
 -- Word：各項目に、雛形の表紙のスタイル（項目ごとの揃え・文字サイズ・太字・行送り）をあてる。
 -- fields は罫線のない表にする。fill の空きは、本文の高さから、ほかの項目の高さを引いて等分する
 -- （1行に収まる前提。少し余らせて、表紙が2ページにならないようにする）。
+-- 項目の高さ（空きは長さ、文字と fields は1行の行送り）は、internal/build が docx.json で渡す。
 -- 表紙のあとはセクションを区切る（表紙にはページ番号を付けず、本文を1ページ目にする）。
 local DOCX_COVER_MARGIN = 2
 
@@ -405,14 +399,14 @@ local function docx_cover(layout, used, docx)
   local height, fills = 0, 0
   for i, line in ipairs(layout) do
     local style = 'reportmd Cover ' .. i
-    local line_height = (tonumber(line.leading) or docx.font_size * 1.2) * docx.line_spacing
+    local line_height = docx.cover_heights[i]
     if line.kind == 'space' then
       if line.space == 'fill' then
         items[#items + 1] = 'fill'
         fills = fills + 1
       else
-        height = height + length_pt(line.space)
-        items[#items + 1] = docx_space(length_pt(line.space))
+        height = height + line_height
+        items[#items + 1] = docx_space(line_height)
       end
     elseif line.kind == 'text' then
       local inlines = fill_template(line.parts, used)

@@ -262,17 +262,12 @@ func WorkFiles(dir, markdown string, cfg *config.Config, source string) (map[str
 	if err != nil {
 		return nil, err
 	}
-	docx, err := DocxJSON(cfg)
-	if err != nil {
-		return nil, err
-	}
 	files := map[string][]byte{
 		"body.md":      []byte(markdown),
 		"meta.json":    meta,
 		"preamble.tex": []byte(Preamble(cfg)),
 		"filter.lua":   filterLua,
 		coverFileName:  cover,
-		docxFileName:   docx,
 	}
 	paths := map[string]string{}
 	for name, data := range files {
@@ -320,13 +315,8 @@ func runPandoc(dir, markdown, output string, format Format, opts Options, source
 		return "", err
 	}
 	if format == Docx {
-		reference, err := ReferenceDocx(opts.Config)
-		if err != nil {
+		if err := writeDocxFiles(dir, opts.Config, paths); err != nil {
 			return "", err
-		}
-		paths[referenceDocxName] = filepath.Join(dir, referenceDocxName)
-		if err := os.WriteFile(paths[referenceDocxName], reference, 0o644); err != nil {
-			return "", &Error{Message: fmt.Sprintf("一時ファイルを書き込めません（%v）", err)}
 		}
 	}
 	title := opts.Config.Document.Title

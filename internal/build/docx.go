@@ -11,6 +11,7 @@ import (
 	"math"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -196,10 +197,7 @@ func docxLayout(cfg *config.Config) docxVars {
 		if item.Space != nil {
 			continue
 		}
-		size := fontSize
-		if item.Size != "" {
-			size = points(item.Size)
-		}
+		size, leading := coverSize(cfg, item)
 		align := item.Align
 		if align == "" {
 			align = "center"
@@ -209,12 +207,21 @@ func docxLayout(cfg *config.Config) docxVars {
 			Fields:     item.Fields != nil,
 			Align:      docxAlign(align),
 			Size:       halfPoints(size),
-			Line:       twips(size * baselineRatio * ls),
+			Line:       twips(leading),
 			LabelRight: twips(2 * size), // 項目名と値の間（PDF の \hspace{2em}）
 			Bold:       item.Bold,
 		})
 	}
 	return v
+}
+
+// coverSize は、表紙の文字の項目（text・fields）の文字サイズと行送り（pt）を返す。
+func coverSize(cfg *config.Config, item config.CoverItem) (size, leading float64) {
+	size = points(cfg.Text.FontSize)
+	if item.Size != "" {
+		size = points(item.Size)
+	}
+	return size, size * baselineRatio * cfg.Text.LineSpacing
 }
 
 // docxAlign は、揃えを Word の値にする。
@@ -251,12 +258,45 @@ func DocxJSON(cfg *config.Config) ([]byte, error) {
 	// 表紙のあとは、セクションを区切る。表紙のセクションにはフッター（ページ番号）を付けない
 	section := `<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/>` +
 		`<w:sectPr>` + docxSection(v.Page) + `</w:sectPr></w:pPr></w:p>`
+	// 表紙の項目ごとの高さ（pt）。空きは長さ（"fill" は 0）、文字と fields は1行の行送り
+	heights := []float64{}
+	for _, item := range cfg.Cover.Layout {
+		switch {
+		case item.Space == nil:
+			_, leading := coverSize(cfg, item)
+			heights = append(heights, leading)
+		case *item.Space == "fill":
+			heights = append(heights, 0)
+		default:
+			heights = append(heights, lengthPoints(*item.Space))
+		}
+	}
 	return json.Marshal(map[string]any{
 		"text_height":   textHeight,
-		"font_size":     points(cfg.Text.FontSize),
-		"line_spacing":  cfg.Text.LineSpacing,
+		"cover_heights": heights,
 		"cover_section": section,
 	})
+}
+
+// writeDocxFiles は、Word の出力に使う雛形（reference.docx）と、filter.lua に渡す寸法（docx.json）を
+// dir に書き出し、そのパスを paths に加える。
+func writeDocxFiles(dir string, cfg *config.Config, paths map[string]string) error {
+	reference, err := ReferenceDocx(cfg)
+	if err != nil {
+		return err
+	}
+	sizes, err := DocxJSON(cfg)
+	if err != nil {
+		return err
+	}
+	for name, data := range map[string][]byte{referenceDocxName: reference, docxFileName: sizes} {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, data, 0o644); err != nil {
+			return &Error{Message: fmt.Sprintf("一時ファイルを書き込めません（%v）", err)}
+		}
+		paths[name] = path
+	}
+	return nil
 }
 
 const docxFooter = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -289,7 +329,7 @@ func ReferenceDocx(cfg *config.Config) ([]byte, error) {
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
 		`<w:body><w:p/><w:sectPr>` + section + `</w:sectPr></w:body></w:document>`
 
-	return rewriteZip(base, func(name string, data []byte) []byte {
+	reference, err := rewriteZip(base, func(name string, data []byte) []byte {
 		switch name {
 		case "word/styles.xml":
 			return []byte(DocxStyles(cfg))
@@ -306,6 +346,10 @@ func ReferenceDocx(cfg *config.Config) ([]byte, error) {
 		}
 		return data
 	}, extra)
+	if err != nil {
+		return nil, &Error{Message: fmt.Sprintf("Word の雛形を作れません（%v）", err)}
+	}
+	return reference, nil
 }
 
 // rewriteZip は、ZIP の各ファイルを edit で書き換え、extra のファイルを足した ZIP を返す。
@@ -362,12 +406,16 @@ var (
 
 // firstParaStyle は、表の最初の段落のスタイルを返す。空のセルの段落（Pandoc が Compact にする）は飛ばす。
 func firstParaStyle(s string) string {
-	for _, m := range paraStyle.FindAllStringSubmatch(s, -1) {
-		if m[1] != "Compact" {
-			return m[1]
+	for {
+		m := paraStyle.FindStringSubmatchIndex(s)
+		if m == nil {
+			return ""
 		}
+		if style := s[m[2]:m[3]]; style != "Compact" {
+			return style
+		}
+		s = s[m[1]:]
 	}
-	return ""
 }
 
 // plainTableStyle は、最初のセルの段落のスタイルから、罫線のない表のスタイルを決める（なければ空）。
@@ -409,10 +457,12 @@ func fixTables(doc string) string {
 	last := 0
 	for _, loc := range tableProps.FindAllStringIndex(doc, -1) {
 		props := tableAlign.ReplaceAllString(doc[loc[0]:loc[1]], "")
-		// 次の表の手前まで（表の中の段落）を見る
+		// 表の終わりか、入れ子の表の始まりの手前まで（表の最初のセルの段落）を見る
 		end := len(doc)
-		if next := strings.Index(doc[loc[1]:], "<w:tbl>"); next >= 0 {
-			end = loc[1] + next
+		for _, tag := range []string{"</w:tbl>", "<w:tbl>"} {
+			if next := strings.Index(doc[loc[1]:], tag); next >= 0 && loc[1]+next < end {
+				end = loc[1] + next
+			}
 		}
 		if style := plainTableStyle(firstParaStyle(doc[loc[1]:end])); style != "" {
 			props = strings.Replace(props, `<w:tblStyle w:val="Table"`, `<w:tblStyle w:val="`+style+`"`, 1)
@@ -443,9 +493,9 @@ func styleLines(styles string) map[string]lineSpacing {
 	var sheet struct {
 		Default *lineSpacing `xml:"docDefaults>pPrDefault>pPr>spacing"`
 		Styles  []struct {
-			Type    string       `xml:"type,attr"`
-			ID      string       `xml:"styleId,attr"`
-			Default string       `xml:"default,attr"`
+			Type    string `xml:"type,attr"`
+			ID      string `xml:"styleId,attr"`
+			Default string `xml:"default,attr"`
 			BasedOn *struct {
 				Val string `xml:"val,attr"`
 			} `xml:"basedOn"`

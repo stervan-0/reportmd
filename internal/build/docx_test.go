@@ -2,9 +2,11 @@ package build
 
 import (
 	"archive/zip"
+	"encoding/json"
 	"encoding/xml"
 	"errors"
 	"io"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -116,7 +118,9 @@ func TestFixTables(t *testing.T) {
 	para := func(style string) string { return `<w:p><w:pPr><w:pStyle w:val="` + style + `" /></w:pPr></w:p>` }
 	doc := table("start", para("reportmdTableHeader")) +
 		table("start", para("Compact")+para("reportmdEquation")+para("reportmdEquationNumber")) +
-		table("start", para("reportmdCover6Label")+para("reportmdCover6"))
+		table("start", para("reportmdCover6Label")+para("reportmdCover6")) +
+		// 表の中に Compact しかなければ、表のあとの段落のスタイルは見ない
+		table("start", para("Compact")) + para("reportmdEquation")
 	got := fixTables(doc)
 	if strings.Contains(got, `<w:jc w:val="start"`) {
 		t.Errorf("表の左寄せを取り除く: %s", got)
@@ -128,6 +132,42 @@ func TestFixTables(t *testing.T) {
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("%s がない: %s", want, got)
+		}
+	}
+	if n := strings.Count(got, `<w:tblStyle w:val="reportmdEquationTable" />`); n != 1 {
+		t.Errorf("数式の表のスタイルは1つ（%d）: %s", n, got)
+	}
+}
+
+func TestDocxJSONCoverHeights(t *testing.T) {
+	cfg, err := config.New(map[string]any{"cover": map[string]any{"layout": []any{
+		map[string]any{"space": "10mm"},
+		map[string]any{"text": "{title}", "size": "20pt"},
+		map[string]any{"space": "fill"},
+		map[string]any{"fields": []any{[]any{"氏名", "{author}"}}},
+	}}}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := DocxJSON(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		CoverHeights []float64 `json:"cover_heights"`
+	}
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	// 空きは長さ、fill は 0、文字は「文字サイズ × 1.2 × 行間 1.5」（fields は本文の 10.5pt）
+	want := []float64{10 * 72 / 25.4, 20 * 1.2 * 1.5, 0, 10.5 * 1.2 * 1.5}
+	if len(got.CoverHeights) != len(want) {
+		t.Fatalf("高さ: %v（期待: %v）", got.CoverHeights, want)
+	}
+	for i := range want {
+		if math.Abs(got.CoverHeights[i]-want[i]) > 1e-9 {
+			t.Errorf("高さ: %v（期待: %v）", got.CoverHeights, want)
+			break
 		}
 	}
 }
@@ -230,8 +270,8 @@ func TestDocxOutput(t *testing.T) {
 		{"表は上にキャプション、セルにスタイル", "![t:結果]\n| a | b |\n|---|---|\n| 1 | 2 |\n",
 			[]string{"reportmdTableCaption|表1 結果", "[表:Table]", "reportmdTableHeader|a", "reportmdTableHeader|b", "reportmdTableText|1", "reportmdTableText|2", "reportmdSpace|"}},
 		{"文中の数式だけの段落は、後ろに幅のない空白", "| a |\n|---|\n| $x$ |\n\n- $y$\n- 項目 $z$\n",
-			[]string{"reportmdSpace|", "[表:Table]", "reportmdTableHeader|a", "reportmdTableText|x​", "reportmdSpace|", "Compact|y​", "Compact|項目 z"}},
-		{"図は下にキャプション","![f:構成](a.png)\n", []string{"reportmdFigure|", "reportmdFigureCaption|図1 構成"}},
+			[]string{"reportmdSpace|", "[表:Table]", "reportmdTableHeader|a", "reportmdTableText|x\u200b", "reportmdSpace|", "Compact|y\u200b", "Compact|項目 z"}},
+		{"図は下にキャプション", "![f:構成](a.png)\n", []string{"reportmdFigure|", "reportmdFigureCaption|図1 構成"}},
 		{"表紙は項目ごとのスタイルで、本文とセクションを分ける", "---\ntitle: 題名\nauthor: 山田\ncover: true\n---\n\n本文\n",
 			[]string{"reportmdSpace|", "reportmdCover2|題名", "reportmdSpace|", "reportmdSpace|", "[表:reportmdCoverTable6]", "reportmdCover6Label|氏名", "reportmdCover6|山田", "reportmdSpace|", "|[区切り]", "BodyText|本文"}},
 	}
