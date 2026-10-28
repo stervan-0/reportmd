@@ -139,6 +139,10 @@ func TestValidation(t *testing.T) {
 		"table.header.align":      `{"table": {"header": {"align": "top"}}}`,
 		"table.rules.top":         `{"table": {"rules": {"top": true}}}`,
 		"equation.numbering":      `{"equation": {"numbering": 1}}`,
+		"slide.title.size":        `{"slide": {"title": {"size": "100pt"}}}`,
+		"slide.title.color":       `{"slide": {"title": {"color": "navy"}}}`,
+		"slide.title.rule":        `{"slide": {"title": {"rule": true}}}`,
+		"slide.text.size":         `{"slide": {"text": {"size": "20"}}}`,
 		"cover.layout":            `{"cover": {"layout": {"text": "a"}}}`,
 	}
 	for name, json := range cases {

@@ -40,11 +40,12 @@ test('誤った値と未知のキーに印を付ける', async () => {
     '  "font": { "main": "My_Font" },',
     '  "heading": { "sizes": ["14pt", "12pt"] },',
     '  "table": { "rules": { "rows": true }, "font_size": null },',
+    '  "slide": { "title": { "color": "navy" } },',
     '  "colour": 1',
     '}',
   ].join('\n');
   const lines = (await validate(text)).map((d) => d.line);
-  for (const line of [1, 2, 3, 4, 5, 6, 7]) {
+  for (const line of [1, 2, 3, 4, 5, 6, 7, 8]) {
     assert.ok(lines.includes(line), `${line + 1} 行目に印がない: ${JSON.stringify(await validate(text))}`);
   }
   // 正しい値（null・false・長さ）には印を付けない
@@ -72,7 +73,7 @@ test('表紙のレイアウトの項目を調べる', async () => {
 });
 
 test('項目と値を補完する', async () => {
-  assert.deepStrictEqual((await complete('{ }', 2)).sort(), ['caption', 'cover', 'document', 'equation', 'font', 'heading', 'page', 'table', 'text']);
+  assert.deepStrictEqual((await complete('{ }', 2)).sort(), ['caption', 'cover', 'document', 'equation', 'font', 'heading', 'page', 'slide', 'table', 'text']);
   const text = '{ "table": { "width": } }';
   const values = await complete(text, text.indexOf(':', text.indexOf('width')) + 2);
   assert.deepStrictEqual(values.sort(), ['"auto"', '"full"']);

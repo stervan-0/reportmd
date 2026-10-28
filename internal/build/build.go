@@ -302,8 +302,9 @@ func PandocArgs(paths map[string]string, output string, format Format, title str
 		// 設定を反映した雛形（docx.go）のスタイルを使う
 		args = append(args, "-t", "docx", "--reference-doc="+paths[referenceDocxName])
 	case Pptx:
-		// 見出しごとに1枚のスライドにする（filter.lua が見出しをすべて最上位にする）
-		args = append(args, "-t", "pptx", "--slide-level=1")
+		// 見出しごとに1枚のスライドにする（filter.lua が見出しをすべて最上位にする）。
+		// 題名と本文の書式は、設定を反映した雛形（pptx.go）を使う
+		args = append(args, "-t", "pptx", "--slide-level=1", "--reference-doc="+paths[referencePptxName])
 	}
 	return append(args, "-o", output)
 }
@@ -314,8 +315,13 @@ func runPandoc(dir, markdown, output string, format Format, opts Options, source
 	if err != nil {
 		return "", err
 	}
-	if format == Docx {
+	switch format {
+	case Docx:
 		if err := writeDocxFiles(dir, opts.Config, paths); err != nil {
+			return "", err
+		}
+	case Pptx:
+		if err := writePptxFiles(dir, opts.Config, paths); err != nil {
 			return "", err
 		}
 	}
@@ -334,6 +340,11 @@ func runPandoc(dir, markdown, output string, format Format, opts Options, source
 	if err == nil && format == Docx {
 		if err := fixDocx(output, opts.Config); err != nil {
 			return "", &Error{Message: fmt.Sprintf("Word の文書を書き換えられません（%v）", err)}
+		}
+	}
+	if err == nil && format == Pptx {
+		if err := fixPptx(output, opts.Config); err != nil {
+			return "", &Error{Message: fmt.Sprintf("PowerPoint のスライドを書き換えられません（%v）", err)}
 		}
 	}
 	if err == nil {

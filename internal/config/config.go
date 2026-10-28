@@ -96,6 +96,17 @@ type Config struct {
 		Numbering bool   `json:"numbering"`
 		Label     string `json:"label"`
 	} `json:"equation"`
+	// PowerPoint のスライドの題名と本文（PowerPoint の出力だけで使う）
+	Slide struct {
+		Title struct {
+			Size  string `json:"size"`
+			Color string `json:"color"` // 16進数6桁（先頭の # はあってもなくてもよい）
+			Rule  any    `json:"rule"`  // false（線を引かない）または線の太さ。SlideRule で読む
+		} `json:"title"`
+		Text struct {
+			Size string `json:"size"`
+		} `json:"text"`
+	} `json:"slide"`
 	Cover struct {
 		Layout []CoverItem `json:"layout"`
 	} `json:"cover"`
@@ -120,6 +131,14 @@ type CoverItem struct {
 // Rule は罫線の太さを返す。線を引かないなら空文字。
 func (c *Config) Rule(name string) string {
 	if s, ok := c.Table.Rules[name].(string); ok {
+		return s
+	}
+	return ""
+}
+
+// SlideRule は、スライドの題名の下の線の太さを返す。線を引かないなら空文字。
+func (c *Config) SlideRule() string {
+	if s, ok := c.Slide.Title.Rule.(string); ok {
 		return s
 	}
 	return ""
@@ -355,6 +374,7 @@ func unknownKeys(defaults, user map[string]any, prefix []string) []string {
 var (
 	lengthPattern = regexp.MustCompile(`^\d+(\.\d+)?(mm|cm|pt|in)$`)
 	pointPattern  = regexp.MustCompile(`^\d+(\.\d+)?pt$`)
+	colorPattern  = regexp.MustCompile(`^#?[0-9A-Fa-f]{6}$`)
 	// LaTeX の特殊文字を含むフォント名は受け付けない（組版コードの破損を防ぐ）
 	fontNamePattern = regexp.MustCompile(`^[^{}\\%#&$^_~]+$`)
 )
@@ -364,6 +384,8 @@ type check func(any) bool
 func isString(v any) bool { _, ok := v.(string); return ok }
 
 func isBool(v any) bool { _, ok := v.(bool); return ok }
+
+func isColor(v any) bool { s, ok := v.(string); return ok && colorPattern.MatchString(s) }
 
 func isLength(v any) bool { s, ok := v.(string); return ok && lengthPattern.MatchString(s) }
 
@@ -469,6 +491,10 @@ var rules = []rule{
 	{"table.rules.sides", ruleExpect, orFalse(isLength)},
 	{"equation.numbering", "true または false", isBool},
 	{"equation.label", "文字列", isString},
+	{"slide.title.size", `"10pt"〜"72pt"`, pointIn(10, 72)},
+	{"slide.title.color", `16進数6桁の色（例："1F3864"）`, isColor},
+	{"slide.title.rule", ruleExpect, orFalse(isLength)},
+	{"slide.text.size", `"8pt"〜"48pt"`, pointIn(8, 48)},
 	// 各項目の中身は validateCoverLayout で調べる
 	{"cover.layout", "表紙の項目（{ ... }）の配列", isArray},
 }

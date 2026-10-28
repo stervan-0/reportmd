@@ -1,6 +1,6 @@
 # reportmd 仕様書
 
-- バージョン：0.17.2（Go による書き直し）
+- バージョン：0.18.0（Go による書き直し）
 - ステータス：設計中
 - 言語：Go（0.1.0 は Ruby で実装。独自構文・設定・出力の互換性を保つ）
 - 文書形式：Markdownベースの独自拡張形式
@@ -98,6 +98,7 @@ reportmd/
 │       ├── docx-styles.xml.tmpl
 │       ├── preamble.go
 │       ├── preamble.tex.tmpl
+│       ├── pptx.go
 │       ├── filter.lua
 │       └── testdata/
 ├── docs/
@@ -124,6 +125,7 @@ reportmd/
 - `filter.lua`：Pandoc解析後の文書構造に対する変換（バイナリに埋め込む）
 - `preamble.tex.tmpl`：設定ファイルの内容（用紙・余白・フォント・文字サイズ・行間・字下げ・ページ番号・見出し・表）をLaTeXのプリアンブルに変換するテンプレート（Go の `text/template`）。PandocのLaTeX標準テンプレートに、`--include-in-header` で追加する
 - `docx.go`・`docx-styles.xml.tmpl`：Word の出力用。設定ファイルの内容を、Word の雛形（`reference.docx`）のスタイルと用紙・余白・ページ番号にする（4.2）。`docx-styles.xml.tmpl` はバイナリに埋め込む
+- `pptx.go`：PowerPoint の出力用。設定ファイルの内容（`slide` と見出しのフォント・太字）を、PowerPoint の雛形（`reference.pptx`）のスライドマスターの書式にし、題名の下の線を引く（4.2）
 - `examples/setting.json`：`examples/report.reportmd` 用のサンプル設定
 - 各パッケージの `*_test.go`：自動テスト。`internal/build/testdata` には、Ruby 版（0.1.0）が生成したプリアンブルなど、互換性の確認に使うファイルを置く
 
@@ -170,7 +172,7 @@ reportmd build report.reportmd -o output.pdf
 | `.tex` | LaTeX のソース | PDF と同じプリアンブルを含む単独の文書。XeLaTeX でそのまま組める |
 | `.html` `.htm` | HTML | 単独のページ。数式は MathML。ページの題名は `document.title`（なければ入力ファイル名）。右揃え・中央揃えは `text-align`、図表の番号とキャプションは付く |
 | `.docx` | Word | 用紙・フォントなどの設定を、PDF と同じ寸法で反映する（下を参照） |
-| `.pptx` | PowerPoint | 見出しごとに1枚のスライド（下を参照）。図表の番号とキャプションは付く。用紙・フォントなどの設定は反映しない |
+| `.pptx` | PowerPoint | 見出しごとに1枚のスライド（下を参照）。図表の番号とキャプションは付く。題名と本文の書式は `slide` の設定に従う。用紙・本文のフォントなど、ほかの設定は反映しない |
 
 そのほかの拡張子はエラーとする。
 
@@ -184,6 +186,13 @@ PowerPoint では、次のようにスライドに分ける（Pandoc を `--slid
 - 図表・数式の参照（6.7.5）は、「図1」などの文字にする（リンクにはしない）。
 - 右揃え・中央揃え・字下げは反映しない。
 - 表のあとの本文は、Pandoc が次のスライド（題名なし）に分ける。
+
+スライドの題名は、本文より目立つように、次の書式にする。
+
+- reportmd が、設定から PowerPoint の雛形（`reference.pptx`）を作り、Pandoc に `--reference-doc` で渡す。雛形は、Pandoc の標準の雛形（`pandoc --print-default-data-file reference.pptx`）のスライドマスターの、題名（`titleStyle`）と本文（`bodyStyle`）の書式を書き換えたもの。
+- 題名：文字サイズは `slide.title.size`、色は `slide.title.color`、フォントは `heading.font`、太字は `heading.bold` に従う。配置（中央揃え）と枠の位置は、標準の雛形のまま。
+- 本文：箇条書きの1段目の文字サイズを `slide.text.size` にし、2段目からは標準の雛形と同じ比率で小さくする（標準の雛形の 24pt・21pt・18pt・15pt を、`slide.text.size` ÷ 24pt の倍率で縮める）。本文のフォントは、標準の雛形のまま。
+- 題名の下の線：題名のあるスライドだけに、題名の枠の下端に、枠と同じ幅で、`slide.title.rule` の太さ・`slide.title.color` の色の線を引く。表紙や改ページのあとなど、題名のないスライドには引かない。`slide.title.rule` が `false` なら引かない。線はスライドごとの図形なので、Pandoc の出力のあとで、各スライドに書き足す。
 
 Word では、PDF とできるだけ同じ体裁になるよう、設定の内容を Word のスタイルにする。
 
@@ -687,6 +696,16 @@ $$ {-}
     "numbering": true,
     "label": "式"
   },
+  "slide": {
+    "title": {
+      "size": "36pt",
+      "color": "1F3864",
+      "rule": "2pt"
+    },
+    "text": {
+      "size": "20pt"
+    }
+  },
   "cover": {
     "layout": [
       { "space": "40mm" },
@@ -759,6 +778,10 @@ $$ {-}
 | `table.rules.sides`     | 表の左右の端の縦線                | 同上                             | `false`                  |
 | `equation.numbering`    | 独立した数式に番号を付けるか（6.9）     | 真偽値                            | `true`                   |
 | `equation.label`        | 数式の参照のラベル文字列（`@名前` -> 「式(1)」） | 文字列                     | `"式"`                    |
+| `slide.title.size`      | PowerPoint のスライドの題名の文字サイズ（4.2） | `pt` 単位、10pt〜72pt          | `"36pt"`                 |
+| `slide.title.color`     | スライドの題名と、題名の下の線の色      | 16進数6桁の文字列（先頭の `#` は省略可）     | `"1F3864"`（濃い紺）          |
+| `slide.title.rule`      | スライドの題名の下の線              | `false`（引かない）または線の太さ（単位付き文字列） | `"2pt"`                  |
+| `slide.text.size`       | スライドの本文（箇条書きの1段目）の文字サイズ | `pt` 単位、8pt〜48pt           | `"20pt"`                 |
 | `cover.layout`          | 表紙のレイアウト（5.4・7.5）       | 表紙の項目の配列                       | 7.2 の例のとおり（タイトル・副題と、科目〜氏名の表） |
 
 ### 7.4 読み込みと検証のルール
