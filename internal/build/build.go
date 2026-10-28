@@ -342,7 +342,7 @@ func runPandoc(dir, markdown, output string, format Format, opts Options, source
 	err = cmd.Run()
 	text := strings.TrimSpace(stderr.String())
 	if err == nil && format == Docx {
-		if err := fixDocxTables(output); err != nil {
+		if err := fixDocx(output, opts.Config); err != nil {
 			return "", &Error{Message: fmt.Sprintf("Word の文書を書き換えられません（%v）", err)}
 		}
 	}

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	_ "embed"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"math"
@@ -381,17 +382,21 @@ func plainTableStyle(paraStyle string) string {
 	return ""
 }
 
-// fixDocxTables は、Pandoc が出力した Word の文書の表を直す。
-func fixDocxTables(path string) error {
+// fixDocx は、Pandoc が出力した Word の文書の表と、行内の数式・画像を含む段落の行送りを直す。
+func fixDocx(path string, cfg *config.Config) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
+	lines := styleLines(DocxStyles(cfg))
 	out, err := rewriteZip(data, func(name string, content []byte) []byte {
-		if name != "word/document.xml" {
-			return content
+		switch name {
+		case "word/document.xml":
+			return []byte(fixLineRules(fixTables(string(content)), lines))
+		case "word/footnotes.xml":
+			return []byte(fixLineRules(string(content), lines))
 		}
-		return []byte(fixTables(string(content)))
+		return content
 	}, nil)
 	if err != nil {
 		return err
@@ -418,4 +423,126 @@ func fixTables(doc string) string {
 	}
 	b.WriteString(doc[last:])
 	return b.String()
+}
+
+// 段落の行送りは、本文・表・見出しなどを PDF と同じ固定値（exact）にしている。
+// 固定値の行に、行より背の高い分数や画像を置くと、Word ははみ出した部分を描かない。
+// そこで、行内の数式・画像を含む段落だけ、同じ値の最小値（atLeast）にして、行を広げる
+// （PDF でも、LaTeX がその行を広げる）。
+
+// lineSpacing は、段落の行送り（twips の値と、exact などの種類）。
+type lineSpacing struct {
+	Line string `xml:"line,attr"`
+	Rule string `xml:"lineRule,attr"`
+}
+
+// styleLines は、雛形の styles.xml から、段落のスタイルごとの行送りを求める。
+// スタイルにない値は、元のスタイル（basedOn）・既定の書式（docDefaults）からたどる。
+// 標準のスタイル（Normal）は、キー "" にも入れる（スタイルのない段落・ないスタイル用）。
+func styleLines(styles string) map[string]lineSpacing {
+	var sheet struct {
+		Default *lineSpacing `xml:"docDefaults>pPrDefault>pPr>spacing"`
+		Styles  []struct {
+			Type    string       `xml:"type,attr"`
+			ID      string       `xml:"styleId,attr"`
+			Default string       `xml:"default,attr"`
+			BasedOn *struct {
+				Val string `xml:"val,attr"`
+			} `xml:"basedOn"`
+			Spacing *lineSpacing `xml:"pPr>spacing"`
+		} `xml:"style"`
+	}
+	if err := xml.Unmarshal([]byte(styles), &sheet); err != nil {
+		panic(err) // テンプレートの誤りは実装の誤り
+	}
+	own := map[string]lineSpacing{}
+	parent := map[string]string{}
+	normal := ""
+	for _, s := range sheet.Styles {
+		if s.Type != "paragraph" {
+			continue
+		}
+		if s.Spacing != nil {
+			own[s.ID] = *s.Spacing
+		}
+		if s.BasedOn != nil {
+			parent[s.ID] = s.BasedOn.Val
+		}
+		if s.Default == "1" {
+			normal = s.ID
+		}
+	}
+	var base lineSpacing
+	if sheet.Default != nil {
+		base = *sheet.Default
+	}
+	resolve := func(id string) lineSpacing {
+		var v lineSpacing
+		for seen := map[string]bool{}; id != "" && !seen[id]; id = parent[id] {
+			seen[id] = true
+			if v.Line == "" {
+				v.Line = own[id].Line
+			}
+			if v.Rule == "" {
+				v.Rule = own[id].Rule
+			}
+		}
+		if v.Line == "" {
+			v.Line = base.Line
+		}
+		if v.Rule == "" {
+			v.Rule = base.Rule
+		}
+		return v
+	}
+	lines := map[string]lineSpacing{"": resolve(normal)}
+	for _, s := range sheet.Styles {
+		if s.Type == "paragraph" {
+			lines[s.ID] = resolve(s.ID)
+		}
+	}
+	return lines
+}
+
+var (
+	paragraphXML = regexp.MustCompile(`(?s)<w:p>.*?</w:p>`)
+	// 段落のプロパティのうち、spacing より後ろに置くもの（OOXML の要素の順）
+	afterSpacing = regexp.MustCompile(`<w:(?:ind|contextualSpacing|mirrorIndents|suppressOverlap|jc|textDirection|textAlignment|textboxTightWrap|outlineLvl|divId|cnfStyle|rPr|sectPr|pPrChange)[ />]`)
+)
+
+// fixLineRules は、行内の数式・画像を含み、行送りが固定値の段落を、同じ値の最小値にする。
+// 独立した数式・図の段落は、スタイルの行送りが固定値でないので、変えない。
+func fixLineRules(doc string, lines map[string]lineSpacing) string {
+	return paragraphXML.ReplaceAllStringFunc(doc, func(p string) string {
+		if !strings.Contains(p, "<m:oMath") && !strings.Contains(p, "<w:drawing") {
+			return p
+		}
+		start := strings.Index(p, "<w:pPr>")
+		end := strings.Index(p, "</w:pPr>")
+		if start >= 0 && end > start && strings.Contains(p[start:end], "<w:spacing") {
+			return p // 段落に直接書いた行送りはそのまま
+		}
+		style := ""
+		if start >= 0 && end > start {
+			if m := paraStyle.FindStringSubmatch(p[start:end]); m != nil {
+				style = m[1]
+			}
+		}
+		line, ok := lines[style]
+		if !ok {
+			line = lines[""]
+		}
+		if line.Rule != "exact" {
+			return p
+		}
+		spacing := `<w:spacing w:line="` + line.Line + `" w:lineRule="atLeast"/>`
+		if start < 0 || end < start {
+			return `<w:p><w:pPr>` + spacing + `</w:pPr>` + p[len("<w:p>"):]
+		}
+		at := end
+		if loc := afterSpacing.FindStringIndex(p[start:end]); loc != nil {
+			at = start + loc[0]
+		}
+		return p[:at] + spacing + p[at:]
+	})
 }

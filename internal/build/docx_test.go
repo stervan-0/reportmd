@@ -132,6 +132,34 @@ func TestFixTables(t *testing.T) {
 	}
 }
 
+func TestFixLineRules(t *testing.T) {
+	lines := styleLines(DocxStyles(config.Default()))
+	// 本文：10.5pt × 1.2 × 1.5 = 18.9pt（378）、表：10.5pt × 1.2 = 12.6pt（252）
+	para := func(props, runs string) string { return `<w:p>` + props + runs + `</w:p>` }
+	math := `<m:oMath><m:r><m:t>x</m:t></m:r></m:oMath>`
+	image := `<w:r><w:drawing></w:drawing></w:r>`
+	text := `<w:r><w:t>a</w:t></w:r>`
+	cases := []struct{ name, in, want string }{
+		{"本文の数式は最小値", para(`<w:pPr><w:pStyle w:val="BodyText" /></w:pPr>`, math),
+			para(`<w:pPr><w:pStyle w:val="BodyText" /><w:spacing w:line="378" w:lineRule="atLeast"/></w:pPr>`, math)},
+		{"表の画像は、揃えより前に置く", para(`<w:pPr><w:pStyle w:val="reportmdTableText" /><w:jc w:val="left" /></w:pPr>`, image),
+			para(`<w:pPr><w:pStyle w:val="reportmdTableText" /><w:spacing w:line="252" w:lineRule="atLeast"/><w:jc w:val="left" /></w:pPr>`, image)},
+		{"段落のプロパティがなければ標準の行送り", para("", math),
+			para(`<w:pPr><w:spacing w:line="378" w:lineRule="atLeast"/></w:pPr>`, math)},
+		{"独立した数式は変えない", para(`<w:pPr><w:pStyle w:val="reportmdEquation" /></w:pPr>`, `<m:oMathPara>`+math+`</m:oMathPara>`), ""},
+		{"数式・画像のない段落は変えない", para(`<w:pPr><w:pStyle w:val="BodyText" /></w:pPr>`, text), ""},
+	}
+	for _, c := range cases {
+		want := c.want
+		if want == "" {
+			want = c.in
+		}
+		if got := fixLineRules(c.in, lines); got != want {
+			t.Errorf("%s\n期待: %s\n結果: %s", c.name, want, got)
+		}
+	}
+}
+
 // docxParagraphs は、文書を Word にして、段落ごとに「スタイル|文字」を返す。
 // 表は「[表:スタイル]」、改ページは「[改ページ]」、セクションの区切りは「[区切り]」にする。
 func docxParagraphs(t *testing.T, rmd string, cfg *config.Config) []string {
@@ -201,7 +229,9 @@ func TestDocxOutput(t *testing.T) {
 			[]string{"FirstParagraph|前", "[表:reportmdEquationTable]", "Compact|", "reportmdEquation|E=mc2", "reportmdEquationNumber|(1)", "reportmdContinuation|後 式(1)", "reportmdEquation|a"}},
 		{"表は上にキャプション、セルにスタイル", "![t:結果]\n| a | b |\n|---|---|\n| 1 | 2 |\n",
 			[]string{"reportmdTableCaption|表1 結果", "[表:Table]", "reportmdTableHeader|a", "reportmdTableHeader|b", "reportmdTableText|1", "reportmdTableText|2", "reportmdSpace|"}},
-		{"図は下にキャプション", "![f:構成](a.png)\n", []string{"reportmdFigure|", "reportmdFigureCaption|図1 構成"}},
+		{"文中の数式だけの段落は、後ろに幅のない空白", "| a |\n|---|\n| $x$ |\n\n- $y$\n- 項目 $z$\n",
+			[]string{"reportmdSpace|", "[表:Table]", "reportmdTableHeader|a", "reportmdTableText|x​", "reportmdSpace|", "Compact|y​", "Compact|項目 z"}},
+		{"図は下にキャプション","![f:構成](a.png)\n", []string{"reportmdFigure|", "reportmdFigureCaption|図1 構成"}},
 		{"表紙は項目ごとのスタイルで、本文とセクションを分ける", "---\ntitle: 題名\nauthor: 山田\ncover: true\n---\n\n本文\n",
 			[]string{"reportmdSpace|", "reportmdCover2|題名", "reportmdSpace|", "reportmdSpace|", "[表:reportmdCoverTable6]", "reportmdCover6Label|氏名", "reportmdCover6|山田", "reportmdSpace|", "|[区切り]", "BodyText|本文"}},
 	}

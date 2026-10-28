@@ -1279,15 +1279,26 @@ local function trim_inlines(inlines)
   return inlines
 end
 
+-- 文中の数式だけの段落か（前後の空白は取り除いたもの）。
+-- Word は、ほかの文字のない段落の数式を、独立した数式（大きな組み方）にする。
+local function inline_math_alone(inlines)
+  return #inlines == 1 and inlines[1].t == 'Math' and inlines[1].mathtype == 'InlineMath'
+end
+
 -- Word：段落を、独立した数式の前後で分ける（style は最初の部分のスタイル。nil なら標準）。
 -- 数式のあとに続く部分は、PDF では同じ段落の続きなので、字下げしない。
--- 数式がなく、style も nil なら nil を返す。
+-- 文中の数式だけの段落（表のセルなど）は、PDF と同じ文中の数式の組み方にするため、
+-- 数式の後ろに幅のない空白（U+200B）を足す。
+-- 独立した数式がなく、style も nil で、文中の数式だけの段落でもなければ nil を返す。
 local function docx_paragraphs(make, content, style)
   local blocks = pandoc.List({})
   local part = pandoc.List({})
   local found = false
   local function flush()
     trim_inlines(part)
+    if inline_math_alone(part) then
+      part:insert(pandoc.Str('\u{200B}'))
+    end
     if #part > 0 then
       local block = make(part)
       blocks:insert(style and styled(style, { block }) or block)
@@ -1304,7 +1315,7 @@ local function docx_paragraphs(make, content, style)
       part:insert(el)
     end
   end
-  if not found and style == nil then
+  if not found and style == nil and not inline_math_alone(trim_inlines(pandoc.List(part))) then
     return nil
   end
   flush()
