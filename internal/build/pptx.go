@@ -17,7 +17,7 @@ import (
 	"reportmd/internal/config"
 )
 
-// PowerPoint（.pptx）は、Pandoc の標準の雛形のスライドマスターに、設定（slide・heading）の
+// PowerPoint（.pptx）は、Pandoc の標準の雛形のスライドマスターに、PowerPoint の設定（setting.pptx.json）の
 // 題名と本文の書式を書き込んだ雛形（reference.pptx）を作り、Pandoc に --reference-doc で渡す。
 // 題名の下の線は、題名のあるスライドにだけ引くので、生成したスライドに後から書き足す。
 
@@ -42,14 +42,14 @@ var (
 )
 
 // PptxMaster は、スライドマスターの題名（titleStyle）と本文（bodyStyle）の書式を、設定に合わせて書き換える。
-// 題名：文字サイズ・色・太字（heading.bold）・フォント（heading.font）。
-// 本文：1段目を slide.text.size にし、2段目からは標準の雛形の比率で小さくする。
+// 題名：文字サイズ・色・太字・フォント。
+// 本文：1段目を text.size にし、2段目からは標準の雛形の比率で小さくする。
 func PptxMaster(master string, cfg *config.Config) string {
 	title := fmt.Sprintf(`<a:defRPr sz="%d"`, int(math.Round(points(cfg.Slide.Title.Size)*100)))
-	if cfg.Heading.Bold {
+	if cfg.Slide.Title.Bold {
 		title += ` b="1"`
 	}
-	font := template.HTMLEscapeString(cfg.Heading.Font)
+	font := template.HTMLEscapeString(cfg.Slide.Title.Font)
 	master = titleStyleXML.ReplaceAllStringFunc(master, func(s string) string {
 		s = defRPrOpen.ReplaceAllLiteralString(s, title)
 		s = textFill.ReplaceAllLiteralString(s, `<a:solidFill><a:srgbClr val="`+pptxColor(cfg.Slide.Title.Color)+`"/></a:solidFill>`)
@@ -107,7 +107,7 @@ var (
 // titleRule は、題名の枠（スライドマスターの題名のプレースホルダー）の下端に引く線の図形を返す。
 // 枠が見つからなければ空。
 func titleRule(master string, cfg *config.Config) string {
-	width := cfg.SlideRule()
+	width := cfg.Slide.RuleWidth()
 	m := titlePlace.FindStringSubmatch(master)
 	if width == "" || m == nil {
 		return ""

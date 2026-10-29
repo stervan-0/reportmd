@@ -7,13 +7,18 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { getLanguageService, TextDocument } = require('vscode-json-languageservice');
 
-const schemaPath = path.join(__dirname, '..', 'schemas', 'setting.schema.json');
-const schema = JSON.parse(fs.readFileSync(schemaPath, 'utf8'));
+const readSchema = (name) => JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'schemas', name), 'utf8'));
 const service = getLanguageService({});
-service.configure({ validate: true, schemas: [{ uri: 'reportmd://setting.schema.json', fileMatch: ['setting.json'], schema }] });
+service.configure({
+  validate: true,
+  schemas: [
+    { uri: 'reportmd://setting.schema.json', fileMatch: ['setting.json', 'setting.docx.json'], schema: readSchema('setting.schema.json') },
+    { uri: 'reportmd://setting.pptx.schema.json', fileMatch: ['setting.pptx.json'], schema: readSchema('setting.pptx.schema.json') },
+  ],
+});
 
-async function validate(text) {
-  const doc = TextDocument.create('file:///r/setting.json', 'json', 1, text);
+async function validate(text, name = 'setting.json') {
+  const doc = TextDocument.create('file:///r/' + name, 'json', 1, text);
   const json = service.parseJSONDocument(doc);
   const list = await service.doValidation(doc, json);
   return list.map((d) => ({ line: d.range.start.line, message: d.message }));
@@ -40,7 +45,7 @@ test('誤った値と未知のキーに印を付ける', async () => {
     '  "font": { "main": "My_Font" },',
     '  "heading": { "sizes": ["14pt", "12pt"] },',
     '  "table": { "rules": { "rows": true }, "font_size": null },',
-    '  "slide": { "title": { "color": "navy" } },',
+    '  "slide": { "title": { "color": "red" } },',
     '  "colour": 1',
     '}',
   ].join('\n');
@@ -51,6 +56,25 @@ test('誤った値と未知のキーに印を付ける', async () => {
   // 正しい値（null・false・長さ）には印を付けない
   const ok = '{ "table": { "font_size": null, "rules": { "rows": false, "vertical": "0.4pt" } }, "text": { "font_size": "11pt" } }';
   assert.deepStrictEqual(await validate(ok), []);
+});
+
+test('PowerPoint の設定（setting.pptx.json）を調べる', async () => {
+  const defaults = fs.readFileSync(path.join(__dirname, '..', '..', 'internal', 'config', 'default.pptx.json'), 'utf8');
+  assert.deepStrictEqual(await validate(defaults, 'setting.pptx.json'), []);
+  assert.deepStrictEqual(await validate('{ "title": { "color": "#c00000", "rule": false } }', 'setting.pptx.json'), []);
+  const text = [
+    '{',
+    '  "title": { "color": "navy" },',
+    '  "text": { "size": "20" },',
+    '  "page": {}',
+    '}',
+  ].join('\n');
+  const lines = (await validate(text, 'setting.pptx.json')).map((d) => d.line);
+  for (const line of [1, 2, 3]) {
+    assert.ok(lines.includes(line), `${line + 1} 行目に印がない: ${JSON.stringify(await validate(text, 'setting.pptx.json'))}`);
+  }
+  // 形式ごとの上書き（setting.docx.json）は、setting.json と同じ項目
+  assert.deepStrictEqual(await validate('{ "font": { "main": "Yu Mincho" } }', 'setting.docx.json'), []);
 });
 
 test('表紙のレイアウトの項目を調べる', async () => {
@@ -73,7 +97,7 @@ test('表紙のレイアウトの項目を調べる', async () => {
 });
 
 test('項目と値を補完する', async () => {
-  assert.deepStrictEqual((await complete('{ }', 2)).sort(), ['caption', 'cover', 'document', 'equation', 'font', 'heading', 'page', 'slide', 'table', 'text']);
+  assert.deepStrictEqual((await complete('{ }', 2)).sort(), ['caption', 'cover', 'document', 'equation', 'font', 'heading', 'page', 'table', 'text']);
   const text = '{ "table": { "width": } }';
   const values = await complete(text, text.indexOf(':', text.indexOf('width')) + 2);
   assert.deepStrictEqual(values.sort(), ['"auto"', '"full"']);

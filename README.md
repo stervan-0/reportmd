@@ -72,7 +72,7 @@ reportmd build report.reportmd -o report.tex   # LaTeX のソース（.html .doc
 [vscode/](vscode/README.md) に、VS Code の拡張機能があります。独自記法の色分け、保存するたびの誤りの表示（波線）、VS Code の中での PDF のプレビュー（保存しなくても、入力するたびに更新）、ボタンからの PDF の生成・監視、`setting.json` の補完と検査ができます。
 
 ```bash
-make vscode     # vscode/reportmd-0.7.0.vsix を作る（Node.js が必要）
+make vscode     # vscode/reportmd-0.8.0.vsix を作る（Node.js が必要）
 ```
 
 VS Code の拡張機能ビューの「…」→「VSIX からのインストール...」で入れます。
@@ -128,6 +128,13 @@ cover:
   "text": { "font_size": "11pt", "paragraph_indent": 0 }
 }
 ```
+
+`setting.json` はどの出力形式にも使う共通の設定です。同じ場所に形式ごとの設定ファイルを置くと、その形式の出力だけ設定を変えられます。
+
+| ファイル | 内容 |
+| --- | --- |
+| `setting.pdf.json`・`setting.html.json`・`setting.docx.json` | `setting.json` と同じ項目。書いた項目だけ、その形式で上書きします（例：Word だけ `{"font": {"main": "Yu Mincho"}}`） |
+| `setting.pptx.json` | PowerPoint のスライドの題名（フォント・太字・文字サイズ・色・下線）と本文の文字サイズ。既定値は [internal/config/default.pptx.json](internal/config/default.pptx.json) |
 
 ### 表の書式
 

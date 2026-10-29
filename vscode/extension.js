@@ -14,7 +14,8 @@ const { parseDiagnostics, referencesIn, findReferences, settingKeyIn, findSettin
 const { commandLine, resolveExecutable, isNotFound } = require('./lib/command');
 const { Preview, VIEW_TYPE } = require('./preview');
 
-const SETTING_FILE = 'setting.json';
+// check が使う設定ファイル（共通の設定と、PDF の設定。check は PDF の設定で調べる）
+const SETTING_FILES = ['setting.json', 'setting.pdf.json'];
 
 let output; // 出力パネル（reportmd の出力をそのまま表示する）
 let diagnostics; // エラー・警告
@@ -103,7 +104,7 @@ function onSave(doc) {
   let targets = [];
   if (isReport(doc)) {
     targets = [doc];
-  } else if (path.basename(doc.uri.fsPath) === SETTING_FILE) {
+  } else if (SETTING_FILES.includes(path.basename(doc.uri.fsPath))) {
     // 設定ファイルを保存したら、同じフォルダの文書を調べ直す
     const dir = path.dirname(doc.uri.fsPath);
     targets = vscode.workspace.textDocuments.filter((d) => isReport(d) && path.dirname(d.uri.fsPath) === dir);

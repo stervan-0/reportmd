@@ -65,7 +65,7 @@ func TestCoverLayoutWarnings(t *testing.T) {
 		"未知の設定キーを無視します: cover.layout の 1 番目の colour",
 		"cover.layout の 2 番目の size は、space の項目では使いません",
 	}
-	if !reflect.DeepEqual(cfg.Warnings, want) {
+	if !reflect.DeepEqual(messages(cfg.Warnings), want) {
 		t.Errorf("未知のキーと、使わないキーは警告する: %v", cfg.Warnings)
 	}
 }

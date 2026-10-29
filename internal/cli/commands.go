@@ -24,17 +24,17 @@ const watchInterval = 200 * time.Millisecond
 // 変更を監視し、変更があるたびに生成し直す。エラーがあっても監視は続ける。
 // live（--stdin）があれば、文書の内容はファイルの代わりに live のものを使い、その内容が変わったときに
 // 生成し直す（保存して、ファイルが受け取った内容と同じになっただけなら、生成し直さない）。
-func (c *CLI) watchLoop(input, output, configPath string, live *liveSource, run func() int) int {
+func (c *CLI) watchLoop(input, output string, configPaths []string, live *liveSource, run func() int) int {
 	ignore := map[string]bool{}
 	if abs, err := filepath.Abs(output); err == nil {
 		ignore[abs] = true
 	}
-	state := func() string { return snapshot(input, configPath, ignore) }
+	state := func() string { return snapshot(input, configPaths, ignore) }
 	if live != nil {
 		if abs, err := filepath.Abs(input); err == nil {
 			ignore[abs] = true
 		}
-		state = func() string { return snapshot(input, configPath, ignore) + live.state(input) }
+		state = func() string { return snapshot(input, configPaths, ignore) + live.state(input) }
 		live.waitFirst()
 	}
 
@@ -63,14 +63,14 @@ func (c *CLI) watchLoop(input, output, configPath string, live *liveSource, run 
 const watchMaxFiles = 5000
 
 // snapshot は、監視対象のファイルの更新時刻と大きさをまとめた文字列を返す。
-func snapshot(input, configPath string, ignore map[string]bool) string {
+func snapshot(input string, configPaths []string, ignore map[string]bool) string {
 	var b strings.Builder
 	add := func(path string, info fs.FileInfo) {
 		fmt.Fprintf(&b, "%s|%d|%d\n", path, info.ModTime().UnixNano(), info.Size())
 	}
-	if configPath != "" {
-		if info, err := os.Stat(configPath); err == nil {
-			add(configPath, info)
+	for _, path := range configPaths {
+		if info, err := os.Stat(path); err == nil {
+			add(path, info)
 		}
 	}
 
@@ -329,7 +329,7 @@ func (c *CLI) doctor(args []string) int {
 		}
 	}
 
-	cfg, err := config.Load(opts.config, "")
+	cfg, err := config.Load(opts.config, "", build.PDF.SettingName())
 	if err != nil {
 		var e *config.Error
 		if errors.As(err, &e) {

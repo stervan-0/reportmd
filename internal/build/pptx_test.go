@@ -32,13 +32,15 @@ func TestPptxMasterDefault(t *testing.T) {
 }
 
 func TestPptxMasterCustom(t *testing.T) {
-	cfg, err := config.New(map[string]any{
-		"heading": map[string]any{"font": "A<B", "bold": false},
-		"slide":   map[string]any{"title": map[string]any{"size": "28pt", "color": "#c00000"}, "text": map[string]any{"size": "18pt"}},
+	slide, _, err := config.NewSlide(map[string]any{
+		"title": map[string]any{"font": "A<B", "bold": false, "size": "28pt", "color": "#c00000"},
+		"text":  map[string]any{"size": "18pt"},
 	}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
+	cfg := config.Default()
+	cfg.Slide = *slide
 	got := PptxMaster(testMaster, cfg)
 	for _, want := range []string{`<a:defRPr sz="2800" kern="1200"><a:solidFill><a:srgbClr val="C00000"/>`, `typeface="A&lt;B"`, `<a:lvl1pPr><a:defRPr sz="1800"`} {
 		if !strings.Contains(got, want) {
@@ -55,10 +57,12 @@ func TestTitleRule(t *testing.T) {
 			t.Errorf("%s がない: %s", want, got)
 		}
 	}
-	cfg, err := config.New(map[string]any{"slide": map[string]any{"title": map[string]any{"rule": false}}}, "")
+	slide, _, err := config.NewSlide(map[string]any{"title": map[string]any{"rule": false}}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
+	cfg := config.Default()
+	cfg.Slide = *slide
 	if got := titleRule(testMaster, cfg); got != "" {
 		t.Errorf("rule が false なら線を引かない: %s", got)
 	}

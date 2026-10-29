@@ -42,6 +42,15 @@ const (
 	Pptx  Format = "pptx"
 )
 
+// SettingName は、形式ごとの設定ファイル（setting.<形式>.json）の形式の名前。
+// LaTeX のソースは PDF の元なので、PDF の設定を使う。
+func (f Format) SettingName() string {
+	if f == LaTeX {
+		return string(PDF)
+	}
+	return string(f)
+}
+
 // FormatFromPath は、出力ファイルの拡張子から形式を決める。
 func FormatFromPath(path string) (Format, bool) {
 	switch strings.ToLower(filepath.Ext(path)) {
@@ -201,7 +210,7 @@ func CheckFonts(cfg *config.Config) error {
 			continue
 		}
 		return &Error{
-			File: cfg.SourceName(),
+			File: cfg.SourceOf(item[0]),
 			Message: fmt.Sprintf("フォント「%s」が見つかりません（設定: %s）。`reportmd fonts` で使えるフォント名を確認してください",
 				item[1], item[0]),
 		}

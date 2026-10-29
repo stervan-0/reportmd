@@ -1,0 +1,105 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "reportmd の PowerPoint の設定ファイル（setting.pptx.json）",
+  "description": "PowerPoint（.pptx）の出力だけで使う設定です。書かなかった項目は既定値になります。項目の一覧は reportmd の仕様書の7章を参照してください。",
+  "type": "object",
+  "additionalProperties": false,
+  "definitions": {
+    "length": {
+      "type": "string",
+      "pattern": "^\\d+(\\.\\d+)?(mm|cm|pt|in)$",
+      "patternErrorMessage": "単位つきの長さ（例：\"25mm\"。単位は mm cm pt in）"
+    },
+    "font": {
+      "type": "string",
+      "pattern": "^[^{}\\\\%#&$^_~]+$",
+      "patternErrorMessage": "空でないフォント名。{ } \\ % # & $ ^ _ ~ は使えません（使えるフォント名は reportmd fonts で確認できます）",
+      "examples": [
+        "IPAexMincho",
+        "IPAexGothic",
+        "Noto Serif CJK JP",
+        "Noto Sans CJK JP",
+        "Noto Sans Mono CJK JP"
+      ]
+    },
+    "rule": {
+      "description": "線の太さ（例：\"0.5pt\"）。false なら線を引かない",
+      "oneOf": [
+        {
+          "const": false
+        },
+        {
+          "$ref": "#/definitions/length"
+        }
+      ]
+    }
+  },
+  "properties": {
+    "title": {
+      "description": "スライドの題名（見出し）",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "font": {
+          "description": "題名のフォント",
+          "$ref": "#/definitions/font",
+          "default": "IPAexGothic"
+        },
+        "bold": {
+          "description": "題名を太字にするか",
+          "type": "boolean",
+          "default": true
+        },
+        "size": {
+          "description": "題名の文字サイズ（\"10pt\"〜\"72pt\"）",
+          "type": "string",
+          "pattern": "^\\d+(\\.\\d+)?pt$",
+          "patternErrorMessage": "\"10pt\"〜\"72pt\" の文字サイズ",
+          "examples": [
+            "28pt",
+            "32pt",
+            "36pt",
+            "40pt"
+          ],
+          "default": "36pt"
+        },
+        "color": {
+          "description": "題名と、題名の下の線の色（16進数6桁。例：\"1F3864\" は濃い紺、\"000000\" は黒）",
+          "type": "string",
+          "pattern": "^#?[0-9A-Fa-f]{6}$",
+          "patternErrorMessage": "16進数6桁の色（例：\"1F3864\"）",
+          "examples": [
+            "1F3864",
+            "000000",
+            "C00000"
+          ],
+          "default": "1F3864"
+        },
+        "rule": {
+          "description": "題名の下の線（題名のあるスライドだけに引く）",
+          "$ref": "#/definitions/rule",
+          "default": "2pt"
+        }
+      }
+    },
+    "text": {
+      "description": "スライドの本文",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "size": {
+          "description": "本文の文字サイズ（\"8pt\"〜\"48pt\"。箇条書きの2段目からは、これより小さくする）",
+          "type": "string",
+          "pattern": "^\\d+(\\.\\d+)?pt$",
+          "patternErrorMessage": "\"8pt\"〜\"48pt\" の文字サイズ",
+          "examples": [
+            "18pt",
+            "20pt",
+            "24pt"
+          ],
+          "default": "20pt"
+        }
+      }
+    }
+  }
+}

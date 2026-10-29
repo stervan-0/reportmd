@@ -21,7 +21,7 @@ func load(t *testing.T, json string) (*Config, error) {
 	t.Helper()
 	dir := t.TempDir()
 	path := writeFile(t, dir, "s.json", json)
-	return Load(path, "")
+	return Load(path, "", "")
 }
 
 func mustLoad(t *testing.T, json string) *Config {
@@ -92,19 +92,19 @@ func TestFindUserFile(t *testing.T) {
 	writeFile(t, dir, "setting.json", `{"text": {"font_size": "12pt"}}`)
 	other := writeFile(t, dir, "other.json", `{"text": {"font_size": "11pt"}}`)
 
-	cfg, err := Load("", input)
+	cfg, err := Load("", input, "")
 	if err != nil || cfg.Text.FontSize != "12pt" {
 		t.Errorf("入力ファイルと同じ場所の setting.json を使う: %v", err)
 	}
-	cfg, err = Load(other, input)
+	cfg, err = Load(other, input, "")
 	if err != nil || cfg.Text.FontSize != "11pt" {
 		t.Errorf("-c で指定したファイルを優先する: %v", err)
 	}
-	_, err = Load(filepath.Join(dir, "none.json"), input)
+	_, err = Load(filepath.Join(dir, "none.json"), input, "")
 	if e := configError(t, err); !strings.Contains(e.Message, "見つかりません") || !strings.HasSuffix(e.File, "none.json") {
 		t.Errorf("指定された設定ファイルがなければエラー: %+v", e)
 	}
-	cfg, err = Load("", filepath.Join(t.TempDir(), "x.rmd"))
+	cfg, err = Load("", filepath.Join(t.TempDir(), "x.rmd"), "")
 	if err != nil || cfg.Source != "" {
 		t.Errorf("setting.json がなければ既定値")
 	}
@@ -139,10 +139,6 @@ func TestValidation(t *testing.T) {
 		"table.header.align":      `{"table": {"header": {"align": "top"}}}`,
 		"table.rules.top":         `{"table": {"rules": {"top": true}}}`,
 		"equation.numbering":      `{"equation": {"numbering": 1}}`,
-		"slide.title.size":        `{"slide": {"title": {"size": "100pt"}}}`,
-		"slide.title.color":       `{"slide": {"title": {"color": "navy"}}}`,
-		"slide.title.rule":        `{"slide": {"title": {"rule": true}}}`,
-		"slide.text.size":         `{"slide": {"text": {"size": "20"}}}`,
 		"cover.layout":            `{"cover": {"layout": {"text": "a"}}}`,
 	}
 	for name, json := range cases {
@@ -191,7 +187,7 @@ func TestBOM(t *testing.T) {
 func TestUnknownKeys(t *testing.T) {
 	cfg := mustLoad(t, `{"foo": 1, "page": {"bar": 2, "margin": {"baz": 3}}, "heading": {"bold": false}}`)
 	want := []string{"未知の設定キーを無視します: foo", "未知の設定キーを無視します: page.bar", "未知の設定キーを無視します: page.margin.baz"}
-	if strings.Join(cfg.Warnings, "|") != strings.Join(want, "|") {
+	if strings.Join(messages(cfg.Warnings), "|") != strings.Join(want, "|") {
 		t.Errorf("未知のキーは警告する: %v", cfg.Warnings)
 	}
 }

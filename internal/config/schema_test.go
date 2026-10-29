@@ -10,11 +10,16 @@ import (
 	"testing"
 )
 
-// VS Code 拡張機能の setting.json のスキーマ（補完と検査に使う）が、
-// 設定の項目（rules）と既定値（default.json）に合っていることを確かめる。
+// VS Code 拡張機能の設定ファイルのスキーマ（補完と検査に使う）が、
+// 設定の項目（rules・slideRules）と既定値（default.json・default.pptx.json）に合っていることを確かめる。
 // 設定の項目を増やしたり既定値を変えたりしたら、スキーマも直す。
 func TestVSCodeSchemaMatchesConfig(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join("..", "..", "vscode", "schemas", "setting.schema.json"))
+	t.Run("setting.json", func(t *testing.T) { checkSchema(t, "setting.schema.json", rules, DefaultJSON()) })
+	t.Run("setting.pptx.json", func(t *testing.T) { checkSchema(t, "setting.pptx.schema.json", slideRules, DefaultPptxJSON()) })
+}
+
+func checkSchema(t *testing.T, name string, rules []rule, defaultJSON []byte) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "vscode", "schemas", name))
 	if err != nil {
 		t.Skipf("スキーマがないため飛ばす: %v", err)
 	}
@@ -23,7 +28,7 @@ func TestVSCodeSchemaMatchesConfig(t *testing.T) {
 		t.Fatalf("スキーマが JSON として不正: %v", err)
 	}
 	var defaults map[string]any
-	if err := json.Unmarshal(DefaultJSON(), &defaults); err != nil {
+	if err := json.Unmarshal(defaultJSON, &defaults); err != nil {
 		t.Fatal(err)
 	}
 

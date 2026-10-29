@@ -1,9 +1,13 @@
 // Package config は、設定ファイル（JSON）を読み込み、内蔵の既定値と統合して検証する。
 //
-// 探索順:
+// 共通の設定ファイルの探索順:
 //  1. 明示的に指定されたファイル（-c / --config）
 //  2. 入力ファイルと同じディレクトリの setting.json
 //  3. 内蔵の既定値（default.json）だけを使う
+//
+// 共通の設定ファイルと同じ場所の、形式ごとの設定ファイル（format.go）も読む。
+// setting.pdf.json・setting.html.json・setting.docx.json は、その形式の出力だけ共通の設定を上書きする。
+// setting.pptx.json は、PowerPoint の出力だけで使う、別の項目の設定（default.pptx.json）。
 package config
 
 import (
@@ -96,25 +100,21 @@ type Config struct {
 		Numbering bool   `json:"numbering"`
 		Label     string `json:"label"`
 	} `json:"equation"`
-	// PowerPoint のスライドの題名と本文（PowerPoint の出力だけで使う）
-	Slide struct {
-		Title struct {
-			Size  string `json:"size"`
-			Color string `json:"color"` // 16進数6桁（先頭の # はあってもなくてもよい）
-			Rule  any    `json:"rule"`  // false（線を引かない）または線の太さ。SlideRule で読む
-		} `json:"title"`
-		Text struct {
-			Size string `json:"size"`
-		} `json:"text"`
-	} `json:"slide"`
 	Cover struct {
 		Layout []CoverItem `json:"layout"`
 	} `json:"cover"`
 
-	// Source は読み込んだ設定ファイルのパス（内蔵の既定値だけなら空）。
+	// Slide は、PowerPoint の設定（setting.pptx.json）。PowerPoint の出力のときだけ読む（ほかは既定値）。
+	Slide Slide `json:"-"`
+
+	// Source は読み込んだ共通の設定ファイルのパス（内蔵の既定値だけなら空）。
 	Source string `json:"-"`
+	// FormatSource は、共通の設定を上書きした形式ごとの設定ファイルのパス（なければ空）。
+	FormatSource string `json:"-"`
+	// formatKeys は、形式ごとの設定ファイルで書いた項目（"font.main" など）。
+	formatKeys map[string]bool
 	// Warnings は、未知のキーなどの警告。
-	Warnings []string `json:"-"`
+	Warnings []Warning `json:"-"`
 }
 
 // CoverItem は、表紙のレイアウト（cover.layout）の1項目。
@@ -136,14 +136,6 @@ func (c *Config) Rule(name string) string {
 	return ""
 }
 
-// SlideRule は、スライドの題名の下の線の太さを返す。線を引かないなら空文字。
-func (c *Config) SlideRule() string {
-	if s, ok := c.Slide.Title.Rule.(string); ok {
-		return s
-	}
-	return ""
-}
-
 // SourceName は、エラー表示に使う設定ファイルの名前。
 func (c *Config) SourceName() string {
 	if c.Source == "" {
@@ -152,30 +144,87 @@ func (c *Config) SourceName() string {
 	return c.Source
 }
 
+// SourceOf は、項目 path（"font.main" など）の値を決めた設定ファイルの名前を返す。
+func (c *Config) SourceOf(path string) string {
+	if c.formatKeys[path] {
+		return c.FormatSource
+	}
+	return c.SourceName()
+}
+
 // Load は設定ファイルを探して読み込む。
 // explicitPath は -c で指定されたファイル、inputPath は入力ファイル（空でもよい）。
-func Load(explicitPath, inputPath string) (*Config, error) {
+// format は出力形式（"pdf" "html" "docx" "pptx"）で、その形式の設定ファイルも読む。空なら共通の設定だけ。
+func Load(explicitPath, inputPath, format string) (*Config, error) {
 	path, err := FindUserFile(explicitPath, inputPath)
 	if err != nil {
 		return nil, err
 	}
 	user := map[string]any{}
 	if path != "" {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return nil, &Error{File: path, Message: fmt.Sprintf("設定ファイルを読み込めません（%v）", err)}
+		if user, err = readUserFile(path); err != nil {
+			return nil, err
 		}
-		value, err := parseJSON(data, path)
+	}
+	layers := []layer{{path, user}}
+
+	// PowerPoint の設定ファイルは、共通の設定の上書きではなく、別の項目（Slide）を持つ
+	base := settingBase(explicitPath, inputPath)
+	if base != "" && format != "" && format != "pptx" {
+		formatPath := FormatFileName(base, format)
+		over, err := readOptionalFile(formatPath)
 		if err != nil {
 			return nil, err
 		}
-		obj, ok := value.(map[string]any)
-		if !ok {
-			return nil, &Error{File: path, Message: "設定ファイルの最上位は { ... } のオブジェクトにしてください"}
+		if over != nil {
+			layers = append(layers, layer{formatPath, over})
 		}
-		user = obj
 	}
-	return New(user, path)
+	cfg, err := newLayered(layers)
+	if err != nil {
+		return nil, err
+	}
+	if format == "pptx" && base != "" {
+		slidePath := FormatFileName(base, "pptx")
+		values, err := readOptionalFile(slidePath)
+		if err != nil {
+			return nil, err
+		}
+		if values != nil {
+			slide, warnings, err := NewSlide(values, slidePath)
+			if err != nil {
+				return nil, err
+			}
+			cfg.Slide = *slide
+			cfg.Warnings = append(cfg.Warnings, warnings...)
+		}
+	}
+	return cfg, nil
+}
+
+// readUserFile は、設定ファイルを読んで、最上位のオブジェクトを返す。
+func readUserFile(path string) (map[string]any, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, &Error{File: path, Message: fmt.Sprintf("設定ファイルを読み込めません（%v）", err)}
+	}
+	value, err := parseJSON(data, path)
+	if err != nil {
+		return nil, err
+	}
+	obj, ok := value.(map[string]any)
+	if !ok {
+		return nil, &Error{File: path, Message: "設定ファイルの最上位は { ... } のオブジェクトにしてください"}
+	}
+	return obj, nil
+}
+
+// readOptionalFile は、あれば設定ファイルを読む。なければ nil。
+func readOptionalFile(path string) (map[string]any, error) {
+	if st, err := os.Stat(path); err != nil || st.IsDir() {
+		return nil, nil
+	}
+	return readUserFile(path)
 }
 
 // FindUserFile は、使う設定ファイルのパスを返す。なければ空文字。
@@ -269,20 +318,49 @@ func normalizeNumbers(value any) any {
 // New は、ユーザーの設定（JSON のオブジェクト）を既定値と統合して検証する。
 // source は表示用の設定ファイル名（空なら内蔵の既定値）。
 func New(user map[string]any, source string) (*Config, error) {
+	return newLayered([]layer{{source, user}})
+}
+
+// layer は、既定値に重ねる設定ファイル1つ分（path は表示用の名前、values はその内容）。
+type layer struct {
+	path   string
+	values map[string]any
+}
+
+// newLayered は、既定値に設定ファイルを順に重ねて検証する。
+// 検証は1つ重ねるごとに行い、エラーと警告は、その値を書いた設定ファイルのものとして示す。
+// 2つ目からは、形式ごとの設定ファイル（上書き）とする。
+func newLayered(layers []layer) (*Config, error) {
 	defaults, err := defaultValues()
 	if err != nil {
 		return nil, err
 	}
-	merged, err := deepMerge(defaults, user, nil, source)
-	if err != nil {
-		return nil, err
-	}
-	if err := validate(merged, source); err != nil {
-		return nil, err
-	}
-	coverWarnings, err := validateCoverLayout(dig(merged, "cover.layout").([]any), source)
-	if err != nil {
-		return nil, err
+	merged := defaults
+	var warnings []Warning
+	for i, l := range layers {
+		if merged, err = deepMerge(merged, l.values, nil, l.path); err != nil {
+			return nil, err
+		}
+		if err := validate(merged, rules, l.path); err != nil {
+			return nil, err
+		}
+		// 表紙のレイアウトは、書いた設定ファイルで調べる（最初は既定値のレイアウトも調べる）
+		if _, given := dig(l.values, "cover.layout").([]any); given || i == 0 {
+			coverWarnings, err := validateCoverLayout(dig(merged, "cover.layout").([]any), l.path)
+			if err != nil {
+				return nil, err
+			}
+			for _, message := range coverWarnings {
+				warnings = append(warnings, Warning{l.path, message})
+			}
+		}
+		for _, name := range unknownKeys(defaults, l.values, nil) {
+			message := "未知の設定キーを無視します: " + name
+			if name == "slide" {
+				message += "（PowerPoint の設定は、setting.pptx.json に書きます）"
+			}
+			warnings = append(warnings, Warning{l.path, message})
+		}
 	}
 
 	data, err := json.Marshal(merged)
@@ -290,14 +368,20 @@ func New(user map[string]any, source string) (*Config, error) {
 		return nil, err
 	}
 	cfg := &Config{}
+	last := layers[len(layers)-1].path
 	if err := json.Unmarshal(data, cfg); err != nil {
-		return nil, &Error{File: source, Message: fmt.Sprintf("設定を読み込めません（%v）", err)}
+		return nil, &Error{File: last, Message: fmt.Sprintf("設定を読み込めません（%v）", err)}
 	}
-	cfg.Source = source
-	for _, name := range unknownKeys(defaults, user, nil) {
-		cfg.Warnings = append(cfg.Warnings, "未知の設定キーを無視します: "+name)
+	cfg.Source = layers[0].path
+	if len(layers) > 1 {
+		cfg.FormatSource = last
+		cfg.formatKeys = map[string]bool{}
+		for _, path := range leafPaths(layers[len(layers)-1].values, "") {
+			cfg.formatKeys[path] = true
+		}
 	}
-	cfg.Warnings = append(cfg.Warnings, coverWarnings...)
+	cfg.Slide = DefaultSlide()
+	cfg.Warnings = warnings
 	return cfg, nil
 }
 
@@ -491,10 +575,6 @@ var rules = []rule{
 	{"table.rules.sides", ruleExpect, orFalse(isLength)},
 	{"equation.numbering", "true または false", isBool},
 	{"equation.label", "文字列", isString},
-	{"slide.title.size", `"10pt"〜"72pt"`, pointIn(10, 72)},
-	{"slide.title.color", `16進数6桁の色（例："1F3864"）`, isColor},
-	{"slide.title.rule", ruleExpect, orFalse(isLength)},
-	{"slide.text.size", `"8pt"〜"48pt"`, pointIn(8, 48)},
 	// 各項目の中身は validateCoverLayout で調べる
 	{"cover.layout", "表紙の項目（{ ... }）の配列", isArray},
 }
@@ -513,7 +593,7 @@ func dig(values map[string]any, path string) any {
 	return current
 }
 
-func validate(values map[string]any, source string) error {
+func validate(values map[string]any, rules []rule, source string) error {
 	for _, r := range rules {
 		value := dig(values, r.path)
 		if r.check(value) {

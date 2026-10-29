@@ -1,0 +1,12 @@
+{
+  "title": {
+    "font": "IPAexGothic",
+    "bold": true,
+    "size": "36pt",
+    "color": "1F3864",
+    "rule": "2pt"
+  },
+  "text": {
+    "size": "20pt"
+  }
+}

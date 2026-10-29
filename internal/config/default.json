@@ -57,16 +57,6 @@
     "numbering": true,
     "label": "式"
   },
-  "slide": {
-    "title": {
-      "size": "36pt",
-      "color": "1F3864",
-      "rule": "2pt"
-    },
-    "text": {
-      "size": "20pt"
-    }
-  },
   "cover": {
     "layout": [
       { "space": "40mm" },

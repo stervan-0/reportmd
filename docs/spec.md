@@ -1,6 +1,6 @@
 # reportmd 仕様書
 
-- バージョン：0.18.0（Go による書き直し）
+- バージョン：0.19.0（Go による書き直し）
 - ステータス：設計中
 - 言語：Go（0.1.0 は Ruby で実装。独自構文・設定・出力の互換性を保つ）
 - 文書形式：Markdownベースの独自拡張形式
@@ -88,7 +88,9 @@ reportmd/
 │   ├── config/
 │   │   ├── config.go
 │   │   ├── cover.go
-│   │   └── default.json
+│   │   ├── format.go
+│   │   ├── default.json
+│   │   └── default.pptx.json
 │   ├── preprocess/
 │   │   └── preprocess.go
 │   └── build/
@@ -120,6 +122,7 @@ reportmd/
 - `internal/cli`：コマンドライン引数の処理と各コマンド（`cli.go` にバージョン番号）
 - `internal/config`：設定ファイルの読み込み・検証（`cover.go` は表紙のレイアウトの検証と `{名前}` の解析）
 - `internal/config/default.json`：内蔵のデフォルト設定（設定ファイルがない場合や、項目が省略された場合に使う。バイナリに埋め込む）
+- `internal/config/format.go`・`default.pptx.json`：形式ごとの設定ファイル（7.1）の読み込みと、PowerPoint の設定（`setting.pptx.json`）の検証・内蔵の既定値（バイナリに埋め込む）
 - `internal/preprocess`：独自構文の検出と変換
 - `internal/build`：文書の生成（Pandoc・XeLaTeXの呼び出し。`cover.go` は表紙のレイアウトを `filter.lua` に渡す `cover.json` の作成）
 - `filter.lua`：Pandoc解析後の文書構造に対する変換（バイナリに埋め込む）
@@ -172,7 +175,7 @@ reportmd build report.reportmd -o output.pdf
 | `.tex` | LaTeX のソース | PDF と同じプリアンブルを含む単独の文書。XeLaTeX でそのまま組める |
 | `.html` `.htm` | HTML | 単独のページ。数式は MathML。ページの題名は `document.title`（なければ入力ファイル名）。右揃え・中央揃えは `text-align`、図表の番号とキャプションは付く |
 | `.docx` | Word | 用紙・フォントなどの設定を、PDF と同じ寸法で反映する（下を参照） |
-| `.pptx` | PowerPoint | 見出しごとに1枚のスライド（下を参照）。図表の番号とキャプションは付く。題名と本文の書式は `slide` の設定に従う。用紙・本文のフォントなど、ほかの設定は反映しない |
+| `.pptx` | PowerPoint | 見出しごとに1枚のスライド（下を参照）。図表の番号とキャプションは付く。題名と本文の書式は PowerPoint の設定（`setting.pptx.json`。7.6）に従う。用紙・本文のフォントなど、ほかの設定は反映しない |
 
 そのほかの拡張子はエラーとする。
 
@@ -189,10 +192,10 @@ PowerPoint では、次のようにスライドに分ける（Pandoc を `--slid
 
 スライドの題名は、本文より目立つように、次の書式にする。
 
-- reportmd が、設定から PowerPoint の雛形（`reference.pptx`）を作り、Pandoc に `--reference-doc` で渡す。雛形は、Pandoc の標準の雛形（`pandoc --print-default-data-file reference.pptx`）のスライドマスターの、題名（`titleStyle`）と本文（`bodyStyle`）の書式を書き換えたもの。
-- 題名：文字サイズは `slide.title.size`、色は `slide.title.color`、フォントは `heading.font`、太字は `heading.bold` に従う。配置（中央揃え）と枠の位置は、標準の雛形のまま。
-- 本文：箇条書きの1段目の文字サイズを `slide.text.size` にし、2段目からは標準の雛形と同じ比率で小さくする（標準の雛形の 24pt・21pt・18pt・15pt を、`slide.text.size` ÷ 24pt の倍率で縮める）。本文のフォントは、標準の雛形のまま。
-- 題名の下の線：題名のあるスライドだけに、題名の枠の下端に、枠と同じ幅で、`slide.title.rule` の太さ・`slide.title.color` の色の線を引く。表紙や改ページのあとなど、題名のないスライドには引かない。`slide.title.rule` が `false` なら引かない。線はスライドごとの図形なので、Pandoc の出力のあとで、各スライドに書き足す。
+- reportmd が、PowerPoint の設定（`setting.pptx.json`。7.6）から PowerPoint の雛形（`reference.pptx`）を作り、Pandoc に `--reference-doc` で渡す。雛形は、Pandoc の標準の雛形（`pandoc --print-default-data-file reference.pptx`）のスライドマスターの、題名（`titleStyle`）と本文（`bodyStyle`）の書式を書き換えたもの。
+- 題名：文字サイズ・色・フォント・太字は `title.size`・`title.color`・`title.font`・`title.bold` に従う。配置（中央揃え）と枠の位置は、標準の雛形のまま。
+- 本文：箇条書きの1段目の文字サイズを `text.size` にし、2段目からは標準の雛形と同じ比率で小さくする（標準の雛形の 24pt・21pt・18pt・15pt を、`text.size` ÷ 24pt の倍率で縮める）。本文のフォントは、標準の雛形のまま。
+- 題名の下の線：題名のあるスライドだけに、題名の枠の下端に、枠と同じ幅で、`title.rule` の太さ・`title.color` の色の線を引く。表紙や改ページのあとなど、題名のないスライドには引かない。`title.rule` が `false` なら引かない。線はスライドごとの図形なので、Pandoc の出力のあとで、各スライドに書き足す。
 
 Word では、PDF とできるだけ同じ体裁になるよう、設定の内容を Word のスタイルにする。
 
@@ -207,7 +210,7 @@ Word では、PDF とできるだけ同じ体裁になるよう、設定の内�
 - 文中の数式（`$...$`）だけの段落（表のセル・リストの項目など）は、数式の後ろに幅のない空白（U+200B）を置く。Word は、ほかの文字のない段落の数式を、独立した数式として中央に大きく組むため。U+200B は、印刷・PDF では幅を取らない（Word の PDF で確認済み）が、Word で編集記号を表示すると、灰色の枠に見える（Word の仕様。ほかの幅のない文字でも同じ）。
 - 表紙は、項目ごとのスタイル（揃え・文字サイズ・太字・行送り）で組み、`fields` は罫線のない表にする。`"fill"` の空きは、本文の高さから、ほかの項目の高さ（各行が1行に収まるとして計算する）を引いて等分する。表紙のあとはセクションを区切り、表紙にはページ番号を付けない。
 - Pandoc は表のスタイルを1種類（`Table`）しか使わず、表ごとに左寄せを書き込む。そこで、生成した文書の表から左寄せを取り除き（スタイルの配置を使う）、数式と表紙の表は、罫線のない表のスタイルに差し替える。
-- フォントは名前で指定するだけで、文書に埋め込まない。Word を開くコンピューターにそのフォントがなければ、Word が別のフォントで表示する。
+- フォントは名前で指定するだけで、文書に埋め込まない。Word を開くコンピューターにそのフォントがなければ、Word が別のフォントで表示する。Word だけ別のフォントにするときは、`setting.docx.json`（7.1）で上書きする。
 
 ### 4.3 設定ファイルの指定
 
@@ -234,7 +237,7 @@ reportmd build report.reportmd -c setting.json
 
 | コマンド | 説明 |
 | --- | --- |
-| `reportmd watch report.reportmd` | `build -w` と同じ。入力ファイルのあるディレクトリ（画像・`setting.json` を含む。`.` で始まる名前は除く）と `-c` の設定ファイルを0.2秒ごとに調べ、変更があるたびに生成し直す（作業ディレクトリを使い回して速くする。8章）。エラーがあっても表示して監視を続ける。Ctrl+C で終了する |
+| `reportmd watch report.reportmd` | `build -w` と同じ。入力ファイルのあるディレクトリ（画像・`setting.json` を含む。`.` で始まる名前は除く）と `-c` の設定ファイル（とその形式ごとの設定ファイル。7.1）を0.2秒ごとに調べ、変更があるたびに生成し直す（作業ディレクトリを使い回して速くする。8章）。エラーがあっても表示して監視を続ける。Ctrl+C で終了する |
 | `reportmd check report.reportmd` | PDF を作らずに、独自構文・設定・図表と数式の参照（`@名前`）の誤りを調べる。XeLaTeX は使わない。Pandoc がない環境では、独自構文と設定だけを調べる |
 | `reportmd init [DIR]` | 新しいレポートの雛形（`report.reportmd`、すべての項目を書いた `setting.json`、`images/`）を作る。既にあるファイルは上書きしない（`--force` で上書きする） |
 | `reportmd fonts` | 設定に書けるフォント名（`fc-list` で調べた日本語フォント）を表示する。`--all` ですべてのフォント |
@@ -634,6 +637,22 @@ $$ {-}
 2. 入力ファイルと同じディレクトリの `setting.json`
 3. 内蔵のデフォルト設定（`config/default.json`）
 
+`setting.json` は、どの出力形式にも使う共通の設定とする。これに加えて、出力形式ごとの設定ファイルを置ける。
+
+| ファイル | 使う出力 | 内容 |
+| --- | --- | --- |
+| `setting.pdf.json` | PDF・LaTeX のソース（`.tex`） | `setting.json` と同じ項目。書いた項目だけ、共通の設定を上書きする |
+| `setting.html.json` | HTML | 同上 |
+| `setting.docx.json` | Word | 同上（例：Word だけ、Windows にあるフォントにする） |
+| `setting.pptx.json` | PowerPoint | PowerPoint だけの項目（スライドの題名と本文。7.6）。共通の設定の上書きではない |
+
+- 形式ごとの設定ファイルは、共通の設定ファイルと同じ場所の、名前に形式を挟んだファイルとする。`-c my.json` なら `my.docx.json` など、`-c` がなければ入力ファイルと同じディレクトリの `setting.docx.json` など。共通の設定ファイルがなくても読む。
+- 上書きは、7.4 の統合と同じく項目単位とする（`{"font": {"main": "Yu Mincho"}}` なら、`font.mono` は共通の設定のまま）。配列は、書いた配列に置き換える。
+- その出力形式でないときは、形式ごとの設定ファイルを読まない（Word を出力するときに `setting.pdf.json` は読まない）。`check` は PDF の元の LaTeX まで通すので、PDF の設定（`setting.pdf.json`）で調べる。
+- PowerPoint の出力も、表紙・図表のラベル・数式のラベルなど、文書の内容にかかわる項目は `setting.json` を使う。`setting.pptx.json` 以外の、形式ごとの上書き（`setting.pdf.json` など）は読まない。
+- エラーと警告は、その項目を書いた設定ファイルのものとして表示する（上書きした項目の値が不正なら、形式ごとの設定ファイルのエラー）。
+- 0.18.0 で `setting.json` に置いた `slide` は、`setting.pptx.json` に移した。`setting.json` に `slide` があれば、未知のキーとして、移した先を示して警告する。
+
 ### 7.2 設定例
 
 ```json
@@ -695,16 +714,6 @@ $$ {-}
   "equation": {
     "numbering": true,
     "label": "式"
-  },
-  "slide": {
-    "title": {
-      "size": "36pt",
-      "color": "1F3864",
-      "rule": "2pt"
-    },
-    "text": {
-      "size": "20pt"
-    }
   },
   "cover": {
     "layout": [
@@ -778,10 +787,6 @@ $$ {-}
 | `table.rules.sides`     | 表の左右の端の縦線                | 同上                             | `false`                  |
 | `equation.numbering`    | 独立した数式に番号を付けるか（6.9）     | 真偽値                            | `true`                   |
 | `equation.label`        | 数式の参照のラベル文字列（`@名前` -> 「式(1)」） | 文字列                     | `"式"`                    |
-| `slide.title.size`      | PowerPoint のスライドの題名の文字サイズ（4.2） | `pt` 単位、10pt〜72pt          | `"36pt"`                 |
-| `slide.title.color`     | スライドの題名と、題名の下の線の色      | 16進数6桁の文字列（先頭の `#` は省略可）     | `"1F3864"`（濃い紺）          |
-| `slide.title.rule`      | スライドの題名の下の線              | `false`（引かない）または線の太さ（単位付き文字列） | `"2pt"`                  |
-| `slide.text.size`       | スライドの本文（箇条書きの1段目）の文字サイズ | `pt` 単位、8pt〜48pt           | `"20pt"`                 |
 | `cover.layout`          | 表紙のレイアウト（5.4・7.5）       | 表紙の項目の配列                       | 7.2 の例のとおり（タイトル・副題と、科目〜氏名の表） |
 
 ### 7.4 読み込みと検証のルール
@@ -815,6 +820,37 @@ $$ {-}
 - `text` の行と、`fields` の各行（値の側）は、`{名前}` を含み、差し込む値がどれも空（フロントマターにない、または空白だけ）なら出力しない。`fields` の行がすべて出力されなければ、表も出力しない。
 - `text`・`space`・`fields` が1つもない、または2つ以上ある項目はエラーとする。未知のキーは警告して無視する。
 - エラー・警告では、項目の位置を「`cover.layout` の 3 番目」のように1から数えて示す。
+
+### 7.6 PowerPoint の設定（`setting.pptx.json`）
+
+PowerPoint の出力だけで使う、スライドの題名と本文の書式（4.2）。書かなかった項目は、内蔵の既定値（`config/default.pptx.json`）を使う。
+
+```json
+{
+  "title": {
+    "font": "IPAexGothic",
+    "bold": true,
+    "size": "36pt",
+    "color": "1F3864",
+    "rule": "2pt"
+  },
+  "text": {
+    "size": "20pt"
+  }
+}
+```
+
+| 項目 | 意味 | 型・許容値 | 既定値 |
+| --- | --- | --- | --- |
+| `title.font` | 題名のフォント | 文字列（フォント名） | `"IPAexGothic"` |
+| `title.bold` | 題名を太字にするか | 真偽値 | `true` |
+| `title.size` | 題名の文字サイズ | `pt` 単位、10pt〜72pt | `"36pt"` |
+| `title.color` | 題名と、題名の下の線の色 | 16進数6桁の文字列（先頭の `#` は省略可） | `"1F3864"`（濃い紺） |
+| `title.rule` | 題名の下の線 | `false`（引かない）または線の太さ（単位付き文字列） | `"2pt"` |
+| `text.size` | 本文（箇条書きの1段目）の文字サイズ | `pt` 単位、8pt〜48pt | `"20pt"` |
+
+- 読み込みと検証のルールは 7.4 と同じ（未知のキーは警告、不正な値はエラー）。
+- フォントは名前で指定するだけで、インストールされているかは調べない（PowerPoint を開くコンピューターにそのフォントがなければ、PowerPoint が別のフォントで表示する）。
 
 ## 8. PDF生成仕様
 
@@ -964,7 +1000,7 @@ PDF生成時に一時ファイルを使用する場合は、一時ディレク�
   - 文書の警告で `@名前` を含むもの（見つからない参照）：文書の中のその `@名前` の位置（コードブロックの中は除く）
   - 設定ファイル（`setting.json`）のもので項目名を含むもの：設定ファイルの中のその項目のキーの位置
   - そのほか：ファイルの先頭の行
-- `setting.json` を保存したときは、同じフォルダの開いている文書を調べ直す。
+- `setting.json`・`setting.pdf.json`（`check` が使う設定）を保存したときは、同じフォルダの開いている文書を調べ直す。
 - 監視中（13.3）の文書は check を実行せず、watch の出力（最後の「変更を検出しました」より後）からエラー・警告を表示する。生成し直すたびに表示を入れ替える。
 - 設定 `reportmd.checkOnSave` が `false` なら、保存時に調べない。
 
@@ -1008,8 +1044,8 @@ PDF生成時に一時ファイルを使用する場合は、一時ディレク�
 
 ### 13.6 setting.json の補完と検査
 
-- `schemas/setting.schema.json`（JSON Schema）を、`setting.json` という名前のファイルに結び付ける。項目と値の候補・説明・既定値を表示し、7.3 と同じ規則（列挙・範囲・長さの形式・フォント名に使えない文字・未知のキー）で印を付ける。
-- スキーマの項目と既定値が、本体の設定の規則と `default.json` に一致することを、Go のテスト（`internal/config/schema_test.go`）で確かめる。
+- `schemas/setting.schema.json`（JSON Schema）を、`setting.json`・`setting.pdf.json`・`setting.html.json`・`setting.docx.json` という名前のファイルに、`schemas/setting.pptx.schema.json` を `setting.pptx.json` に結び付ける。項目と値の候補・説明・既定値を表示し、7.3・7.6 と同じ規則（列挙・範囲・長さの形式・フォント名に使えない文字・未知のキー）で印を付ける。
+- スキーマの項目と既定値が、本体の設定の規則と `default.json`・`default.pptx.json` に一致することを、Go のテスト（`internal/config/schema_test.go`）で確かめる。
 
 ### 13.7 テストとパッケージ
 
@@ -1025,7 +1061,7 @@ PDF生成時に一時ファイルを使用する場合は、一時ディレク�
 | 項目 | 仮決めの内容 | 場所 |
 | --- | --- | --- |
 | 本文へのタイトル出力 | フロントマターの `title` / `author` はPDFメタデータに使う。本文には、表紙を付けた場合だけ出す | 5.2 |
-| 設定ファイルの探索順 | `-c` → 入力ファイルと同じ場所の `setting.json` → 内蔵デフォルト（`config/default.json`） | 7.1 |
+| 設定ファイルの探索順 | `-c` → 入力ファイルと同じ場所の `setting.json` → 内蔵デフォルト（`config/default.json`）。形式ごとの設定ファイル（`setting.docx.json` など）は、その隣 | 7.1 |
 | `paragraph_indent` の既定値 | `1`（1字下げ。日本語文書の標準） | 7.3 |
 | 表示形式 | 「図1 タイトル」（半角スペース1個）。ラベル文字は設定で変更可 | 6.7.4 |
 | 内容のない `->` / `<->` | 読み飛ばす（出力しない） | 6.3 |

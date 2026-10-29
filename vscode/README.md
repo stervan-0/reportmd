@@ -14,7 +14,7 @@ reportmd（Markdown で大学のレポートを書いて PDF にするツール�
 - **PDF の生成**：エディタの右上のボタン、ステータスバー、コマンドパレット（`reportmd:` で始まるコマンド）から実行できます。
   - 「PDF を生成」：`reportmd build` を1回実行します。
   - 「監視」：`reportmd watch` を実行し、入力・保存するたびに PDF を作り直します。もう一度押すと止まります。監視中は、生成したときのエラー（LaTeX のエラーを含む）を表示します。
-- **setting.json の補完と検査**：項目と値の候補・説明を表示し、誤った値に印を付けます。
+- **setting.json の補完と検査**：項目と値の候補・説明を表示し、誤った値に印を付けます。形式ごとの設定ファイル（`setting.pdf.json`・`setting.html.json`・`setting.docx.json`・`setting.pptx.json`）も同じです。
 
 ## 必要なもの
 
@@ -27,7 +27,7 @@ reportmd（Markdown で大学のレポートを書いて PDF にするツール�
 
 ```bash
 cd vscode
-npm run package     # reportmd-0.7.0.vsix ができる（Node.js が必要。リポジトリの最上位で make vscode でも可）
+npm run package     # reportmd-0.8.0.vsix ができる（Node.js が必要。リポジトリの最上位で make vscode でも可）
 ```
 
 VS Code の拡張機能ビューの「…」メニュー →「VSIX からのインストール...」で、できた `.vsix` を選びます。WSL に接続した VS Code で行うと、WSL の側に入ります。

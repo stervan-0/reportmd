@@ -22,7 +22,7 @@ func loadCase(t *testing.T, name string) *config.Config {
 	if name != "default" {
 		path = filepath.Join("testdata", name+".json")
 	}
-	cfg, err := config.Load(path, "")
+	cfg, err := config.Load(path, "", "pdf")
 	if err != nil {
 		t.Fatal(err)
 	}

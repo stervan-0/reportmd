@@ -18,7 +18,7 @@ import (
 )
 
 // Version は reportmd のバージョン。
-const Version = "0.18.0"
+const Version = "0.19.0"
 
 const usage = `使い方:
   reportmd                                 （いちばん簡単な使い方。下を参照）
@@ -253,8 +253,8 @@ func (c *CLI) reportError(input string, err error) int {
 }
 
 func (c *CLI) reportConfigWarnings(cfg *config.Config) {
-	for _, message := range cfg.Warnings {
-		fmt.Fprintln(c.Stderr, diagnostic(cfg.SourceName(), 0, "warning", message))
+	for _, w := range cfg.Warnings {
+		fmt.Fprintln(c.Stderr, diagnostic(w.SourceName(), 0, "warning", w.Message))
 	}
 }
 
@@ -354,7 +354,7 @@ func (c *CLI) build(args []string, watch bool) int {
 		if live != nil {
 			source = live.get()
 		}
-		cfg, err := config.Load(opts.config, input)
+		cfg, err := config.Load(opts.config, input, format.SettingName())
 		if err != nil {
 			return c.reportError(input, err)
 		}
@@ -384,7 +384,12 @@ func (c *CLI) build(args []string, watch bool) int {
 	}
 
 	if watching {
-		return c.watchLoop(input, output, opts.config, live, run)
+		configPaths := []string{}
+		if opts.config != "" {
+			// -c の設定ファイルが入力ファイルと別の場所にあれば、形式ごとの設定ファイルも監視する
+			configPaths = append(configPaths, opts.config, config.FormatFileName(opts.config, format.SettingName()))
+		}
+		return c.watchLoop(input, output, configPaths, live, run)
 	}
 	return run()
 }
@@ -443,7 +448,8 @@ func (c *CLI) check(args []string) int {
 			return c.reportError(input, err)
 		}
 	}
-	cfg, err := config.Load(opts.config, input)
+	// check は PDF の元の LaTeX まで通すので、PDF の設定で調べる
+	cfg, err := config.Load(opts.config, input, build.PDF.SettingName())
 	if err != nil {
 		return c.reportError(input, err)
 	}
