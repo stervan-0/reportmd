@@ -26,8 +26,13 @@
 \makeatletter
 \newcommand{\reportmdheading}[2]{\reportmdheadlatin\reportmdheadcjk{{if .HeadingBold}}\bfseries{{end}}\fontsize{#1}{#2}\selectfont}
 \renewcommand{\@seccntformat}[1]{\csname the#1\endcsname\hspace{1em}}
+{{- if .HeadingRules}}
+% 見出しの下の線（#1：文字との間、#2：太さ、#3：\@startsection が続けて書く見出しの本体）。
+% 線のあとの行は、深さ 0 の行のあとと同じく、行送りで位置を決める（線に詰めない）
+\newcommand{\reportmdheadingrule}[3]{#3\nobreak\vskip#1\hrule height#2\relax\prevdepth\z@}
+{{- end}}
 {{- range .Headings}}
-\renewcommand{\ {{- .Name -}} }{\@startsection{ {{- .Name -}} }{ {{- .Level -}} }{ {{- .Indent -}} pt}{ {{- $.HeadingBefore -}} pt}{ {{- $.HeadingAfter -}} pt}{\reportmdheading{ {{- .Size -}} pt}{ {{- .Leading -}} pt}}}
+\renewcommand{\ {{- .Name -}} }{\@startsection{ {{- .Name -}} }{ {{- .Level -}} }{ {{- .Indent -}} pt}{ {{- $.HeadingBefore -}} pt}{ {{- $.HeadingAfter -}} pt}{\reportmdheading{ {{- .Size -}} pt}{ {{- .Leading -}} pt}{{if .Rule}}\reportmdheadingrule{ {{- .RuleGap -}} pt}{ {{- .Rule -}} pt}{{end}}}}
 {{- end}}
 \makeatother
 % --- 表（filter.lua が tabular に組み、ここで定義した命令で書式を決める） ---

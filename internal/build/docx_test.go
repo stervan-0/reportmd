@@ -99,6 +99,27 @@ func TestDocxStylesCustom(t *testing.T) {
 	}
 }
 
+func TestDocxHeadingRules(t *testing.T) {
+	if strings.Contains(DocxStyles(config.Default()), "<w:pBdr>") {
+		t.Errorf("既定では見出しに罫線を付けない")
+	}
+	cfg, err := config.New(map[string]any{"heading": map[string]any{"rules": []any{"0.8pt", false, "0.4pt"}}}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	styles := DocxStyles(cfg)
+	wellFormed(t, styles)
+	// 太さは 1/8 pt、文字との間は見出しの文字サイズの 0.2 倍（pt の整数）
+	if got := strings.Count(styles, "<w:pBdr>"); got != 2 {
+		t.Errorf("線を引く見出しは2つ: %d", got)
+	}
+	for _, want := range []string{`<w:bottom w:val="single" w:sz="6" w:space="3" w:color="000000"/>`, `<w:bottom w:val="single" w:sz="3" w:space="2" w:color="000000"/>`} {
+		if !strings.Contains(styles, want) {
+			t.Errorf("%s がない", want)
+		}
+	}
+}
+
 func TestDocxSection(t *testing.T) {
 	cfg, err := config.New(map[string]any{"document": map[string]any{"paper": "b5"}}, "")
 	if err != nil {

@@ -27,7 +27,7 @@ reportmd（Markdown で大学のレポートを書いて PDF にするツール�
 
 ```bash
 cd vscode
-npm run package     # reportmd-0.8.0.vsix ができる（Node.js が必要。リポジトリの最上位で make vscode でも可）
+npm run package     # reportmd-0.9.0.vsix ができる（Node.js が必要。リポジトリの最上位で make vscode でも可）
 ```
 
 VS Code の拡張機能ビューの「…」メニュー →「VSIX からのインストール...」で、できた `.vsix` を選びます。WSL に接続した VS Code で行うと、WSL の側に入ります。

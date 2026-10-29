@@ -76,6 +76,8 @@ type Config struct {
 		Bold    bool      `json:"bold"`
 		Sizes   []string  `json:"sizes"`
 		Indents []float64 `json:"indents"`
+		// 見出しの下の線。各要素は false（引かない）または線の太さの文字列。HeadingRule で読む
+		Rules []any `json:"rules"`
 	} `json:"heading"`
 	Caption struct {
 		FigureLabel    string `json:"figure_label"`
@@ -132,6 +134,16 @@ type CoverItem struct {
 func (c *Config) Rule(name string) string {
 	if s, ok := c.Table.Rules[name].(string); ok {
 		return s
+	}
+	return ""
+}
+
+// HeadingRule は、見出しレベル level（0〜2）の下の線の太さを返す。線を引かないなら空文字。
+func (c *Config) HeadingRule(level int) string {
+	if level < len(c.Heading.Rules) {
+		if s, ok := c.Heading.Rules[level].(string); ok {
+			return s
+		}
 	}
 	return ""
 }
@@ -556,6 +568,7 @@ var rules = []rule{
 	{"heading.bold", "true または false", isBool},
 	{"heading.sizes", `"6pt"〜"24pt" の文字列を3個並べた配列`, arrayOf(3, pointIn(6, 24))},
 	{"heading.indents", "0〜5 の数値を3個並べた配列（単位は字）", arrayOf(3, numberIn(0, 5))},
+	{"heading.rules", `false（線を引かない）または線の太さを3個並べた配列（例：["0.8pt", false, false]）`, arrayOf(3, orFalse(isLength))},
 	{"caption.figure_label", "文字列", isString},
 	{"caption.table_label", "文字列", isString},
 	{"caption.figure_position", `"top" または "bottom"`, oneOf("top", "bottom")},

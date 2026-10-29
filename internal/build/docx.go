@@ -82,6 +82,7 @@ func ruleSize(s string) int {
 
 type docxHeading struct {
 	Level, Outline, Size, Line, Indent int
+	Rule, RuleSpace                    int // 下の線の太さ（1/8 pt。なければ 0）と、文字との間（pt）
 }
 
 type docxCover struct {
@@ -181,6 +182,11 @@ func docxLayout(cfg *config.Config) docxVars {
 			Line:    twips(size * baselineRatio * ls),
 			Indent:  twips(cfg.Heading.Indents[i] * fontSize),
 		})
+		if rule := cfg.HeadingRule(i); rule != "" {
+			v.Headings[i].Rule = ruleSize(rule)
+			// Word の罫線と文字の間は pt の整数（0〜31）
+			v.Headings[i].RuleSpace = int(math.Min(math.Round(size*headingRuleGap), 31))
+		}
 	}
 
 	// 表の中は本文の行間を使わない。row_spacing で広げた分を、行の上下に半分ずつ足す

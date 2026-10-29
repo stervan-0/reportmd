@@ -133,6 +133,7 @@ func TestValidation(t *testing.T) {
 		"font.mono":               `{"font": {"mono": ""}}`,
 		"heading.sizes":           `{"heading": {"sizes": ["14pt", "12pt"]}}`,
 		"heading.indents":         `{"heading": {"indents": [0, 1, 9]}}`,
+		"heading.rules":           `{"heading": {"rules": ["0.8pt", true, false]}}`,
 		"caption.figure_position": `{"caption": {"figure_position": "left"}}`,
 		"table.width":             `{"table": {"width": "half"}}`,
 		"table.font_size":         `{"table": {"font_size": "5pt"}}`,

@@ -93,6 +93,11 @@
     <w:pPr>
       <w:keepNext/>
       <w:keepLines/>
+      {{- if .Rule}}
+      <w:pBdr>
+        <w:bottom w:val="single" w:sz="{{.Rule}}" w:space="{{.RuleSpace}}" w:color="000000"/>
+      </w:pBdr>
+      {{- end}}
       <w:spacing w:before="{{$.HeadingBefore}}" w:after="{{$.HeadingAfter}}" w:line="{{.Line}}" w:lineRule="exact"/>
       <w:ind w:firstLine="{{.Indent}}"/>
       <w:outlineLvl w:val="{{.Outline}}"/>

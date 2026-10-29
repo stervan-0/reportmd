@@ -111,3 +111,25 @@ func TestNumber(t *testing.T) {
 		}
 	}
 }
+
+// 見出しの下の線。線を引く見出しの書式の最後に \reportmdheadingrule{文字との間}{太さ} を置く。
+func TestPreambleHeadingRules(t *testing.T) {
+	if strings.Contains(Preamble(config.Default()), "reportmdheadingrule") {
+		t.Errorf("既定では見出しの下に線を引かない")
+	}
+	cfg, err := config.New(map[string]any{"heading": map[string]any{"rules": []any{"0.8pt", "0.2mm", false}}}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := Preamble(cfg)
+	for _, want := range []string{
+		`\newcommand{\reportmdheadingrule}[3]{#3\nobreak\vskip#1\hrule height#2\relax\prevdepth\z@}`,
+		`{\reportmdheading{14pt}{16.8pt}\reportmdheadingrule{2.8pt}{0.8pt}}}`,   // 文字との間は文字サイズの 0.2 倍
+		`{\reportmdheading{12pt}{14.4pt}\reportmdheadingrule{2.4pt}{0.567pt}}}`, // 0.2mm
+		`{\reportmdheading{10.5pt}{12.6pt}}}`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("%s がない:\n%s", want, got)
+		}
+	}
+}

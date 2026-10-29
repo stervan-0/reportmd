@@ -43,7 +43,7 @@ test('誤った値と未知のキーに印を付ける', async () => {
     '  "page": { "margin": { "top": "25" } },',
     '  "text": { "line_spacing": 5, "font_size": "11px" },',
     '  "font": { "main": "My_Font" },',
-    '  "heading": { "sizes": ["14pt", "12pt"] },',
+    '  "heading": { "sizes": ["14pt", "12pt"], "rules": [true, false, false] },',
     '  "table": { "rules": { "rows": true }, "font_size": null },',
     '  "slide": { "title": { "color": "red" } },',
     '  "colour": 1',

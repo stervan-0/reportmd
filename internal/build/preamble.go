@@ -25,6 +25,7 @@ var tablePositionEnvs = map[string]string{"center": "center", "left": "flushleft
 type headingVars struct {
 	Name, Indent, Size, Leading string
 	Level                       int
+	Rule, RuleGap               string // 見出しの下の線の太さと、見出しの文字との間（なければ空）
 }
 
 type ruleVars struct{ Name, Width string }
@@ -40,6 +41,7 @@ type preambleVars struct {
 	HeadingBold                 bool
 	Headings                    []headingVars
 	HeadingBefore, HeadingAfter string
+	HeadingRules                bool // 下の線を引く見出しがあるか
 
 	TablePositionEnv             string
 	TableFontSize, TableBaseline string
@@ -85,6 +87,11 @@ func Preamble(cfg *config.Config) string {
 			Size:    number(size),
 			Leading: number(size * baselineRatio),
 		})
+		if rule := cfg.HeadingRule(i); rule != "" {
+			vars.Headings[i].Rule = number(lengthPoints(rule))
+			vars.Headings[i].RuleGap = number(size * headingRuleGap)
+			vars.HeadingRules = true
+		}
 	}
 
 	// 表の書式。文字サイズが null なら本文と同じにする。
@@ -111,6 +118,9 @@ func Preamble(cfg *config.Config) string {
 	}
 	return out.String()
 }
+
+// headingRuleGap は、見出しの文字（最後の行の下端）と下の線の間（見出しの文字サイズに対する比率）。
+const headingRuleGap = 0.2
 
 // points は "10.5pt" を 10.5 にする（検証済みの値だけを渡す）。
 func points(s string) float64 {

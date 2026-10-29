@@ -192,6 +192,14 @@
           "minItems": 3,
           "maxItems": 3,
           "default": [0, 1, 2]
+        },
+        "rules": {
+          "description": "見出しの下の線（#1 #2 #3 の順に3個。線の太さ、または false で線を引かない。PDF と Word に反映する）",
+          "type": "array",
+          "items": { "$ref": "#/definitions/rule" },
+          "minItems": 3,
+          "maxItems": 3,
+          "default": [false, false, false]
         }
       }
     },

@@ -26,7 +26,8 @@
     "font": "IPAexGothic",
     "bold": true,
     "sizes": ["14pt", "12pt", "10.5pt"],
-    "indents": [0, 1, 2]
+    "indents": [0, 1, 2],
+    "rules": [false, false, false]
   },
   "caption": {
     "figure_label": "図",
