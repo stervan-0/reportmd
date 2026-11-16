@@ -21,6 +21,91 @@ make uninstall          # 取り除く（監視で使うキャッシュ ~/.cache
 make dist               # Linux・macOS・Windows 向けの実行ファイルを dist/ に作る
 ```
 
+`make install` は Linux・macOS（WSL を含む）向けです。Windows の PowerShell では動きません。Windows では WSL の中で `make install` するか、次の Docker を使ってください。
+
+## Docker で使う
+
+Docker があれば、Go・Pandoc・XeLaTeX・フォントを自分で入れなくても使えます。必要なものは、すべてイメージに入っています。Windows の PowerShell（Docker Desktop）からも使えます。
+
+まず、このリポジトリのフォルダでイメージを作ります（最初の1回だけ。TeX Live を取ってくるので数分かかります）。
+
+```bash
+docker build -t reportmd .
+```
+
+あとは、レポートのフォルダで `reportmd` の代わりに `docker run …` と打ちます。そのフォルダをコンテナの中の `/work` に見せて、reportmd を動かします。イメージ名 `reportmd` のあとに書いたものが、そのまま reportmd のコマンドになります。
+
+```bash
+# Linux・macOS・WSL（-u は、できたファイルを自分の持ち物にするため）
+docker run --rm -it -v "$PWD:/work" -u "$(id -u):$(id -g)" reportmd build report.reportmd
+```
+
+```powershell
+# Windows の PowerShell
+docker run --rm -it -v "$($PWD.ProviderPath):/work" reportmd build report.reportmd
+```
+
+毎回打つのは長いので、`reportmd` という名前で呼べるようにしておくと、ふつうに入れたときと同じように使えます。bash の関数は、端末から打ったときだけ `-t` を付けるので、`reportmd build --stdin < a.reportmd` のようなリダイレクトや、スクリプトからの呼び出しもそのまま使えます（`-t` を付けると、入力が端末でないときに失敗し、エラー出力も標準出力にまとめられてしまいます）。
+
+```bash
+# ~/.bashrc に書く（前の版の README の alias reportmd=… を書いていても、1行目で取り消す）
+unalias reportmd 2>/dev/null
+reportmd() {
+  local tty=
+  [ -t 0 ] && [ -t 1 ] && [ -t 2 ] && tty=-t
+  docker run --rm -i $tty -v "$PWD:/work" -u "$(id -u):$(id -g)" reportmd "$@"
+}
+```
+
+```powershell
+# $PROFILE（notepad $PROFILE で開く）に書く
+function reportmd {
+  $tty = if ([Console]::IsInputRedirected -or [Console]::IsOutputRedirected -or [Console]::IsErrorRedirected) { @() } else { @('-t') }
+  docker run --rm -i @tty -v "$($PWD.ProviderPath):/work" reportmd @args
+}
+```
+
+PowerShell の関数は、打ったコマンドをパイプやリダイレクトにつないでも、それを見分けられません（`-t` が付いたままになり、パイプの入力も docker に渡りません）。PowerShell で `Get-Content a.reportmd | …` や `… > out.txt` のように使うときは、関数ではなく、`-t` を付けない `docker run --rm -i -v "$($PWD.ProviderPath):/work" reportmd …` を直接打ってください。
+
+そのときは、先に PowerShell の文字コードを UTF-8 にしてください。PowerShell の既定の文字コードは UTF-8 ではないので、そのままでは日本語が化けます。Windows PowerShell 5.1 では、`Get-Content` が BOM のない UTF-8 を Shift-JIS として読み、外部コマンドに渡すときは日本語を `?` にしてしまいます。また、外部コマンドの出力は `[Console]::OutputEncoding`（日本語版の Windows では CP932）で読まれるので、reportmd のメッセージも化けます。
+
+```powershell
+# 文字コードを UTF-8 にする（その PowerShell を閉じるまで有効）
+$OutputEncoding = [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+Get-Content -Raw -Encoding UTF8 a.reportmd | docker run --rm -i -v "$($PWD.ProviderPath):/work" reportmd build --stdin a.reportmd
+```
+
+```bash
+reportmd init myreport            # 雛形を作る
+reportmd build report.reportmd    # report.pdf を作る
+reportmd watch report.reportmd    # 保存するたびに PDF を作り直す（Ctrl+C で終了）
+reportmd doctor                   # イメージの中に必要なものが揃っているか調べる
+reportmd --version                # イメージの中の reportmd のバージョン
+```
+
+Docker で使うときの注意：
+
+- コンテナの中からは PDF ビューアを開けません。引数なしの `reportmd`（監視して作り直す）や `--open` も使えますが、ビューアは開かないので、できた PDF は自分で開いてください。
+- コンテナから見えるのは、コマンドを打ったフォルダの中だけです。`../images/a.png` のような外のファイルも、`/home/…` や `C:\…` の絶対パス、`-c` で指定する別の場所の設定ファイルも使えません（「見つかりません」のエラーになります）。レポートのフォルダに移ってから実行してください。
+- 使えるフォントは、イメージに入っているもの（IPAex明朝・IPAexゴシック・Noto Sans CJK JP など）だけです。`reportmd fonts` に出るのも、イメージの中のフォントです。游明朝などのほかのフォントを使うときは、使うフォントのファイルだけを1つのフォルダに集め、そのフォルダを `/usr/local/share/fonts` の下に見せます（上の関数の `docker run` に `-v` を足します）。`C:\Windows\Fonts` をまるごと見せると、起動のたびにフォントを読み直すので、1回ごとに数秒以上遅くなります。
+
+  ```bash
+  # 例：游明朝（yumin*.ttf）を使う
+  mkdir -p ~/reportmd-fonts && cp /mnt/c/Windows/Fonts/yumin*.ttf ~/reportmd-fonts/
+  # docker run に足す：-v ~/reportmd-fonts:/usr/local/share/fonts/host:ro
+  ```
+
+  ```powershell
+  # 例：游明朝（yumin*.ttf）を使う
+  mkdir $HOME\reportmd-fonts; Copy-Item C:\Windows\Fonts\yumin*.ttf $HOME\reportmd-fonts
+  # docker run に足す：-v "$HOME\reportmd-fonts:/usr/local/share/fonts/host:ro"
+  ```
+
+- `--keep-temp` で残した一時ファイルは、そのままではコンテナと一緒に消えます。`-e TMPDIR=/work` を `docker run` に足すと、レポートのフォルダの中に残ります。このとき「一時ファイルを残しました: /work/reportmd-…」と表示されますが、`/work` はコンテナから見たレポートのフォルダのことなので、レポートのフォルダの中の `reportmd-…` を見てください。
+- VS Code 拡張機能は `reportmd` を直接起動するので、Docker 版では使えません（上の関数も見えません）。VS Code で使うときは、WSL の中で `make install` してください。
+- 時刻（監視中の「[15:04:05] 変更を検出しました」など）は日本時間です。変えるときは `-e TZ=UTC` のように指定します。
+- reportmd を新しくしたら、`git pull` のあとに `docker build -t reportmd .` をもう一度実行します。古いイメージのままかどうかは `reportmd --version` で確かめられます。
+
 ## 使い方
 
 ふだんは、レポートのフォルダで `reportmd` と打つだけです。
@@ -72,10 +157,17 @@ reportmd build report.reportmd -o report.tex   # LaTeX のソース（.html .doc
 [vscode/](vscode/README.md) に、VS Code の拡張機能があります。独自記法の色分け、保存するたびの誤りの表示（波線）、VS Code の中での PDF のプレビュー（保存しなくても、入力するたびに更新）、ボタンからの PDF の生成・監視、`setting.json` の補完と検査ができます。
 
 ```bash
-make vscode     # vscode/reportmd-0.10.0.vsix を作る（Node.js が必要）
+make vscode          # vscode/reportmd-0.10.0.vsix を作る（Node.js が必要）
+make vscode-docker   # 同じものを Node.js のイメージの中で作る（Node.js の代わりに Docker が必要）
 ```
 
-VS Code の拡張機能ビューの「…」→「VSIX からのインストール...」で入れます。
+Node.js を入れていない場合は `make vscode-docker` を使います。`npm` の取り込みなどはすべてコンテナの中で行い、できた `.vsix` だけを `vscode/` に置きます。`make` のない PowerShell では、リポジトリのフォルダで次を実行します。
+
+```powershell
+docker run --rm -v "$($PWD.ProviderPath)\vscode:/out" node:22 sh /out/scripts/package-in-docker.sh
+```
+
+VS Code の拡張機能ビューの「…」→「VSIX からのインストール...」で入れます。拡張機能が呼び出す reportmd は、ローカルに入れたもの（`make install`）です。Docker のイメージの reportmd は使えません。
 
 ## 記法
 
