@@ -67,6 +67,14 @@ function reportmd {
 
 PowerShell の関数は、打ったコマンドをパイプやリダイレクトにつないでも、それを見分けられません（`-t` が付いたままになり、パイプの入力も docker に渡りません）。PowerShell で `Get-Content a.reportmd | …` や `… > out.txt` のように使うときは、関数ではなく、`-t` を付けない `docker run --rm -i -v "$($PWD.ProviderPath):/work" reportmd …` を直接打ってください。
 
+そのときは、先に PowerShell の文字コードを UTF-8 にしてください。PowerShell の既定の文字コードは UTF-8 ではないので、そのままでは日本語が化けます。Windows PowerShell 5.1 では、`Get-Content` が BOM のない UTF-8 を Shift-JIS として読み、外部コマンドに渡すときは日本語を `?` にしてしまいます。また、外部コマンドの出力は `[Console]::OutputEncoding`（日本語版の Windows では CP932）で読まれるので、reportmd のメッセージも化けます。
+
+```powershell
+# 文字コードを UTF-8 にする（その PowerShell を閉じるまで有効）
+$OutputEncoding = [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+Get-Content -Raw -Encoding UTF8 a.reportmd | docker run --rm -i -v "$($PWD.ProviderPath):/work" reportmd build --stdin a.reportmd
+```
+
 ```bash
 reportmd init myreport            # 雛形を作る
 reportmd build report.reportmd    # report.pdf を作る
