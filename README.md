@@ -72,7 +72,7 @@ reportmd build report.reportmd -o report.tex   # LaTeX のソース（.html .doc
 [vscode/](vscode/README.md) に、VS Code の拡張機能があります。独自記法の色分け、保存するたびの誤りの表示（波線）、VS Code の中での PDF のプレビュー（保存しなくても、入力するたびに更新）、ボタンからの PDF の生成・監視、`setting.json` の補完と検査ができます。
 
 ```bash
-make vscode     # vscode/reportmd-0.9.0.vsix を作る（Node.js が必要）
+make vscode     # vscode/reportmd-0.10.0.vsix を作る（Node.js が必要）
 ```
 
 VS Code の拡張機能ビューの「…」→「VSIX からのインストール...」で入れます。
