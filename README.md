@@ -21,6 +21,55 @@ make uninstall          # 取り除く（監視で使うキャッシュ ~/.cache
 make dist               # Linux・macOS・Windows 向けの実行ファイルを dist/ に作る
 ```
 
+`make install` は Linux・macOS（WSL を含む）向けです。Windows の PowerShell では動きません。Windows では WSL の中で `make install` するか、次の Docker を使ってください。
+
+## Docker で使う
+
+Docker があれば、Go・Pandoc・XeLaTeX・フォントを自分で入れなくても使えます。必要なものは、すべてイメージに入っています。Windows の PowerShell（Docker Desktop）からも使えます。
+
+まず、このリポジトリのフォルダでイメージを作ります（最初の1回だけ。TeX Live を取ってくるので数分かかります）。
+
+```bash
+docker build -t reportmd .
+```
+
+あとは、レポートのフォルダで `reportmd` の代わりに `docker run …` と打ちます。そのフォルダをコンテナの中の `/work` に見せて、reportmd を動かします。イメージ名 `reportmd` のあとに書いたものが、そのまま reportmd のコマンドになります。
+
+```bash
+# Linux・macOS・WSL（-u は、できたファイルを自分の持ち物にするため）
+docker run --rm -it -v "$PWD:/work" -u "$(id -u):$(id -g)" reportmd build report.reportmd
+```
+
+```powershell
+# Windows の PowerShell
+docker run --rm -it -v "${PWD}:/work" reportmd build report.reportmd
+```
+
+毎回打つのは長いので、`reportmd` という名前で呼べるようにしておくと、ふつうに入れたときと同じように使えます。
+
+```bash
+# ~/.bashrc に書く
+alias reportmd='docker run --rm -it -v "$PWD:/work" -u "$(id -u):$(id -g)" reportmd'
+```
+
+```powershell
+# $PROFILE（notepad $PROFILE で開く）に書く
+function reportmd { docker run --rm -it -v "${PWD}:/work" reportmd @args }
+```
+
+```bash
+reportmd init myreport            # 雛形を作る
+reportmd build report.reportmd    # report.pdf を作る
+reportmd watch report.reportmd    # 保存するたびに PDF を作り直す（Ctrl+C で終了）
+reportmd doctor                   # イメージの中に必要なものが揃っているか調べる
+```
+
+Docker で使うときの注意：
+
+- コンテナの中からは PDF ビューアを開けません。引数なしの `reportmd`（監視して作り直す）や `--open` も使えますが、ビューアは開かないので、できた PDF は自分で開いてください。
+- コンテナから見えるのは、コマンドを打ったフォルダの中だけです。`../images/a.png` のように、そのフォルダの外のファイルは使えません。
+- reportmd を新しくしたら、`git pull` のあとに `docker build -t reportmd .` をもう一度実行します。
+
 ## 使い方
 
 ふだんは、レポートのフォルダで `reportmd` と打つだけです。
