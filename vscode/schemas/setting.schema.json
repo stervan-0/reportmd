@@ -285,6 +285,43 @@
         "label": { "description": "数式の参照の前の文字（@名前 が「式(1)」になるときの「式」）", "type": "string", "default": "式" }
       }
     },
+    "code": {
+      "description": "コードブロック（``` または ~~~ で囲んだ部分）",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "font_size": {
+          "description": "コードブロックの文字サイズ（null なら本文と同じ）",
+          "oneOf": [{ "type": "null" }, { "$ref": "#/definitions/point" }],
+          "default": null
+        },
+        "line_spacing": {
+          "description": "コードブロックの行間（標準の行送りに対する倍率。1.0〜3.0。本文の行間は使わない）",
+          "type": "number",
+          "minimum": 1,
+          "maximum": 3,
+          "default": 1.2
+        },
+        "background": {
+          "description": "背景の色（16進数6桁。例：\"F5F5F5\" は薄い灰色）。false なら背景を付けない",
+          "oneOf": [
+            { "const": false },
+            {
+              "type": "string",
+              "pattern": "^#?[0-9A-Fa-f]{6}$",
+              "patternErrorMessage": "16進数6桁の色（例：\"F5F5F5\"）"
+            }
+          ],
+          "default": "F5F5F5"
+        },
+        "border": { "description": "枠の線の太さ（false で枠を付けない）", "$ref": "#/definitions/rule", "default": "0.4pt" },
+        "highlight": {
+          "description": "言語名（```python など）を書いたコードに、構文の色を付けるか",
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
     "cover": {
       "description": "表紙（文書のフロントマターに cover を書くと付く）",
       "type": "object",

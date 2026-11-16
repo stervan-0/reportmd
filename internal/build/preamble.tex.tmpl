@@ -56,3 +56,47 @@
 % 縦の罫線（列の間 vrule と、表の左右の端 vside）
 \newcommand{\reportmdvrule}{ {{- if .RuleVertical}}\vrule width {{.RuleVertical}}{{end -}} }
 \newcommand{\reportmdvside}{ {{- if .RuleSides}}\vrule width {{.RuleSides}}{{end -}} }
+% --- コードブロック（filter.lua が reportmdcode 環境で囲む） ---
+% 長い行は、枠の中で折り返す（和文の行も折り返せるよう、どこでも折り返す）。
+% コードの前後の空きは reportmdcode 環境で決める（fancyvrb のリストの空きは付けない）。
+% Pandoc は、構文の色を付けたコードを Highlighting 環境、それ以外を verbatim 環境にする。
+\usepackage{xcolor}
+\usepackage{fvextra}
+\usepackage{framed}
+% （折り返しの設定は、コードブロックの環境だけに付ける。文中のコード \VERB は折り返さない）
+\ifdefined\Highlighting
+\RecustomVerbatimEnvironment{Highlighting}{Verbatim}{commandchars=\\\{\},breaklines,breakanywhere,listparameters={\setlength{\topsep}{0pt}\setlength{\partopsep}{0pt}}}
+\fi
+\ifdefined\Shaded
+\renewenvironment{Shaded}{}{}
+\fi
+\RecustomVerbatimEnvironment{verbatim}{Verbatim}{breaklines,breakanywhere,listparameters={\setlength{\topsep}{0pt}\setlength{\partopsep}{0pt}}}
+{{- if .CodeBackground}}
+\definecolor{reportmdcodebg}{HTML}{ {{- .CodeBackground -}} }
+{{- end}}
+{{- if .CodeBorder}}
+\definecolor{reportmdcodeborder}{HTML}{ {{- .CodeBorderColor -}} }
+{{- end}}
+\makeatletter
+\newcommand{\reportmdcodestyle}{\linespread{1}\fontsize{ {{- .CodeFontSize -}} pt}{ {{- .CodeBaseline -}} pt}\selectfont\parskip\z@}
+{{- if or .CodeBackground .CodeBorder}}
+% 背景・枠（framed。ページをまたぐコードは、ページごとに枠を閉じる）。
+% リスト・引用の中では、枠をその字下げの幅に収める（framed の snugshade* と同じ方法。
+% 左の字下げの分だけ右へずらし、右の余白の分だけ幅を減らす）
+\newenvironment{reportmdcode}{%
+  \def\FrameCommand##1{\hskip\@totalleftmargin
+    {\fboxsep={{.CodePadding}}pt\fboxrule={{if .CodeBorder}}{{.CodeBorder}}{{else}}\z@{{end}}\reportmdcodeframe{##1}}%
+    \hskip-\linewidth\hskip-\@totalleftmargin\hskip\columnwidth}%
+  \MakeFramed{\advance\hsize-\width\@totalleftmargin\z@\linewidth\hsize\@setminipage}\reportmdcodestyle}%
+  {\par\unskip\@minipagefalse\endMakeFramed}
+{{- if and .CodeBackground .CodeBorder}}
+\newcommand{\reportmdcodeframe}{\fcolorbox{reportmdcodeborder}{reportmdcodebg}}
+{{- else if .CodeBackground}}
+\newcommand{\reportmdcodeframe}{\colorbox{reportmdcodebg}}
+{{- else}}
+\newcommand{\reportmdcodeframe}[1]{{"{{"}}\color{reportmdcodeborder}\fbox{\normalcolor #1}}}
+{{- end}}
+{{- else}}
+\newenvironment{reportmdcode}{\par\vskip\medskipamount\reportmdcodestyle}{\par\vskip\medskipamount}
+{{- end}}
+\makeatother

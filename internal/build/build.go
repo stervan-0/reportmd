@@ -11,7 +11,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
+	"sync"
 
 	"reportmd/internal/config"
 	"reportmd/internal/preprocess"
@@ -246,6 +249,7 @@ func Metadata(cfg *config.Config, source string) map[string]any {
 	if strings.TrimSpace(cfg.Document.Author) != "" {
 		meta["author"] = cfg.Document.Author
 	}
+	size := codeSize(cfg)
 	meta["reportmd"] = map[string]any{
 		"figure_label":    cfg.Caption.FigureLabel,
 		"table_label":     cfg.Caption.TableLabel,
@@ -257,6 +261,13 @@ func Metadata(cfg *config.Config, source string) map[string]any {
 		"table_header_align": cfg.Table.Header.Align,
 		"equation_numbering": cfg.Equation.Numbering,
 		"equation_label":     cfg.Equation.Label,
+		// コードブロック。HTML の書式は filter.lua が決める（PDF はプリアンブル、Word は雛形）
+		"code_font_size":    number(size),
+		"code_line_height":  number(size * baselineRatio * cfg.Code.LineSpacing),
+		"code_background":   cfg.CodeBackground(),
+		"code_border":       cfg.CodeBorder(),
+		"code_border_color": codeBorderColor,
+		"code_padding":      number(size * codePadding),
 	}
 	return meta
 }
@@ -291,13 +302,19 @@ func WorkFiles(dir, markdown string, cfg *config.Config, source string) (map[str
 
 // PandocArgs は、Pandoc の引数を作る。
 // title は HTML のページの題名（文書に title がない場合に使う）。
-func PandocArgs(paths map[string]string, output string, format Format, title string) []string {
+// noHighlight は、コードブロックに構文の色を付けないとき（code.highlight が false）に渡す引数
+// （NoHighlightArg）。空なら色を付ける。
+func PandocArgs(paths map[string]string, output string, format Format, title string, noHighlight string) []string {
 	args := []string{
 		paths["body.md"],
 		"-f", pandocReader,
 		"--lua-filter=" + paths["filter.lua"],
 		"--metadata-file=" + paths["meta.json"],
 		"--number-sections", // 見出しの番号（標準の見出しは filter.lua で番号なしにする）
+	}
+	if noHighlight != "" {
+		// 言語名（クラス）は残したまま、色だけを付けない（numberLines などのクラスも残る）
+		args = append(args, noHighlight)
 	}
 	switch format {
 	case LaTeX: // PDF も、いったん LaTeX にしてから XeLaTeX にかける（latex.go）
@@ -316,6 +333,44 @@ func PandocArgs(paths map[string]string, output string, format Format, title str
 		args = append(args, "-t", "pptx", "--slide-level=1", "--reference-doc="+paths[referencePptxName])
 	}
 	return append(args, "-o", output)
+}
+
+// NoHighlightArg は、構文の色を付けないための Pandoc の引数を、入っている Pandoc の版に合わせて返す。
+// Pandoc 3.8 で --syntax-highlighting=none ができ、それまでの --no-highlight は、動くものの
+// 非推奨の警告を出すようになった（Pandoc の警告は、そのまま利用者に表示される）。
+// 版がわからなければ、どの版でも動く --no-highlight にする。
+func NoHighlightArg() string {
+	pandocVersionOnce.Do(func() {
+		if out, err := exec.Command("pandoc", "--version").Output(); err == nil {
+			pandocMajor, pandocMinor, pandocVersionKnown = parsePandocVersion(string(out))
+		}
+	})
+	return noHighlightArgFor(pandocMajor, pandocMinor, pandocVersionKnown)
+}
+
+var (
+	pandocVersionOnce        sync.Once
+	pandocMajor, pandocMinor int
+	pandocVersionKnown       bool
+	pandocVersionPattern     = regexp.MustCompile(`^pandoc(?:\.exe)?\s+(\d+)\.(\d+)`)
+)
+
+// parsePandocVersion は、pandoc --version の出力の最初の行（"pandoc 3.1.3"）から版を読む。
+func parsePandocVersion(out string) (major, minor int, ok bool) {
+	m := pandocVersionPattern.FindStringSubmatch(strings.TrimSpace(out))
+	if m == nil {
+		return 0, 0, false
+	}
+	major, _ = strconv.Atoi(m[1])
+	minor, _ = strconv.Atoi(m[2])
+	return major, minor, true
+}
+
+func noHighlightArgFor(major, minor int, known bool) string {
+	if known && (major > 3 || major == 3 && minor >= 8) {
+		return "--syntax-highlighting=none"
+	}
+	return "--no-highlight"
 }
 
 // source は元の .rmd の内容（LaTeX のエラーの位置を推定するために使う）。
@@ -339,7 +394,11 @@ func runPandoc(dir, markdown, output string, format Format, opts Options, source
 		base := filepath.Base(opts.Input)
 		title = strings.TrimSuffix(base, filepath.Ext(base))
 	}
-	cmd := exec.Command("pandoc", PandocArgs(paths, output, format, title)...)
+	noHighlight := ""
+	if !opts.Config.Code.Highlight {
+		noHighlight = NoHighlightArg()
+	}
+	cmd := exec.Command("pandoc", PandocArgs(paths, output, format, title, noHighlight)...)
 	// 画像などの相対パスは、入力ファイルのある場所を基準にする
 	cmd.Dir = filepath.Dir(opts.Input)
 	var stderr bytes.Buffer
