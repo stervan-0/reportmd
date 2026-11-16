@@ -50,6 +50,24 @@ type preambleVars struct {
 	TableHeaderBold              bool
 	HorizontalRules              []ruleVars
 	RuleVertical, RuleSides      string
+
+	CodeFontSize, CodeBaseline, CodePadding string
+	CodeBackground                          string // 背景の色（なければ空）
+	CodeBorder, CodeBorderColor             string // 枠の線の太さ（なければ空）と色
+}
+
+// codeBorderColor は、コードブロックの枠の線の色（薄い灰色）。
+const codeBorderColor = "BFBFBF"
+
+// codePadding は、コードブロックの枠と文字の間（コードの文字サイズに対する比率）。
+const codePadding = 0.5
+
+// codeSize は、コードブロックの文字サイズ（pt）。null なら本文と同じ。
+func codeSize(cfg *config.Config) float64 {
+	if cfg.Code.FontSize != nil {
+		return points(*cfg.Code.FontSize)
+	}
+	return points(cfg.Text.FontSize)
 }
 
 // Preamble は、設定の内容（用紙・余白・フォント・文字サイズ・行間・見出し・表）を
@@ -111,6 +129,15 @@ func Preamble(cfg *config.Config) string {
 	}
 	vars.RuleVertical = cfg.Rule("vertical")
 	vars.RuleSides = cfg.Rule("sides")
+
+	// コードブロックの中は本文の行間（line_spacing）を使わず、code.line_spacing で行送りを決める
+	size := codeSize(cfg)
+	vars.CodeFontSize = number(size)
+	vars.CodeBaseline = number(size * baselineRatio * cfg.Code.LineSpacing)
+	vars.CodePadding = number(size * codePadding)
+	vars.CodeBackground = cfg.CodeBackground()
+	vars.CodeBorder = cfg.CodeBorder()
+	vars.CodeBorderColor = codeBorderColor
 
 	var out strings.Builder
 	if err := preambleTemplate.Execute(&out, vars); err != nil {

@@ -99,11 +99,63 @@ func TestDocxStylesCustom(t *testing.T) {
 	}
 }
 
+// sourceCodeStyle は、styles.xml のコードブロックのスタイル（Source Code）の部分を返す。
+func sourceCodeStyle(t *testing.T, styles string) string {
+	t.Helper()
+	start := strings.Index(styles, `w:styleId="SourceCode"`)
+	if start < 0 {
+		t.Fatal("Source Code のスタイルがない")
+	}
+	return styles[start : start+strings.Index(styles[start:], "</w:style>")]
+}
+
+func TestDocxCodeStyle(t *testing.T) {
+	styles := DocxStyles(config.Default())
+	wellFormed(t, styles)
+	got := sourceCodeStyle(t, styles)
+	// 枠の太さは 1/8 pt、枠と文字の間は 5pt（10.5pt の半分を pt の整数に）、左右は枠と文字の間と線の太さの分だけ下げる
+	for _, want := range []string{
+		`<w:left w:val="single" w:sz="3" w:space="5" w:color="BFBFBF"/>`,
+		`<w:shd w:val="clear" w:color="auto" w:fill="F5F5F5"/>`,
+		`<w:spacing w:before="260" w:after="260" w:line="302" w:lineRule="exact"/>`,
+		`<w:ind w:left="108" w:right="108" w:firstLine="0"/>`,
+		`<w:sz w:val="21"/>`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("%s がない:\n%s", want, got)
+		}
+	}
+
+	cfg, err := config.New(map[string]any{"code": map[string]any{"background": false, "border": false, "font_size": "9pt", "line_spacing": 1.0}}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	styles = DocxStyles(cfg)
+	wellFormed(t, styles)
+	got = sourceCodeStyle(t, styles)
+	for _, want := range []string{`<w:spacing w:before="160" w:after="160" w:line="216" w:lineRule="exact"/>`, `<w:ind w:left="0" w:right="0" w:firstLine="0"/>`, `<w:sz w:val="18"/>`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("%s がない:\n%s", want, got)
+		}
+	}
+	for _, unwanted := range []string{"<w:pBdr>", "<w:shd"} {
+		if strings.Contains(got, unwanted) {
+			t.Errorf("背景も枠もなければ %s を書かない", unwanted)
+		}
+	}
+}
+
 func TestDocxHeadingRules(t *testing.T) {
-	if strings.Contains(DocxStyles(config.Default()), "<w:pBdr>") {
+	// コードブロックの枠（これも段落の罫線）は付けずに数える
+	noCodeBorder := map[string]any{"border": false}
+	plain, err := config.New(map[string]any{"code": noCodeBorder}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(DocxStyles(plain), "<w:pBdr>") {
 		t.Errorf("既定では見出しに罫線を付けない")
 	}
-	cfg, err := config.New(map[string]any{"heading": map[string]any{"rules": []any{"0.8pt", false, "0.4pt"}}}, "")
+	cfg, err := config.New(map[string]any{"heading": map[string]any{"rules": []any{"0.8pt", false, "0.4pt"}}, "code": noCodeBorder}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -293,6 +345,11 @@ func TestDocxOutput(t *testing.T) {
 		{"文中の数式だけの段落は、後ろに幅のない空白", "| a |\n|---|\n| $x$ |\n\n- $y$\n- 項目 $z$\n",
 			[]string{"reportmdSpace|", "[表:Table]", "reportmdTableHeader|a", "reportmdTableText|x\u200b", "reportmdSpace|", "Compact|y\u200b", "Compact|項目 z"}},
 		{"図は下にキャプション", "![f:構成](a.png)\n", []string{"reportmdFigure|", "reportmdFigureCaption|図1 構成"}},
+		{"続けて書いたコードブロックは、空きの段落で別の枠にする", "```python\nx = 1\n```\n\n```\ny\n```\n\n- 項目\n\n  ```\n  a\n  ```\n\n  ```\n  b\n  ```\n",
+			[]string{"SourceCode|x = 1", "reportmdSpace|", "SourceCode|y", "|項目", "SourceCode|a", "reportmdSpace|", "SourceCode|b"}},
+		{"引用の最後のコードと、すぐ後のコードも別の枠にする", "> 引用\n>\n> ```\n> a\n> ```\n\n```\nb\n```\n\n> ```\n> c\n> ```\n",
+			[]string{"BlockText|引用", "SourceCode|a", "reportmdSpace|", "SourceCode|b", "reportmdSpace|", "SourceCode|c"}},
+		{"間に段落があれば空きの段落は入れない", "```\nx\n```\n\n本文\n\n```\ny\n```\n", []string{"SourceCode|x", "FirstParagraph|本文", "SourceCode|y"}},
 		{"表紙は項目ごとのスタイルで、本文とセクションを分ける", "---\ntitle: 題名\nauthor: 山田\ncover: true\n---\n\n本文\n",
 			[]string{"reportmdSpace|", "reportmdCover2|題名", "reportmdSpace|", "reportmdSpace|", "[表:reportmdCoverTable6]", "reportmdCover6Label|氏名", "reportmdCover6|山田", "reportmdSpace|", "|[区切り]", "BodyText|本文"}},
 	}

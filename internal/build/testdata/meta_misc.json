@@ -8,6 +8,12 @@
     "table_width": "auto",
     "table_header_align": "center",
     "equation_numbering": true,
-    "equation_label": "式"
+    "equation_label": "式",
+    "code_background": "F5F5F5",
+    "code_border": "0.4pt",
+    "code_border_color": "BFBFBF",
+    "code_font_size": "11",
+    "code_line_height": "15.84",
+    "code_padding": "5.5"
   }
 }

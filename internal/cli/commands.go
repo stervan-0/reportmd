@@ -277,7 +277,8 @@ func (c *CLI) fonts(args []string) int {
 // --- doctor ---------------------------------------------------------------
 
 // latexPackages は、PDF の生成に使う LaTeX のパッケージ。
-var latexPackages = []string{"xeCJK.sty", "geometry.sty", "indentfirst.sty", "tabularx.sty", "array.sty", "calc.sty", "fontspec.sty"}
+var latexPackages = []string{"xeCJK.sty", "geometry.sty", "indentfirst.sty", "tabularx.sty", "array.sty", "calc.sty", "fontspec.sty",
+	"xcolor.sty", "fvextra.sty", "framed.sty"}
 
 // doctor は、PDF の生成に必要なものが揃っているかを調べて表示する。
 func (c *CLI) doctor(args []string) int {

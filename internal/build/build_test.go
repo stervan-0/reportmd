@@ -13,7 +13,8 @@ import (
 
 // testdata の preamble_*.tex と meta_*.json は、Ruby 版 reportmd が同じ設定から
 // 生成したもの。Go 版でも、同じプリアンブルとメタデータになることを確かめる。
-// Go 版で加えた行（コードの中の欧文と和文のアキをなくす設定）は、preamble_*.tex にも足してある。
+// Go 版で加えた行（コードの中の欧文と和文のアキをなくす設定、コードブロックの書式）は preamble_*.tex に、
+// Go 版で加えた項目（code_*）は meta_*.json にも足してある。
 var goldenCases = []string{"default", "grid", "custom", "misc"}
 
 func loadCase(t *testing.T, name string) *config.Config {
@@ -103,12 +104,105 @@ func TestFormatFromPath(t *testing.T) {
 	}
 }
 
+// code.highlight が false なら、構文の色を付けない引数を渡す（言語名などのクラスは残す）。
+func TestPandocArgsHighlight(t *testing.T) {
+	paths := map[string]string{"body.md": "b.md", "filter.lua": "f.lua", "meta.json": "m.json"}
+	for _, format := range []Format{LaTeX, HTML, Docx, Pptx} {
+		if args := strings.Join(PandocArgs(paths, "out", format, "t", ""), " "); strings.Contains(args, "highlight") {
+			t.Errorf("%s: 既定では構文の色を付ける: %s", format, args)
+		}
+		if args := strings.Join(PandocArgs(paths, "out", format, "t", "--syntax-highlighting=none"), " "); !strings.Contains(args, " --syntax-highlighting=none ") {
+			t.Errorf("%s: 色を付けない引数を渡す: %s", format, args)
+		}
+	}
+}
+
+// Pandoc 3.8 からは --syntax-highlighting=none（--no-highlight は非推奨の警告が出る）。
+func TestNoHighlightArgByVersion(t *testing.T) {
+	cases := []struct {
+		out  string
+		want string
+	}{
+		{"pandoc 3.1.3\nFeatures: +server +lua\n", "--no-highlight"},
+		{"pandoc 3.7.0.2\n", "--no-highlight"},
+		{"pandoc 3.8\n", "--syntax-highlighting=none"},
+		{"pandoc.exe 3.8.2\r\n", "--syntax-highlighting=none"},
+		{"pandoc 3.10\n", "--syntax-highlighting=none"},
+		{"pandoc 4.0\n", "--syntax-highlighting=none"},
+		{"pandoc 2.19.2\n", "--no-highlight"},
+		{"something else\n", "--no-highlight"}, // 版がわからなければ、どの版でも動くもの
+	}
+	for _, c := range cases {
+		major, minor, ok := parsePandocVersion(c.out)
+		if got := noHighlightArgFor(major, minor, ok); got != c.want {
+			t.Errorf("%q -> %s（期待 %s）", c.out, got, c.want)
+		}
+	}
+}
+
 func TestNumber(t *testing.T) {
 	cases := map[float64]string{10.5: "10.5", 14: "14", 12.6: "12.6", 18.900000000000002: "18.9", 0: "0", 1.0 / 3: "0.333"}
 	for in, want := range cases {
 		if got := number(in); got != want {
 			t.Errorf("number(%v) = %s（期待 %s）", in, got, want)
 		}
+	}
+}
+
+// コードブロックの書式。背景と枠の有無で、reportmdcode 環境の囲み方を変える。
+func TestPreambleCode(t *testing.T) {
+	cases := []struct {
+		name   string
+		code   map[string]any
+		has    []string
+		hasNot []string
+	}{
+		{"既定は背景と枠", nil,
+			[]string{`\fontsize{10.5pt}{15.12pt}`, `\fboxsep=5.25pt\fboxrule=0.4pt`, `\fcolorbox{reportmdcodeborder}{reportmdcodebg}`, `{HTML}{F5F5F5}`,
+				// リスト・引用の中では、枠をその字下げの幅に収める
+				`\def\FrameCommand##1{\hskip\@totalleftmargin`, `\hskip-\linewidth\hskip-\@totalleftmargin\hskip\columnwidth}`,
+				`\MakeFramed{\advance\hsize-\width\@totalleftmargin\z@\linewidth\hsize\@setminipage}`,
+				// 折り返しは、コードブロックの環境だけ（文中のコードには付けない）
+				`\RecustomVerbatimEnvironment{verbatim}{Verbatim}{breaklines,breakanywhere,`},
+			[]string{`\fvset`}},
+		{"背景だけ", map[string]any{"border": false, "background": "#ffeeee"},
+			[]string{`\fboxrule=\z@`, `\colorbox{reportmdcodebg}`, `{HTML}{FFEEEE}`},
+			[]string{"reportmdcodeborder"}},
+		{"太さ 0 の枠は付けない", map[string]any{"border": "0pt"},
+			[]string{`\fboxrule=\z@`, `\colorbox{reportmdcodebg}`},
+			[]string{"reportmdcodeborder"}},
+		{"枠だけ", map[string]any{"background": false, "border": "1pt"},
+			[]string{`\fboxrule=1pt`, `\fbox{\normalcolor #1}`},
+			[]string{"reportmdcodebg"}},
+		{"背景も枠もなし", map[string]any{"background": false, "border": false},
+			[]string{`\newenvironment{reportmdcode}{\par\vskip\medskipamount\reportmdcodestyle}`},
+			[]string{"MakeFramed", "reportmdcodebg", "reportmdcodeborder"}},
+		{"文字サイズと行間", map[string]any{"font_size": "9pt", "line_spacing": 1.0},
+			[]string{`\fontsize{9pt}{10.8pt}`, `\fboxsep=4.5pt`},
+			nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			user := map[string]any{}
+			if c.code != nil {
+				user["code"] = c.code
+			}
+			cfg, err := config.New(user, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := Preamble(cfg)
+			for _, want := range c.has {
+				if !strings.Contains(got, want) {
+					t.Errorf("%s がない:\n%s", want, got)
+				}
+			}
+			for _, unwanted := range c.hasNot {
+				if strings.Contains(got, unwanted) {
+					t.Errorf("%s はないはず", unwanted)
+				}
+			}
+		})
 	}
 }
 

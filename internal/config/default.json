@@ -58,6 +58,13 @@
     "numbering": true,
     "label": "式"
   },
+  "code": {
+    "font_size": null,
+    "line_spacing": 1.2,
+    "background": "F5F5F5",
+    "border": "0.4pt",
+    "highlight": true
+  },
   "cover": {
     "layout": [
       { "space": "40mm" },

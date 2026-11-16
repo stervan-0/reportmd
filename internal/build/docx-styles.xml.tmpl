@@ -208,17 +208,34 @@
       <w:ind w:firstLine="0" w:left="{{.QuoteIndent}}" w:right="{{.QuoteIndent}}"/>
     </w:pPr>
   </w:style>
-  <!-- コードブロック（等幅。欧文と和文の間を空けない） -->
+  <!-- コードブロック（等幅。欧文と和文の間を空けない。背景・枠は code.background・code.border。
+       枠と背景が本文の幅に収まるよう、左右を枠と文字の間の分だけ下げる） -->
   <w:style w:type="paragraph" w:customStyle="1" w:styleId="SourceCode">
     <w:name w:val="Source Code"/>
     <w:basedOn w:val="Normal"/>
     <w:link w:val="VerbatimChar"/>
     <w:pPr>
       <w:wordWrap w:val="off"/>
+      {{- if .CodeBorder}}
+      <w:pBdr>
+        <w:top w:val="single" w:sz="{{.CodeBorder}}" w:space="{{.CodePadding}}" w:color="{{.CodeBorderColor}}"/>
+        <w:left w:val="single" w:sz="{{.CodeBorder}}" w:space="{{.CodePadding}}" w:color="{{.CodeBorderColor}}"/>
+        <w:bottom w:val="single" w:sz="{{.CodeBorder}}" w:space="{{.CodePadding}}" w:color="{{.CodeBorderColor}}"/>
+        <w:right w:val="single" w:sz="{{.CodeBorder}}" w:space="{{.CodePadding}}" w:color="{{.CodeBorderColor}}"/>
+      </w:pBdr>
+      {{- end}}
+      {{- if .CodeBackground}}
+      <w:shd w:val="clear" w:color="auto" w:fill="{{.CodeBackground}}"/>
+      {{- end}}
       <w:autoSpaceDE w:val="0"/>
       <w:autoSpaceDN w:val="0"/>
-      <w:spacing w:before="{{.ListSkip}}" w:after="{{.ListSkip}}"/>
+      <w:spacing w:before="{{.CodeSkip}}" w:after="{{.CodeSkip}}" w:line="{{.CodeLine}}" w:lineRule="exact"/>
+      <w:ind w:left="{{.CodeIndent}}" w:right="{{.CodeIndent}}" w:firstLine="0"/>
     </w:pPr>
+    <w:rPr>
+      <w:sz w:val="{{.CodeSize}}"/>
+      <w:szCs w:val="{{.CodeSize}}"/>
+    </w:rPr>
   </w:style>
   <w:style w:type="paragraph" w:styleId="FootnoteText">
     <w:name w:val="Footnote Text"/>
