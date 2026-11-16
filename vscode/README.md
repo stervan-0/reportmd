@@ -30,6 +30,8 @@ cd vscode
 npm run package     # reportmd-0.9.0.vsix ができる（Node.js が必要。リポジトリの最上位で make vscode でも可）
 ```
 
+Node.js がなく Docker がある場合は、リポジトリの最上位で `make vscode-docker` を実行すると、Node.js のイメージの中で同じ `.vsix` を作れます（`make` のない PowerShell での打ち方は、最上位の README を参照）。
+
 VS Code の拡張機能ビューの「…」メニュー →「VSIX からのインストール...」で、できた `.vsix` を選びます。WSL に接続した VS Code で行うと、WSL の側に入ります。
 
 拡張子 `.rmd`（reportmd 0.1.0）のファイルにも使う場合は、VS Code の設定に次を加えます（R Markdown を使わない場合のみ）。

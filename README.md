@@ -133,10 +133,17 @@ reportmd build report.reportmd -o report.tex   # LaTeX のソース（.html .doc
 [vscode/](vscode/README.md) に、VS Code の拡張機能があります。独自記法の色分け、保存するたびの誤りの表示（波線）、VS Code の中での PDF のプレビュー（保存しなくても、入力するたびに更新）、ボタンからの PDF の生成・監視、`setting.json` の補完と検査ができます。
 
 ```bash
-make vscode     # vscode/reportmd-0.9.0.vsix を作る（Node.js が必要）
+make vscode          # vscode/reportmd-0.9.0.vsix を作る（Node.js が必要）
+make vscode-docker   # 同じものを Node.js のイメージの中で作る（Node.js の代わりに Docker が必要）
 ```
 
-VS Code の拡張機能ビューの「…」→「VSIX からのインストール...」で入れます。
+Node.js を入れていない場合は `make vscode-docker` を使います。`npm` の取り込みなどはすべてコンテナの中で行い、できた `.vsix` だけを `vscode/` に置きます。`make` のない PowerShell では、リポジトリのフォルダで次を実行します。
+
+```powershell
+docker run --rm -v "$($PWD.ProviderPath)\vscode:/out" node:22 sh /out/scripts/package-in-docker.sh
+```
+
+VS Code の拡張機能ビューの「…」→「VSIX からのインストール...」で入れます。拡張機能が呼び出す reportmd は、ローカルに入れたもの（`make install`）です。Docker のイメージの reportmd は使えません。
 
 ## 記法
 
