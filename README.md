@@ -7,7 +7,7 @@ Go で書いた1つの実行ファイルで動きます（Ruby などの実行�
 ## 必要なもの
 
 - Pandoc
-- XeLaTeX（TeX Live など。`xeCJK` パッケージを含むもの）
+- XeLaTeX（TeX Live など。`xeCJK`・`fvextra`・`framed` パッケージを含むもの）
 - 既定のフォント：IPAex明朝・IPAexゴシック・Noto Sans Mono CJK JP（設定で変更できます）
 - ビルドする場合のみ：Go 1.22 以上
 
@@ -94,6 +94,19 @@ VS Code の拡張機能ビューの「…」→「VSIX からのインストー�
 
 コードブロック・数式ブロック（`$$`）・YAML フロントマターの中は変換されません。フロントマターで使えるキーは `title`・`author`（PDF のメタデータになります）と `cover`（表紙）だけで、ほかのキーは警告を出して無視します。
 
+### コードブロック
+
+```` ``` ```` または `~~~` で囲んだコードは、薄い灰色の背景と枠の中に、書いたとおり等幅フォントで表示します。開きフェンスの後ろに言語名（`python`・`c`・`sh` など）を書くと、構文に色が付きます。PDF では、本文の幅に収まらない長い行を枠の中で折り返し、ページをまたぐコードはページごとに枠を閉じます。
+
+````markdown
+```python
+def hello(name):
+    print(f"こんにちは、{name}さん")
+```
+````
+
+背景・枠・文字サイズ・行間・構文の色は、設定の `code` で変えられます（下の「コードブロックの書式」）。
+
 ### 表紙
 
 フロントマターに `cover` を書くと、文書の先頭に表紙が付きます。表紙にはページ番号を付けず、本文が1ページ目になります。
@@ -120,7 +133,7 @@ cover:
 
 ## 設定
 
-用紙・余白・フォント・文字サイズ・行間・見出し・キャプション・表の書式・数式の番号・表紙のレイアウトを JSON で指定します。書かなかった項目は [internal/config/default.json](internal/config/default.json) の値になります。項目の一覧は仕様書の7章を参照してください。`reportmd init` で作られる `setting.json` には、すべての項目が既定値で書かれています。
+用紙・余白・フォント・文字サイズ・行間・見出し・キャプション・表の書式・数式の番号・コードブロックの書式・表紙のレイアウトを JSON で指定します。書かなかった項目は [internal/config/default.json](internal/config/default.json) の値になります。項目の一覧は仕様書の7章を参照してください。`reportmd init` で作られる `setting.json` には、すべての項目が既定値で書かれています。
 
 ```json
 {
@@ -166,6 +179,28 @@ cover:
 | `cell_padding` | セルの左右の余白 |
 | `header.bold` / `header.align` | 見出し行の太字と揃え（`"column"` なら列の揃えに従う） |
 | `rules.*` | 各罫線の太さ。`false` で線を引かない（`top` 上端、`header` 見出しの下、`bottom` 下端、`rows` 行の間、`vertical` 列の間、`sides` 左右の端） |
+
+### コードブロックの書式
+
+```json
+{
+  "code": {
+    "font_size": "9pt",
+    "line_spacing": 1.2,
+    "background": "F5F5F5",
+    "border": "0.4pt",
+    "highlight": true
+  }
+}
+```
+
+| 項目 | 意味 |
+| --- | --- |
+| `font_size` | コードの文字サイズ（`null` なら本文と同じ） |
+| `line_spacing` | コードの行間（倍率。本文の行間とは別） |
+| `background` | 背景の色（16進数6桁）。`false` で背景なし |
+| `border` | 枠の線の太さ。`false` で枠なし |
+| `highlight` | 言語名を書いたコードに構文の色を付けるか |
 
 ### 表紙のレイアウト
 

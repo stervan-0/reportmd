@@ -120,6 +120,12 @@ type docxVars struct {
 	RuleTop, RuleBottom         int
 	RuleHeader, RuleRows        int
 	RuleVertical, RuleSides     int
+	CodeSize, CodeLine          int
+	CodeSkip, CodeIndent        int    // 前後の空き（枠の外）と、左右の字下げ
+	CodePadding                 int    // 枠と文字の間（pt の整数）
+	CodeBorder                  int    // 枠の線の太さ（1/8 pt。なければ 0）
+	CodeBorderColor             string // 枠の線の色
+	CodeBackground              string // 背景の色（なければ空）
 	Covers                      []docxCover
 }
 
@@ -198,6 +204,22 @@ func docxLayout(cfg *config.Config) docxVars {
 	v.TableSize = halfPoints(tableSize)
 	v.TableLine = twips(tableLine)
 	v.TableRowPad = twips(tableLine * (cfg.Table.RowSpacing - 1) / 2)
+
+	// コードブロックの中は本文の行間を使わない。枠や背景があれば、PDF と同じく
+	// 枠と文字の間を空け、枠が本文の幅に収まるよう左右を下げる
+	size := codeSize(cfg)
+	v.CodeSize = halfPoints(size)
+	v.CodeLine = twips(size * baselineRatio * cfg.Code.LineSpacing)
+	v.CodeSkip = twips(listSkip)
+	v.CodeBorder = ruleSize(cfg.CodeBorder())
+	v.CodeBorderColor = codeBorderColor
+	v.CodeBackground = cfg.CodeBackground()
+	if v.CodeBorder > 0 || v.CodeBackground != "" {
+		// Word の罫線と文字の間は pt の整数（0〜31）
+		v.CodePadding = int(math.Min(math.Round(size*codePadding), 31))
+		v.CodeIndent = twips(float64(v.CodePadding) + lengthPoints(cfg.CodeBorder()))
+		v.CodeSkip += twips(float64(v.CodePadding))
+	}
 
 	for i, item := range cfg.Cover.Layout {
 		if item.Space != nil {

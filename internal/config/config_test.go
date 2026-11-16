@@ -86,6 +86,21 @@ func TestTableFontSize(t *testing.T) {
 	}
 }
 
+func TestCodeBackgroundAndBorder(t *testing.T) {
+	cfg := mustLoad(t, `{}`)
+	if cfg.CodeBackground() != "F5F5F5" || cfg.CodeBorder() != "0.4pt" || cfg.Code.FontSize != nil || !cfg.Code.Highlight {
+		t.Errorf("既定は薄い灰色の背景と 0.4pt の枠、本文と同じ文字サイズ、構文の色あり")
+	}
+	cfg = mustLoad(t, `{"code": {"background": "#e8f0fe", "border": "1mm"}}`)
+	if cfg.CodeBackground() != "E8F0FE" || cfg.CodeBorder() != "1mm" {
+		t.Errorf("色は先頭の # を除いて大文字にする: %q %q", cfg.CodeBackground(), cfg.CodeBorder())
+	}
+	cfg = mustLoad(t, `{"code": {"background": false, "border": false}}`)
+	if cfg.CodeBackground() != "" || cfg.CodeBorder() != "" {
+		t.Errorf("false なら付けない")
+	}
+}
+
 func TestFindUserFile(t *testing.T) {
 	dir := t.TempDir()
 	input := writeFile(t, dir, "report.reportmd", "本文\n")
@@ -140,6 +155,11 @@ func TestValidation(t *testing.T) {
 		"table.header.align":      `{"table": {"header": {"align": "top"}}}`,
 		"table.rules.top":         `{"table": {"rules": {"top": true}}}`,
 		"equation.numbering":      `{"equation": {"numbering": 1}}`,
+		"code.font_size":          `{"code": {"font_size": "30pt"}}`,
+		"code.line_spacing":       `{"code": {"line_spacing": 0.5}}`,
+		"code.background":         `{"code": {"background": "gray"}}`,
+		"code.border":             `{"code": {"border": true}}`,
+		"code.highlight":          `{"code": {"highlight": "yes"}}`,
 		"cover.layout":            `{"cover": {"layout": {"text": "a"}}}`,
 	}
 	for name, json := range cases {

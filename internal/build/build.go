@@ -246,6 +246,7 @@ func Metadata(cfg *config.Config, source string) map[string]any {
 	if strings.TrimSpace(cfg.Document.Author) != "" {
 		meta["author"] = cfg.Document.Author
 	}
+	size := codeSize(cfg)
 	meta["reportmd"] = map[string]any{
 		"figure_label":    cfg.Caption.FigureLabel,
 		"table_label":     cfg.Caption.TableLabel,
@@ -257,6 +258,14 @@ func Metadata(cfg *config.Config, source string) map[string]any {
 		"table_header_align": cfg.Table.Header.Align,
 		"equation_numbering": cfg.Equation.Numbering,
 		"equation_label":     cfg.Equation.Label,
+		// コードブロック。HTML の書式は filter.lua が決める（PDF はプリアンブル、Word は雛形）
+		"code_highlight":    cfg.Code.Highlight,
+		"code_font_size":    number(size),
+		"code_line_height":  number(size * baselineRatio * cfg.Code.LineSpacing),
+		"code_background":   cfg.CodeBackground(),
+		"code_border":       cfg.CodeBorder(),
+		"code_border_color": codeBorderColor,
+		"code_padding":      number(size * codePadding),
 	}
 	return meta
 }

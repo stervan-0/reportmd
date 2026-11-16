@@ -45,3 +45,28 @@
 % 縦の罫線（列の間 vrule と、表の左右の端 vside）
 \newcommand{\reportmdvrule}{\vrule width 0.4pt}
 \newcommand{\reportmdvside}{\vrule width 0.4pt}
+% --- コードブロック（filter.lua が reportmdcode 環境で囲む） ---
+% 長い行は、枠の中で折り返す（和文の行も折り返せるよう、どこでも折り返す）。
+% コードの前後の空きは reportmdcode 環境で決める（fancyvrb のリストの空きは付けない）。
+% Pandoc は、構文の色を付けたコードを Highlighting 環境、それ以外を verbatim 環境にする。
+\usepackage{xcolor}
+\usepackage{fvextra}
+\usepackage{framed}
+\fvset{breaklines,breakanywhere,listparameters={\setlength{\topsep}{0pt}\setlength{\partopsep}{0pt}}}
+\ifdefined\Highlighting
+\RecustomVerbatimEnvironment{Highlighting}{Verbatim}{commandchars=\\\{\}}
+\fi
+\ifdefined\Shaded
+\renewenvironment{Shaded}{}{}
+\fi
+\RecustomVerbatimEnvironment{verbatim}{Verbatim}{}
+\definecolor{reportmdcodebg}{HTML}{F5F5F5}
+\definecolor{reportmdcodeborder}{HTML}{BFBFBF}
+\makeatletter
+\newcommand{\reportmdcodestyle}{\linespread{1}\fontsize{10.5pt}{15.12pt}\selectfont\parskip\z@}
+% 背景・枠（framed。ページをまたぐコードは、ページごとに枠を閉じる）
+\newenvironment{reportmdcode}{%
+  \def\FrameCommand{\fboxsep=5.25pt\fboxrule=0.4pt\reportmdcodeframe}%
+  \MakeFramed{\advance\hsize-\width\FrameRestore}\reportmdcodestyle}{\endMakeFramed}
+\newcommand{\reportmdcodeframe}{\fcolorbox{reportmdcodeborder}{reportmdcodebg}}
+\makeatother

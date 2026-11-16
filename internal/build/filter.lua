@@ -13,6 +13,8 @@
 --   独立した数式（$$）        ->  右端に通し番号 (1) を付ける（.reportmd-equation の目印で
 --                                 参照用の名前・番号なしを指定）
 --   @名前（引用）             ->  名前を付けた図表・数式の「図1」「表2」「式(1)」
+--   コードブロック            ->  PDF は reportmdcode 環境、HTML は背景・枠の div で囲む
+--                                 （code.highlight が false なら、構文の色を付けない）
 --   2 スペース始まりの段落   ->  字下げ 1 文字分（paragraph_indent の置き換え）
 --   見出し                    ->  #1〜#3（.reportmd-num）は番号付き、
 --                                 標準の #（クラスなし）は番号なしにする
@@ -31,6 +33,7 @@
 --   source                           警告に表示する入力ファイル名
 --   table_width / table_header_align 表の幅（auto / full）と見出し行の揃え
 --   equation_numbering / equation_label 数式の番号の有無と、参照のラベル（既定：式）
+--   code_*                           コードブロックの構文の色の有無と、HTML の書式
 --
 -- 表紙のレイアウト（設定の cover.layout）は、このファイルと同じ場所の cover.json で受け取る。
 -- Word の寸法（本文の高さ、表紙のあとのセクションの区切り）は、同じ場所の docx.json で受け取る。
@@ -116,6 +119,13 @@ local settings = {
   table_header_align = 'center', -- center / left / right / column（列の揃えに従う）
   equation_numbering = 'true',   -- false なら数式に番号を付けない
   equation_label = '式',         -- 参照のラベル（@名前 -> 式(1)）
+  code_highlight = 'true',       -- false なら、コードブロックに構文の色を付けない
+  code_font_size = '10.5',       -- HTML のコードブロックの書式（pt。PDF はプリアンブル、Word は雛形で決める）
+  code_line_height = '15.12',
+  code_background = 'F5F5F5',    -- 背景の色（16進数6桁。空なら付けない）
+  code_border = '0.4pt',         -- 枠の線の太さ（空なら付けない）
+  code_border_color = 'BFBFBF',
+  code_padding = '5.25',
 }
 
 local function read_settings(meta)
@@ -1346,6 +1356,50 @@ local function convert_plain(plain)
 end
 
 -- ---------------------------------------------------------------------
+-- コードブロック
+-- ---------------------------------------------------------------------
+--
+-- 構文の色は、言語名（```python など）を書いたコードに、Pandoc が付ける。
+-- code.highlight が false なら、言語名（クラス）を取り除いて、色を付けないようにする。
+-- PDF は reportmdcode 環境（プリアンブルで背景・枠・文字サイズを決める）で囲み、
+-- HTML は背景・枠・文字サイズを書いた div で囲む。Word は雛形のスタイル（Source Code）で決める。
+
+local function html_code_style()
+  local style = 'margin: 1em 0; padding: ' .. settings.code_padding .. 'pt; font-size: '
+    .. settings.code_font_size .. 'pt; line-height: ' .. settings.code_line_height .. 'pt;'
+  if settings.code_background ~= '' then
+    style = style .. ' background: #' .. settings.code_background .. ';'
+  end
+  if settings.code_border ~= '' then
+    style = style .. ' border: ' .. settings.code_border .. ' solid #' .. settings.code_border_color .. ';'
+  end
+  return style
+end
+
+local function convert_code_block(code)
+  local changed = false
+  if settings.code_highlight == 'false' and #code.classes > 0 then
+    code.classes = {}
+    changed = true
+  end
+  if FORMAT:match('latex') then
+    return {
+      pandoc.RawBlock('latex', '\\begin{reportmdcode}'),
+      code,
+      pandoc.RawBlock('latex', '\\end{reportmdcode}'),
+    }
+  end
+  if FORMAT:match('^html') then
+    -- 囲みの div の中では、コードの前後の空きを付けず、長い行は折り返す
+    code.attributes.style = 'margin: 0; white-space: pre-wrap; overflow-wrap: anywhere;'
+    return pandoc.Div({ code }, { style = html_code_style() })
+  end
+  if changed then
+    return code
+  end
+end
+
+-- ---------------------------------------------------------------------
 -- 脚注（PowerPoint）
 -- ---------------------------------------------------------------------
 --
@@ -1392,6 +1446,7 @@ return {
     Span = convert_span,
     Cite = convert_cite,
     Note = convert_note,
+    CodeBlock = convert_code_block,
     Blocks = convert_blocks,
   },
   -- 表紙は、本文の変換が終わってから先頭に置く（表紙の値は本文の変換の対象にしない）

@@ -164,7 +164,23 @@ var filterCases = []filterCase{
 
 	// 字下げ
 	{name: "2スペースの字下げ", rmd: "  段落です\n", format: "latex", has: []string{`\noindent\hspace*{\reportmdchar}段落です`}, hasNot: []string{"reportmd-indent"}},
+
+	// コードブロック
+	{name: "コードブロックは reportmdcode で囲む", rmd: codeDoc, format: "latex",
+		order: []string{`\begin{reportmdcode}`, `\begin{Highlighting}`, `\KeywordTok{def}`, `\end{Highlighting}`, `\end{reportmdcode}`,
+			`\begin{reportmdcode}`, `\begin{verbatim}`, "plain block", `\end{verbatim}`, `\end{reportmdcode}`}},
+	{name: "code_highlight false なら色を付けない", rmd: codeDoc, format: "latex", settings: map[string]any{"code_highlight": false},
+		has: []string{"\\begin{verbatim}\ndef hello():"}, hasNot: []string{"Highlighting", "KeywordTok"}},
+	{name: "リストの中のコードブロック", rmd: "- 項目\n\n  ```\n  x = 1\n  ```\n", format: "latex",
+		order: []string{`\item`, `\begin{reportmdcode}`, "x = 1", `\end{reportmdcode}`, `\end{itemize}`}},
+	{name: "HTML は背景と枠の div で囲む", rmd: codeDoc, format: "html",
+		has: []string{`background: #F5F5F5;`, `border: 0.4pt solid #BFBFBF;`, `font-size: 10.5pt;`, `white-space: pre-wrap;`, `class="sourceCode python"`}},
+	{name: "HTML の背景と枠を付けない", rmd: codeDoc, format: "html", settings: map[string]any{"code_background": "", "code_border": ""},
+		has: []string{`white-space: pre-wrap;`}, hasNot: []string{"background:", "border:"}},
+	{name: "PDF・HTML 以外ではコードブロックを囲まない", rmd: codeDoc, format: "native", has: []string{`CodeBlock`, `[ "python" ]`}, hasNot: []string{"reportmdcode", "Div"}},
 }
+
+const codeDoc = "```python\ndef hello():\n    print(\"こんにちは\")\n```\n\n~~~\nplain block\n~~~\n"
 
 func TestFilter(t *testing.T) {
 	for _, c := range filterCases {

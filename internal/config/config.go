@@ -102,6 +102,14 @@ type Config struct {
 		Numbering bool   `json:"numbering"`
 		Label     string `json:"label"`
 	} `json:"equation"`
+	Code struct {
+		FontSize    *string `json:"font_size"`
+		LineSpacing float64 `json:"line_spacing"`
+		// 背景の色と枠の線の太さ。false（付けない）または文字列。CodeBackground・CodeBorder で読む
+		Background any  `json:"background"`
+		Border     any  `json:"border"`
+		Highlight  bool `json:"highlight"`
+	} `json:"code"`
 	Cover struct {
 		Layout []CoverItem `json:"layout"`
 	} `json:"cover"`
@@ -144,6 +152,22 @@ func (c *Config) HeadingRule(level int) string {
 		if s, ok := c.Heading.Rules[level].(string); ok {
 			return s
 		}
+	}
+	return ""
+}
+
+// CodeBackground は、コードブロックの背景の色（16進数6桁。先頭の # は除く）を返す。背景を付けないなら空文字。
+func (c *Config) CodeBackground() string {
+	if s, ok := c.Code.Background.(string); ok {
+		return strings.ToUpper(strings.TrimPrefix(s, "#"))
+	}
+	return ""
+}
+
+// CodeBorder は、コードブロックの枠の線の太さを返す。枠を付けないなら空文字。
+func (c *Config) CodeBorder() string {
+	if s, ok := c.Code.Border.(string); ok {
+		return s
 	}
 	return ""
 }
@@ -588,6 +612,11 @@ var rules = []rule{
 	{"table.rules.sides", ruleExpect, orFalse(isLength)},
 	{"equation.numbering", "true または false", isBool},
 	{"equation.label", "文字列", isString},
+	{"code.font_size", `null（本文と同じ）または "6pt"〜"24pt"`, orNull(pointIn(6, 24))},
+	{"code.line_spacing", "1.0〜3.0 の数値", numberIn(1, 3)},
+	{"code.background", `false（背景を付けない）または16進数6桁の色（例："F5F5F5"）`, orFalse(isColor)},
+	{"code.border", ruleExpect, orFalse(isLength)},
+	{"code.highlight", "true または false", isBool},
 	// 各項目の中身は validateCoverLayout で調べる
 	{"cover.layout", "表紙の項目（{ ... }）の配列", isArray},
 }

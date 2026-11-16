@@ -13,7 +13,8 @@ import (
 
 // testdata の preamble_*.tex と meta_*.json は、Ruby 版 reportmd が同じ設定から
 // 生成したもの。Go 版でも、同じプリアンブルとメタデータになることを確かめる。
-// Go 版で加えた行（コードの中の欧文と和文のアキをなくす設定）は、preamble_*.tex にも足してある。
+// Go 版で加えた行（コードの中の欧文と和文のアキをなくす設定、コードブロックの書式）は preamble_*.tex に、
+// Go 版で加えた項目（code_*）は meta_*.json にも足してある。
 var goldenCases = []string{"default", "grid", "custom", "misc"}
 
 func loadCase(t *testing.T, name string) *config.Config {
@@ -109,6 +110,55 @@ func TestNumber(t *testing.T) {
 		if got := number(in); got != want {
 			t.Errorf("number(%v) = %s（期待 %s）", in, got, want)
 		}
+	}
+}
+
+// コードブロックの書式。背景と枠の有無で、reportmdcode 環境の囲み方を変える。
+func TestPreambleCode(t *testing.T) {
+	cases := []struct {
+		name   string
+		code   map[string]any
+		has    []string
+		hasNot []string
+	}{
+		{"既定は背景と枠", nil,
+			[]string{`\fontsize{10.5pt}{15.12pt}`, `\fboxsep=5.25pt\fboxrule=0.4pt`, `\fcolorbox{reportmdcodeborder}{reportmdcodebg}`, `{HTML}{F5F5F5}`},
+			nil},
+		{"背景だけ", map[string]any{"border": false, "background": "#ffeeee"},
+			[]string{`\fboxrule=\z@`, `\colorbox{reportmdcodebg}`, `{HTML}{FFEEEE}`},
+			[]string{"reportmdcodeborder"}},
+		{"枠だけ", map[string]any{"background": false, "border": "1pt"},
+			[]string{`\fboxrule=1pt`, `\fbox{\normalcolor #1}`},
+			[]string{"reportmdcodebg"}},
+		{"背景も枠もなし", map[string]any{"background": false, "border": false},
+			[]string{`\newenvironment{reportmdcode}{\par\vskip\medskipamount\reportmdcodestyle}`},
+			[]string{"MakeFramed", "reportmdcodebg", "reportmdcodeborder"}},
+		{"文字サイズと行間", map[string]any{"font_size": "9pt", "line_spacing": 1.0},
+			[]string{`\fontsize{9pt}{10.8pt}`, `\fboxsep=4.5pt`},
+			nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			user := map[string]any{}
+			if c.code != nil {
+				user["code"] = c.code
+			}
+			cfg, err := config.New(user, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := Preamble(cfg)
+			for _, want := range c.has {
+				if !strings.Contains(got, want) {
+					t.Errorf("%s がない:\n%s", want, got)
+				}
+			}
+			for _, unwanted := range c.hasNot {
+				if strings.Contains(got, unwanted) {
+					t.Errorf("%s はないはず", unwanted)
+				}
+			}
+		})
 	}
 }
 
