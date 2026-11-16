@@ -95,6 +95,10 @@ func TestCodeBackgroundAndBorder(t *testing.T) {
 	if cfg.CodeBackground() != "E8F0FE" || cfg.CodeBorder() != "1mm" {
 		t.Errorf("色は先頭の # を除いて大文字にする: %q %q", cfg.CodeBackground(), cfg.CodeBorder())
 	}
+	cfg = mustLoad(t, `{"code": {"border": "0mm"}}`)
+	if cfg.CodeBorder() != "" {
+		t.Errorf("太さ 0 の枠は付けない: %q", cfg.CodeBorder())
+	}
 	cfg = mustLoad(t, `{"code": {"background": false, "border": false}}`)
 	if cfg.CodeBackground() != "" || cfg.CodeBorder() != "" {
 		t.Errorf("false なら付けない")

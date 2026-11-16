@@ -217,7 +217,8 @@ func docxLayout(cfg *config.Config) docxVars {
 	if v.CodeBorder > 0 || v.CodeBackground != "" {
 		// Word の罫線と文字の間は pt の整数（0〜31）
 		v.CodePadding = int(math.Min(math.Round(size*codePadding), 31))
-		v.CodeIndent = twips(float64(v.CodePadding) + lengthPoints(cfg.CodeBorder()))
+		// 線の太さは、Word が引く太さ（ruleSize で範囲に収めた 1/8 pt の値）で数える
+		v.CodeIndent = twips(float64(v.CodePadding) + float64(v.CodeBorder)/8)
 		v.CodeSkip += twips(float64(v.CodePadding))
 	}
 

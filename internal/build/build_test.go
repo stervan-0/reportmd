@@ -104,6 +104,19 @@ func TestFormatFromPath(t *testing.T) {
 	}
 }
 
+// code.highlight が false なら、Pandoc に --no-highlight を渡す（言語名などのクラスは残す）。
+func TestPandocArgsHighlight(t *testing.T) {
+	paths := map[string]string{"body.md": "b.md", "filter.lua": "f.lua", "meta.json": "m.json"}
+	for _, format := range []Format{LaTeX, HTML, Docx, Pptx} {
+		if args := strings.Join(PandocArgs(paths, "out", format, "t", true), " "); strings.Contains(args, "--no-highlight") {
+			t.Errorf("%s: 既定では構文の色を付ける: %s", format, args)
+		}
+		if args := strings.Join(PandocArgs(paths, "out", format, "t", false), " "); !strings.Contains(args, "--no-highlight") {
+			t.Errorf("%s: highlight が false なら --no-highlight: %s", format, args)
+		}
+	}
+}
+
 func TestNumber(t *testing.T) {
 	cases := map[float64]string{10.5: "10.5", 14: "14", 12.6: "12.6", 18.900000000000002: "18.9", 0: "0", 1.0 / 3: "0.333"}
 	for in, want := range cases {
@@ -122,10 +135,18 @@ func TestPreambleCode(t *testing.T) {
 		hasNot []string
 	}{
 		{"既定は背景と枠", nil,
-			[]string{`\fontsize{10.5pt}{15.12pt}`, `\fboxsep=5.25pt\fboxrule=0.4pt`, `\fcolorbox{reportmdcodeborder}{reportmdcodebg}`, `{HTML}{F5F5F5}`},
-			nil},
+			[]string{`\fontsize{10.5pt}{15.12pt}`, `\fboxsep=5.25pt\fboxrule=0.4pt`, `\fcolorbox{reportmdcodeborder}{reportmdcodebg}`, `{HTML}{F5F5F5}`,
+				// リスト・引用の中では、枠をその字下げの幅に収める
+				`\def\FrameCommand##1{\hskip\@totalleftmargin`, `\hskip-\linewidth\hskip-\@totalleftmargin\hskip\columnwidth}`,
+				`\MakeFramed{\advance\hsize-\width\@totalleftmargin\z@\linewidth\hsize\@setminipage}`,
+				// 折り返しは、コードブロックの環境だけ（文中のコードには付けない）
+				`\RecustomVerbatimEnvironment{verbatim}{Verbatim}{breaklines,breakanywhere,`},
+			[]string{`\fvset`}},
 		{"背景だけ", map[string]any{"border": false, "background": "#ffeeee"},
 			[]string{`\fboxrule=\z@`, `\colorbox{reportmdcodebg}`, `{HTML}{FFEEEE}`},
+			[]string{"reportmdcodeborder"}},
+		{"太さ 0 の枠は付けない", map[string]any{"border": "0pt"},
+			[]string{`\fboxrule=\z@`, `\colorbox{reportmdcodebg}`},
 			[]string{"reportmdcodeborder"}},
 		{"枠だけ", map[string]any{"background": false, "border": "1pt"},
 			[]string{`\fboxrule=1pt`, `\fbox{\normalcolor #1}`},

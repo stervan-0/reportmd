@@ -259,7 +259,6 @@ func Metadata(cfg *config.Config, source string) map[string]any {
 		"equation_numbering": cfg.Equation.Numbering,
 		"equation_label":     cfg.Equation.Label,
 		// コードブロック。HTML の書式は filter.lua が決める（PDF はプリアンブル、Word は雛形）
-		"code_highlight":    cfg.Code.Highlight,
 		"code_font_size":    number(size),
 		"code_line_height":  number(size * baselineRatio * cfg.Code.LineSpacing),
 		"code_background":   cfg.CodeBackground(),
@@ -300,13 +299,18 @@ func WorkFiles(dir, markdown string, cfg *config.Config, source string) (map[str
 
 // PandocArgs は、Pandoc の引数を作る。
 // title は HTML のページの題名（文書に title がない場合に使う）。
-func PandocArgs(paths map[string]string, output string, format Format, title string) []string {
+// highlight が false なら、コードブロックに構文の色を付けない（code.highlight）。
+func PandocArgs(paths map[string]string, output string, format Format, title string, highlight bool) []string {
 	args := []string{
 		paths["body.md"],
 		"-f", pandocReader,
 		"--lua-filter=" + paths["filter.lua"],
 		"--metadata-file=" + paths["meta.json"],
 		"--number-sections", // 見出しの番号（標準の見出しは filter.lua で番号なしにする）
+	}
+	if !highlight {
+		// 言語名（クラス）は残したまま、色だけを付けない（numberLines などのクラスも残る）
+		args = append(args, "--no-highlight")
 	}
 	switch format {
 	case LaTeX: // PDF も、いったん LaTeX にしてから XeLaTeX にかける（latex.go）
@@ -348,7 +352,7 @@ func runPandoc(dir, markdown, output string, format Format, opts Options, source
 		base := filepath.Base(opts.Input)
 		title = strings.TrimSuffix(base, filepath.Ext(base))
 	}
-	cmd := exec.Command("pandoc", PandocArgs(paths, output, format, title)...)
+	cmd := exec.Command("pandoc", PandocArgs(paths, output, format, title, opts.Config.Code.Highlight)...)
 	// 画像などの相対パスは、入力ファイルのある場所を基準にする
 	cmd.Dir = filepath.Dir(opts.Input)
 	var stderr bytes.Buffer

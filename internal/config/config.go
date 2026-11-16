@@ -165,11 +165,17 @@ func (c *Config) CodeBackground() string {
 }
 
 // CodeBorder は、コードブロックの枠の線の太さを返す。枠を付けないなら空文字。
+// 太さが 0（"0pt" など）なら、false と同じく枠を付けない（Word は細い線を最小の太さで引くため、
+// 0 のまま渡すと PDF と Word で違ってしまう）。
 func (c *Config) CodeBorder() string {
-	if s, ok := c.Code.Border.(string); ok {
-		return s
+	s, ok := c.Code.Border.(string)
+	if !ok {
+		return ""
 	}
-	return ""
+	if f, err := strconv.ParseFloat(strings.TrimRight(s, "abcdefghijklmnopqrstuvwxyz"), 64); err == nil && f == 0 {
+		return ""
+	}
+	return s
 }
 
 // SourceName は、エラー表示に使う設定ファイルの名前。

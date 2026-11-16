@@ -235,16 +235,19 @@ func TestBuildConfigProblems(t *testing.T) {
 	contains(t, "警告", errOut, setting+": warning: 未知の設定キーを無視します: unknown_key")
 }
 
-// コードブロック：構文の色を付けたもの・言語名のないもの・知らない言語名・リストの中・長い行・
-// ページをまたぐもの が、背景と枠の有無のどの設定でも PDF になる。
+// コードブロック：構文の色を付けたもの・言語名のないもの・知らない言語名・リストと引用の中・長い行・
+// ページをまたぐもの（リストの中も）が、背景と枠の有無のどの設定でも PDF になる。
 func TestBuildPDFCodeBlocks(t *testing.T) {
 	pdfReady(t)
-	var long strings.Builder
+	var long, longInList strings.Builder
 	for i := 1; i <= 70; i++ {
 		fmt.Fprintf(&long, "line %d\n", i)
+		fmt.Fprintf(&longInList, "  item line %d\n", i)
 	}
 	doc := "#1 コード\n\n```python\ndef hello(name):\n    print(f\"こんにちは、{name}さん。\" + \"" + strings.Repeat("とても長い行", 20) + "\")\n```\n\n" +
-		"```\nplain block\n```\n\n~~~ unknownlang\nunknown language\n~~~\n\n- 項目\n\n  ```sh\n  echo 'in list'\n  ```\n\n```\n" + long.String() + "```\n"
+		"```\nplain block\n```\n\n~~~ unknownlang\nunknown language\n~~~\n\n- 項目\n\n  ```sh\n  echo 'in list'\n  ```\n\n" +
+		"> 引用\n>\n> ```\n> in quote " + strings.Repeat("とても長い行", 20) + "\n> ```\n\n" +
+		"```\n" + long.String() + "```\n\n- 長いコード\n\n  ```c\n" + longInList.String() + "  ```\n"
 	settings := map[string]string{
 		"既定":      `{}`,
 		"背景だけ":    `{"code": {"border": false}}`,
@@ -261,7 +264,7 @@ func TestBuildPDFCodeBlocks(t *testing.T) {
 				t.Fatalf("PDF を生成できるはず: %d %s", code, errOut)
 			}
 			text := pdfText(t, filepath.Join(dir, "report.pdf"))
-			for _, want := range []string{"def hello(name):", "plain block", "unknown language", "echo 'in list'", "line 1", "line 70"} {
+			for _, want := range []string{"def hello(name):", "plain block", "unknown language", "echo 'in list'", "in quote", "line 1", "line 70", "item line 1", "item line 70"} {
 				contains(t, "PDF の文字", text, want)
 			}
 		})

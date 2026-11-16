@@ -69,6 +69,10 @@ type filterCase struct {
 	hasNot   []string
 	// order は、この順に出てくるべき文字列
 	order []string
+	// count は、文字列が出てくる回数
+	count map[string]int
+	// extra は、Pandoc に足す引数
+	extra []string
 }
 
 const smallTable = "| 条件 | 結果 |\n|---|---|\n| A | 10 |\n"
@@ -169,14 +173,21 @@ var filterCases = []filterCase{
 	{name: "コードブロックは reportmdcode で囲む", rmd: codeDoc, format: "latex",
 		order: []string{`\begin{reportmdcode}`, `\begin{Highlighting}`, `\KeywordTok{def}`, `\end{Highlighting}`, `\end{reportmdcode}`,
 			`\begin{reportmdcode}`, `\begin{verbatim}`, "plain block", `\end{verbatim}`, `\end{reportmdcode}`}},
-	{name: "code_highlight false なら色を付けない", rmd: codeDoc, format: "latex", settings: map[string]any{"code_highlight": false},
-		has: []string{"\\begin{verbatim}\ndef hello():"}, hasNot: []string{"Highlighting", "KeywordTok"}},
+	{name: "--no-highlight でも囲む", rmd: codeDoc, format: "latex", extra: []string{"--no-highlight"},
+		order: []string{`\begin{reportmdcode}`, "\\begin{verbatim}\ndef hello():", `\end{reportmdcode}`}, hasNot: []string{"Highlighting", "KeywordTok"}},
 	{name: "リストの中のコードブロック", rmd: "- 項目\n\n  ```\n  x = 1\n  ```\n", format: "latex",
 		order: []string{`\item`, `\begin{reportmdcode}`, "x = 1", `\end{reportmdcode}`, `\end{itemize}`}},
-	{name: "HTML は背景と枠の div で囲む", rmd: codeDoc, format: "html",
-		has: []string{`background: #F5F5F5;`, `border: 0.4pt solid #BFBFBF;`, `font-size: 10.5pt;`, `white-space: pre-wrap;`, `class="sourceCode python"`}},
-	{name: "HTML の背景と枠を付けない", rmd: codeDoc, format: "html", settings: map[string]any{"code_background": "", "code_border": ""},
-		has: []string{`white-space: pre-wrap;`}, hasNot: []string{"background:", "border:"}},
+	// HTML：囲みの書式は、header-includes の CSS で1回だけ出す（-s で文書全体にして確かめる）
+	{name: "HTML は .reportmd-code の div で囲む", rmd: codeDoc, format: "html", extra: []string{"-s", "--metadata=pagetitle:t"},
+		order: []string{"<style>", `.reportmd-code { margin: 1em 0; padding: 5.25pt; font-size: 10.5pt; line-height: 15.12pt; background: #F5F5F5; border: 0.4pt solid #BFBFBF; }`,
+			// 言語名付きのコードにも効くよう、Pandoc の pre > code.sourceCode より強い指定にする
+			`.reportmd-code pre > code.sourceCode { white-space: pre-wrap;`, `.reportmd-code pre > code.sourceCode > span { line-height: inherit; }`, "</style>",
+			`<div class="reportmd-code">`, `class="sourceCode python"`, `<div class="reportmd-code">`, "plain block"}},
+	{name: "HTML の CSS は1回だけ", rmd: codeDoc + "\n```\nthird\n```\n", format: "html", extra: []string{"-s", "--metadata=pagetitle:t"},
+		count: map[string]int{".reportmd-code {": 1, `<div class="reportmd-code">`: 3}},
+	{name: "HTML の背景と枠を付けない", rmd: codeDoc, format: "html", extra: []string{"-s", "--metadata=pagetitle:t"}, settings: map[string]any{"code_background": "", "code_border": ""},
+		has: []string{`.reportmd-code { margin: 1em 0; padding: 5.25pt; font-size: 10.5pt; line-height: 15.12pt; }`}, hasNot: []string{"background: #", "border: 0.4pt"}},
+	{name: "コードブロックがなければ CSS を出さない", rmd: "本文\n", format: "html", extra: []string{"-s", "--metadata=pagetitle:t"}, hasNot: []string{"reportmd-code"}},
 	{name: "PDF・HTML 以外ではコードブロックを囲まない", rmd: codeDoc, format: "native", has: []string{`CodeBlock`, `[ "python" ]`}, hasNot: []string{"reportmdcode", "Div"}},
 }
 
@@ -185,7 +196,12 @@ const codeDoc = "```python\ndef hello():\n    print(\"こんにちは\")\n```\n\
 func TestFilter(t *testing.T) {
 	for _, c := range filterCases {
 		t.Run(c.name, func(t *testing.T) {
-			out, _ := pandoc(t, c.rmd, c.format, c.settings)
+			out, _ := pandoc(t, c.rmd, c.format, c.settings, c.extra...)
+			for s, want := range c.count {
+				if got := strings.Count(out, s); got != want {
+					t.Errorf("%q は %d 回のはず: %d 回", s, want, got)
+				}
+			}
 			for _, want := range c.has {
 				if !strings.Contains(out, want) {
 					t.Errorf("%q が含まれるはず:\n%s", want, out)

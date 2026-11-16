@@ -345,7 +345,9 @@ func TestDocxOutput(t *testing.T) {
 		{"文中の数式だけの段落は、後ろに幅のない空白", "| a |\n|---|\n| $x$ |\n\n- $y$\n- 項目 $z$\n",
 			[]string{"reportmdSpace|", "[表:Table]", "reportmdTableHeader|a", "reportmdTableText|x\u200b", "reportmdSpace|", "Compact|y\u200b", "Compact|項目 z"}},
 		{"図は下にキャプション", "![f:構成](a.png)\n", []string{"reportmdFigure|", "reportmdFigureCaption|図1 構成"}},
-		{"コードブロックは Source Code のスタイル", "```python\nx = 1\n```\n\n```\ny\n```\n", []string{"SourceCode|x = 1", "SourceCode|y"}},
+		{"続けて書いたコードブロックは、空きの段落で別の枠にする", "```python\nx = 1\n```\n\n```\ny\n```\n\n- 項目\n\n  ```\n  a\n  ```\n\n  ```\n  b\n  ```\n",
+			[]string{"SourceCode|x = 1", "reportmdSpace|", "SourceCode|y", "|項目", "SourceCode|a", "reportmdSpace|", "SourceCode|b"}},
+		{"間に段落があれば空きの段落は入れない", "```\nx\n```\n\n本文\n\n```\ny\n```\n", []string{"SourceCode|x", "FirstParagraph|本文", "SourceCode|y"}},
 		{"表紙は項目ごとのスタイルで、本文とセクションを分ける", "---\ntitle: 題名\nauthor: 山田\ncover: true\n---\n\n本文\n",
 			[]string{"reportmdSpace|", "reportmdCover2|題名", "reportmdSpace|", "reportmdSpace|", "[表:reportmdCoverTable6]", "reportmdCover6Label|氏名", "reportmdCover6|山田", "reportmdSpace|", "|[区切り]", "BodyText|本文"}},
 	}

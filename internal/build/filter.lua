@@ -13,8 +13,8 @@
 --   独立した数式（$$）        ->  右端に通し番号 (1) を付ける（.reportmd-equation の目印で
 --                                 参照用の名前・番号なしを指定）
 --   @名前（引用）             ->  名前を付けた図表・数式の「図1」「表2」「式(1)」
---   コードブロック            ->  PDF は reportmdcode 環境、HTML は背景・枠の div で囲む
---                                 （code.highlight が false なら、構文の色を付けない）
+--   コードブロック            ->  PDF は reportmdcode 環境、HTML は .reportmd-code の div で囲む。
+--                                 Word は、続けて書いたコードブロックの間に空きの段落を入れる
 --   2 スペース始まりの段落   ->  字下げ 1 文字分（paragraph_indent の置き換え）
 --   見出し                    ->  #1〜#3（.reportmd-num）は番号付き、
 --                                 標準の #（クラスなし）は番号なしにする
@@ -33,7 +33,7 @@
 --   source                           警告に表示する入力ファイル名
 --   table_width / table_header_align 表の幅（auto / full）と見出し行の揃え
 --   equation_numbering / equation_label 数式の番号の有無と、参照のラベル（既定：式）
---   code_*                           コードブロックの構文の色の有無と、HTML の書式
+--   code_*                           HTML のコードブロックの書式
 --
 -- 表紙のレイアウト（設定の cover.layout）は、このファイルと同じ場所の cover.json で受け取る。
 -- Word の寸法（本文の高さ、表紙のあとのセクションの区切り）は、同じ場所の docx.json で受け取る。
@@ -119,7 +119,6 @@ local settings = {
   table_header_align = 'center', -- center / left / right / column（列の揃えに従う）
   equation_numbering = 'true',   -- false なら数式に番号を付けない
   equation_label = '式',         -- 参照のラベル（@名前 -> 式(1)）
-  code_highlight = 'true',       -- false なら、コードブロックに構文の色を付けない
   code_font_size = '10.5',       -- HTML のコードブロックの書式（pt。PDF はプリアンブル、Word は雛形で決める）
   code_line_height = '15.12',
   code_background = 'F5F5F5',    -- 背景の色（16進数6桁。空なら付けない）
@@ -1072,6 +1071,12 @@ local function convert_blocks(blocks)
         and not has_class(block, 'reportmd-plain') then
       result:extend(numberless_table(block))
       changed = true
+    elseif FORMAT == 'docx' and block.t == 'CodeBlock' and i > 1 and blocks[i - 1].t == 'CodeBlock' then
+      -- 続けて書いたコードブロックは、間に空きの段落を入れて、別々の枠にする
+      -- （Word は、罫線の設定が同じ段落が隣り合うと、1つの枠にまとめる）
+      result:insert(docx_space(1))
+      result:insert(block)
+      changed = true
     else
       result:insert(block)
     end
@@ -1359,29 +1364,41 @@ end
 -- コードブロック
 -- ---------------------------------------------------------------------
 --
--- 構文の色は、言語名（```python など）を書いたコードに、Pandoc が付ける。
--- code.highlight が false なら、言語名（クラス）を取り除いて、色を付けないようにする。
+-- 構文の色は、言語名（```python など）を書いたコードに、Pandoc が付ける
+-- （code.highlight が false なら、internal/build が Pandoc に --no-highlight を渡す）。
 -- PDF は reportmdcode 環境（プリアンブルで背景・枠・文字サイズを決める）で囲み、
--- HTML は背景・枠・文字サイズを書いた div で囲む。Word は雛形のスタイル（Source Code）で決める。
+-- HTML は .reportmd-code の div で囲んで、その書式を header-includes の CSS で決める。
+-- Word は雛形のスタイル（Source Code）で決める。続けて書いたコードブロックの間には、
+-- 空きの段落を入れる（Word は、罫線の設定が同じ段落が隣り合うと、1つの枠にまとめるため）。
 
-local function html_code_style()
-  local style = 'margin: 1em 0; padding: ' .. settings.code_padding .. 'pt; font-size: '
+local CODE_CLASS = 'reportmd-code'
+local html_code_used = false
+
+-- HTML：囲みの div（.reportmd-code）の書式。Pandoc の標準の CSS（言語名付きのコードの
+-- pre > code.sourceCode { white-space: pre; } や、行の高さ line-height: 1.25）より強い指定で、
+-- 前後の空きをなくし、長い行を折り返し、文字サイズ・行送りを囲みのものにする。
+local function html_code_css()
+  local box = 'margin: 1em 0; padding: ' .. settings.code_padding .. 'pt; font-size: '
     .. settings.code_font_size .. 'pt; line-height: ' .. settings.code_line_height .. 'pt;'
   if settings.code_background ~= '' then
-    style = style .. ' background: #' .. settings.code_background .. ';'
+    box = box .. ' background: #' .. settings.code_background .. ';'
   end
   if settings.code_border ~= '' then
-    style = style .. ' border: ' .. settings.code_border .. ' solid #' .. settings.code_border_color .. ';'
+    box = box .. ' border: ' .. settings.code_border .. ' solid #' .. settings.code_border_color .. ';'
   end
-  return style
+  local c = '.' .. CODE_CLASS
+  return table.concat({
+    '<style>',
+    c .. ' { ' .. box .. ' }',
+    c .. ' div.sourceCode, ' .. c .. ' pre { margin: 0; overflow: visible; background: none; }',
+    c .. ' pre, ' .. c .. ' pre code, ' .. c .. ' pre > code.sourceCode'
+      .. ' { white-space: pre-wrap; overflow-wrap: anywhere; font-size: inherit; }',
+    c .. ' pre > code.sourceCode > span { line-height: inherit; }',
+    '</style>',
+  }, '\n')
 end
 
 local function convert_code_block(code)
-  local changed = false
-  if settings.code_highlight == 'false' and #code.classes > 0 then
-    code.classes = {}
-    changed = true
-  end
   if FORMAT:match('latex') then
     return {
       pandoc.RawBlock('latex', '\\begin{reportmdcode}'),
@@ -1390,13 +1407,18 @@ local function convert_code_block(code)
     }
   end
   if FORMAT:match('^html') then
-    -- 囲みの div の中では、コードの前後の空きを付けず、長い行は折り返す
-    code.attributes.style = 'margin: 0; white-space: pre-wrap; overflow-wrap: anywhere;'
-    return pandoc.Div({ code }, { style = html_code_style() })
+    html_code_used = true
+    return pandoc.Div({ code }, { class = CODE_CLASS })
   end
-  if changed then
-    return code
+end
+
+-- HTML：コードブロックがあれば、囲みの書式（CSS）を header-includes で1回だけ出す
+local function add_code_css(doc)
+  if not html_code_used then
+    return nil
   end
+  doc.meta['header-includes'] = pandoc.MetaBlocks({ pandoc.RawBlock('html', html_code_css()) })
+  return doc
 end
 
 -- ---------------------------------------------------------------------
@@ -1453,6 +1475,7 @@ return {
   {
     Pandoc = function(doc)
       doc = add_cover(doc) or doc
+      doc = add_code_css(doc) or doc
       return add_notes(doc) or doc
     end,
   },
