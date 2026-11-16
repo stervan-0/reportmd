@@ -173,8 +173,6 @@ var filterCases = []filterCase{
 	{name: "コードブロックは reportmdcode で囲む", rmd: codeDoc, format: "latex",
 		order: []string{`\begin{reportmdcode}`, `\begin{Highlighting}`, `\KeywordTok{def}`, `\end{Highlighting}`, `\end{reportmdcode}`,
 			`\begin{reportmdcode}`, `\begin{verbatim}`, "plain block", `\end{verbatim}`, `\end{reportmdcode}`}},
-	{name: "--no-highlight でも囲む", rmd: codeDoc, format: "latex", extra: []string{"--no-highlight"},
-		order: []string{`\begin{reportmdcode}`, "\\begin{verbatim}\ndef hello():", `\end{reportmdcode}`}, hasNot: []string{"Highlighting", "KeywordTok"}},
 	{name: "リストの中のコードブロック", rmd: "- 項目\n\n  ```\n  x = 1\n  ```\n", format: "latex",
 		order: []string{`\item`, `\begin{reportmdcode}`, "x = 1", `\end{reportmdcode}`, `\end{itemize}`}},
 	// HTML：囲みの書式は、header-includes の CSS で1回だけ出す（-s で文書全体にして確かめる）
@@ -222,6 +220,25 @@ func TestFilter(t *testing.T) {
 				pos += i + len(want)
 			}
 		})
+	}
+}
+
+// 構文の色を付けない引数（入っている Pandoc の版に合わせたもの）でも囲み、Pandoc の警告は出ない。
+func TestFilterNoHighlight(t *testing.T) {
+	out, stderr := pandoc(t, codeDoc, "latex", nil, NoHighlightArg())
+	if stderr != "" {
+		t.Errorf("%s で Pandoc の警告が出ないはず: %s", NoHighlightArg(), stderr)
+	}
+	pos := 0
+	for _, want := range []string{`\begin{reportmdcode}`, "\\begin{verbatim}\ndef hello():", `\end{reportmdcode}`} {
+		i := strings.Index(out[pos:], want)
+		if i < 0 {
+			t.Fatalf("%q が順に出てくるはず:\n%s", want, out)
+		}
+		pos += i + len(want)
+	}
+	if strings.Contains(out, "Highlighting") {
+		t.Errorf("構文の色を付けない:\n%s", out)
 	}
 }
 

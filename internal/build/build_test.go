@@ -104,15 +104,38 @@ func TestFormatFromPath(t *testing.T) {
 	}
 }
 
-// code.highlight が false なら、Pandoc に --no-highlight を渡す（言語名などのクラスは残す）。
+// code.highlight が false なら、構文の色を付けない引数を渡す（言語名などのクラスは残す）。
 func TestPandocArgsHighlight(t *testing.T) {
 	paths := map[string]string{"body.md": "b.md", "filter.lua": "f.lua", "meta.json": "m.json"}
 	for _, format := range []Format{LaTeX, HTML, Docx, Pptx} {
-		if args := strings.Join(PandocArgs(paths, "out", format, "t", true), " "); strings.Contains(args, "--no-highlight") {
+		if args := strings.Join(PandocArgs(paths, "out", format, "t", ""), " "); strings.Contains(args, "highlight") {
 			t.Errorf("%s: 既定では構文の色を付ける: %s", format, args)
 		}
-		if args := strings.Join(PandocArgs(paths, "out", format, "t", false), " "); !strings.Contains(args, "--no-highlight") {
-			t.Errorf("%s: highlight が false なら --no-highlight: %s", format, args)
+		if args := strings.Join(PandocArgs(paths, "out", format, "t", "--syntax-highlighting=none"), " "); !strings.Contains(args, " --syntax-highlighting=none ") {
+			t.Errorf("%s: 色を付けない引数を渡す: %s", format, args)
+		}
+	}
+}
+
+// Pandoc 3.8 からは --syntax-highlighting=none（--no-highlight は非推奨の警告が出る）。
+func TestNoHighlightArgByVersion(t *testing.T) {
+	cases := []struct {
+		out  string
+		want string
+	}{
+		{"pandoc 3.1.3\nFeatures: +server +lua\n", "--no-highlight"},
+		{"pandoc 3.7.0.2\n", "--no-highlight"},
+		{"pandoc 3.8\n", "--syntax-highlighting=none"},
+		{"pandoc.exe 3.8.2\r\n", "--syntax-highlighting=none"},
+		{"pandoc 3.10\n", "--syntax-highlighting=none"},
+		{"pandoc 4.0\n", "--syntax-highlighting=none"},
+		{"pandoc 2.19.2\n", "--no-highlight"},
+		{"something else\n", "--no-highlight"}, // 版がわからなければ、どの版でも動くもの
+	}
+	for _, c := range cases {
+		major, minor, ok := parsePandocVersion(c.out)
+		if got := noHighlightArgFor(major, minor, ok); got != c.want {
+			t.Errorf("%q -> %s（期待 %s）", c.out, got, c.want)
 		}
 	}
 }

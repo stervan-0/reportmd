@@ -349,9 +349,9 @@ def hello(name):
 - 背景の色（`code.background`）と枠の線の太さ（`code.border`）は、設定で変えられ、`false` で付けない（太さが 0 の枠も付けない）。枠の色は薄い灰色（`BFBFBF`）とする。枠と文字の間は、コードの文字サイズの半分とする。
 - コードの文字サイズ（`code.font_size`。`null` なら本文と同じ）と行間（`code.line_spacing`）は、本文とは別に決める。本文の行間（`text.line_spacing`）は使わない。
 - PDF では、本文の幅に収まらない長い行は、枠の中で折り返す（和文の行も折り返せるよう、どの文字の間でも折り返し、続きの行の先頭に `↪` を付ける）。ページをまたぐコードは、ページごとに枠を閉じる。リスト・引用の中のコードは、背景と枠も含めて、その字下げの幅（左右とも）に収める。長い行の折り返しは、コードブロックだけにする（文中のコードは折り返さない）。
-- Word では、コードブロックを1つの段落（スタイル Source Code）にし、背景（網掛け）と枠（段落の罫線）を付ける。枠が本文の幅に収まるよう、左右を枠と文字の間の分だけ下げる。長い行は Word が折り返す。Word は、罫線の設定が同じ段落が隣り合うと1つの枠にまとめるので、続けて書いたコードブロックの間には、高さ 1pt の空きの段落を入れて、別々の枠にする。
+- Word では、コードブロックを1つの段落（スタイル Source Code）にし、背景（網掛け）と枠（段落の罫線）を付ける。枠が本文の幅に収まるよう、左右を枠と文字の間の分だけ下げる。長い行は Word が折り返す。Word は、罫線の設定が同じ段落が隣り合うと1つの枠にまとめるので、続けて書いたコードブロックの間には、高さ 1pt の空きの段落を入れて、別々の枠にする（引用の中のコードも同じ字下げになるので、引用の最後のコードと、そのすぐ後のコードの間にも入れる）。
 - HTML では、`reportmd-code` クラスの `div` で囲み、背景・枠・文字サイズ・行送りと長い行の折り返しを、`<head>` の CSS（コードブロックがあるときだけ、1回）で決める。言語名付きのコードにも効くよう、Pandoc の標準の CSS（`pre > code.sourceCode { white-space: pre; }`、行の高さ `line-height: 1.25`）より強い指定にする。PowerPoint では、構文の色（`code.highlight`）だけを反映する。
-- 実装：`filter.lua` が、PDF では `reportmdcode` 環境（`\begin{reportmdcode}`〜`\end{reportmdcode}`）で囲む。環境の書式（`framed` による背景と枠、文字サイズ）と、折り返し（`fvextra` の `breaklines`・`breakanywhere`）は、`preamble.tex.tmpl` が設定から定義する。Pandoc が構文の色を付けたコード（`Highlighting` 環境）も、色のないコード（`verbatim` 環境）も、`fvextra` の `Verbatim` にして同じ書式にする。リスト・引用の中では、`framed` の `snugshade*` 環境と同じく、枠を `\@totalleftmargin` だけ右へずらし、右の余白の分だけ幅を減らす。HTML の CSS は、`filter.lua` が `header-includes` に入れる。`code.highlight` が `false` なら、Pandoc に `--no-highlight` を渡す。
+- 実装：`filter.lua` が、PDF では `reportmdcode` 環境（`\begin{reportmdcode}`〜`\end{reportmdcode}`）で囲む。環境の書式（`framed` による背景と枠、文字サイズ）と、折り返し（`fvextra` の `breaklines`・`breakanywhere`）は、`preamble.tex.tmpl` が設定から定義する。Pandoc が構文の色を付けたコード（`Highlighting` 環境）も、色のないコード（`verbatim` 環境）も、`fvextra` の `Verbatim` にして同じ書式にする。リスト・引用の中では、`framed` の `snugshade*` 環境と同じく、枠を `\@totalleftmargin` だけ右へずらし、右の余白の分だけ幅を減らす。HTML の CSS は、`filter.lua` が `header-includes` に入れる。`code.highlight` が `false` なら、Pandoc に、3.8 以上なら `--syntax-highlighting=none`、それより前なら `--no-highlight` を渡す（3.8 から `--no-highlight` は非推奨の警告を出すため。版は `pandoc --version` で調べる）。
 
 ## 6. 独自構文
 

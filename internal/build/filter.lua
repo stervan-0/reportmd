@@ -1043,6 +1043,21 @@ local function convert_table(caption_div, tbl)
   return tbl
 end
 
+-- ブロックの、最初（last が false）または最後のブロックを、引用・Div の中までたどって返す
+-- （引用の中のコードも、Word では本文のコードと同じ字下げの段落になるため）。
+local function edge_block(block, last)
+  while block ~= nil and (block.t == 'BlockQuote' or block.t == 'Div') and #block.content > 0 do
+    block = block.content[last and #block.content or 1]
+  end
+  return block
+end
+
+-- Word：2つのブロックの境目で、コードブロックが隣り合うか
+local function code_blocks_meet(before, after)
+  local a, b = edge_block(before, true), edge_block(after, false)
+  return a ~= nil and b ~= nil and a.t == 'CodeBlock' and b.t == 'CodeBlock'
+end
+
 -- ブロックの並びを先頭から見ていき、図・表の見出しを、番号つきの組版に置き換える。
 local function convert_blocks(blocks)
   local result = pandoc.List({})
@@ -1071,9 +1086,10 @@ local function convert_blocks(blocks)
         and not has_class(block, 'reportmd-plain') then
       result:extend(numberless_table(block))
       changed = true
-    elseif FORMAT == 'docx' and block.t == 'CodeBlock' and i > 1 and blocks[i - 1].t == 'CodeBlock' then
+    elseif FORMAT == 'docx' and i > 1 and code_blocks_meet(blocks[i - 1], block) then
       -- 続けて書いたコードブロックは、間に空きの段落を入れて、別々の枠にする
-      -- （Word は、罫線の設定が同じ段落が隣り合うと、1つの枠にまとめる）
+      -- （Word は、罫線の設定が同じ段落が隣り合うと、1つの枠にまとめる）。
+      -- 引用の最後のコードと、そのすぐ後のコードも同じ
       result:insert(docx_space(1))
       result:insert(block)
       changed = true
