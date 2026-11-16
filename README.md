@@ -45,10 +45,11 @@ docker run --rm -it -v "$PWD:/work" -u "$(id -u):$(id -g)" reportmd build report
 docker run --rm -it -v "$($PWD.ProviderPath):/work" reportmd build report.reportmd
 ```
 
-毎回打つのは長いので、`reportmd` という名前で呼べるようにしておくと、ふつうに入れたときと同じように使えます。端末から打ったときだけ `-t` を付けるので、`reportmd build --stdin < a.reportmd` のようなリダイレクトや、スクリプトからの呼び出しもそのまま使えます（`-t` を付けると、入力が端末でないときに失敗し、エラー出力も標準出力にまとめられてしまいます）。
+毎回打つのは長いので、`reportmd` という名前で呼べるようにしておくと、ふつうに入れたときと同じように使えます。bash の関数は、端末から打ったときだけ `-t` を付けるので、`reportmd build --stdin < a.reportmd` のようなリダイレクトや、スクリプトからの呼び出しもそのまま使えます（`-t` を付けると、入力が端末でないときに失敗し、エラー出力も標準出力にまとめられてしまいます）。
 
 ```bash
-# ~/.bashrc に書く
+# ~/.bashrc に書く（前の版の README の alias reportmd=… を書いていても、1行目で取り消す）
+unalias reportmd 2>/dev/null
 reportmd() {
   local tty=
   [ -t 0 ] && [ -t 1 ] && [ -t 2 ] && tty=-t
@@ -64,6 +65,8 @@ function reportmd {
 }
 ```
 
+PowerShell の関数は、打ったコマンドをパイプやリダイレクトにつないでも、それを見分けられません（`-t` が付いたままになり、パイプの入力も docker に渡りません）。PowerShell で `Get-Content a.reportmd | …` や `… > out.txt` のように使うときは、関数ではなく、`-t` を付けない `docker run --rm -i -v "$($PWD.ProviderPath):/work" reportmd …` を直接打ってください。
+
 ```bash
 reportmd init myreport            # 雛形を作る
 reportmd build report.reportmd    # report.pdf を作る
@@ -76,8 +79,21 @@ Docker で使うときの注意：
 
 - コンテナの中からは PDF ビューアを開けません。引数なしの `reportmd`（監視して作り直す）や `--open` も使えますが、ビューアは開かないので、できた PDF は自分で開いてください。
 - コンテナから見えるのは、コマンドを打ったフォルダの中だけです。`../images/a.png` のような外のファイルも、`/home/…` や `C:\…` の絶対パス、`-c` で指定する別の場所の設定ファイルも使えません（「見つかりません」のエラーになります）。レポートのフォルダに移ってから実行してください。
-- 使えるフォントは、イメージに入っているもの（IPAex明朝・IPAexゴシック・Noto Sans CJK JP など）だけです。`reportmd fonts` に出るのも、イメージの中のフォントです。游明朝などのほかのフォントを使うときは、フォントのフォルダを `/usr/local/share/fonts` の下に見せます（Windows のフォントなら、bash では `-v /mnt/c/Windows/Fonts:/usr/local/share/fonts/windows:ro`、PowerShell では `-v "C:\Windows\Fonts:/usr/local/share/fonts/windows:ro"` を `docker run` に足します）。
-- `--keep-temp` で残した一時ファイルは、そのままではコンテナと一緒に消えます。`-e TMPDIR=/work` を `docker run` に足すと、レポートのフォルダの中に残ります。
+- 使えるフォントは、イメージに入っているもの（IPAex明朝・IPAexゴシック・Noto Sans CJK JP など）だけです。`reportmd fonts` に出るのも、イメージの中のフォントです。游明朝などのほかのフォントを使うときは、使うフォントのファイルだけを1つのフォルダに集め、そのフォルダを `/usr/local/share/fonts` の下に見せます（上の関数の `docker run` に `-v` を足します）。`C:\Windows\Fonts` をまるごと見せると、起動のたびにフォントを読み直すので、1回ごとに数秒以上遅くなります。
+
+  ```bash
+  # 例：游明朝（yumin*.ttf）を使う
+  mkdir -p ~/reportmd-fonts && cp /mnt/c/Windows/Fonts/yumin*.ttf ~/reportmd-fonts/
+  # docker run に足す：-v ~/reportmd-fonts:/usr/local/share/fonts/host:ro
+  ```
+
+  ```powershell
+  # 例：游明朝（yumin*.ttf）を使う
+  mkdir $HOME\reportmd-fonts; Copy-Item C:\Windows\Fonts\yumin*.ttf $HOME\reportmd-fonts
+  # docker run に足す：-v "$HOME\reportmd-fonts:/usr/local/share/fonts/host:ro"
+  ```
+
+- `--keep-temp` で残した一時ファイルは、そのままではコンテナと一緒に消えます。`-e TMPDIR=/work` を `docker run` に足すと、レポートのフォルダの中に残ります。このとき「一時ファイルを残しました: /work/reportmd-…」と表示されますが、`/work` はコンテナから見たレポートのフォルダのことなので、レポートのフォルダの中の `reportmd-…` を見てください。
 - VS Code 拡張機能は `reportmd` を直接起動するので、Docker 版では使えません（上の関数も見えません）。VS Code で使うときは、WSL の中で `make install` してください。
 - 時刻（監視中の「[15:04:05] 変更を検出しました」など）は日本時間です。変えるときは `-e TZ=UTC` のように指定します。
 - reportmd を新しくしたら、`git pull` のあとに `docker build -t reportmd .` をもう一度実行します。古いイメージのままかどうかは `reportmd --version` で確かめられます。
