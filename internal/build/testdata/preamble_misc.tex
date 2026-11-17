@@ -76,3 +76,15 @@
   {\par\unskip\@minipagefalse\endMakeFramed}
 \newcommand{\reportmdcodeframe}{\fcolorbox{reportmdcodeborder}{reportmdcodebg}}
 \makeatother
+% --- 文中のコード（filter.lua が \reportmdinlinecodestart{}〜\reportmdinlinecodeend{} で囲む） ---
+% 中身を箱に入れて、コードブロックと同じ色の背景を敷く。空白で区切った語ごとに箱を分け
+% （\reportmdinlinecodebreak{}）、箱の間で行を折り返せるようにする（1語の中では折り返さない）。
+% 背景の高さは、中身によらず本文の文字の高さ＋上下 1pt にそろえる。しおり（PDF の目次）では、何もしない
+\newsavebox{\reportmdinlinebox}
+\makeatletter
+\newcommand{\reportmdinline@put}{{\color{reportmdcodebg}\rule[-\dimexpr\dp\reportmdinlinebox+1pt\relax]{\wd\reportmdinlinebox}{\dimexpr\ht\reportmdinlinebox+\dp\reportmdinlinebox+2pt\relax}}\kern-\wd\reportmdinlinebox\usebox{\reportmdinlinebox}}
+\DeclareRobustCommand{\reportmdinlinecodestart}{\leavevmode\begingroup\setbox\reportmdinlinebox\hbox\bgroup\hspace{1pt}\vphantom{Ag}}
+\DeclareRobustCommand{\reportmdinlinecodebreak}{\egroup\reportmdinline@put\allowbreak\setbox\reportmdinlinebox\hbox\bgroup\vphantom{Ag}}
+\DeclareRobustCommand{\reportmdinlinecodeend}{\hspace{1pt}\egroup\reportmdinline@put\endgroup}
+\makeatother
+\AtBeginDocument{\ifdefined\pdfstringdefDisableCommands\pdfstringdefDisableCommands{\let\reportmdinlinecodestart\relax\let\reportmdinlinecodebreak\relax\let\reportmdinlinecodeend\relax}\fi}

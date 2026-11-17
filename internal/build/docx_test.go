@@ -143,6 +143,27 @@ func TestDocxCodeStyle(t *testing.T) {
 			t.Errorf("背景も枠もなければ %s を書かない", unwanted)
 		}
 	}
+	if strings.Contains(verbatimCharStyle(t, styles), "<w:shd") {
+		t.Errorf("背景がなければ、文中のコードにも網掛けを付けない")
+	}
+}
+
+// verbatimCharStyle は、styles.xml の文中のコードのスタイル（Verbatim Char）の部分を返す。
+func verbatimCharStyle(t *testing.T, styles string) string {
+	t.Helper()
+	start := strings.Index(styles, `w:styleId="VerbatimChar"`)
+	if start < 0 {
+		t.Fatal("Verbatim Char のスタイルがない")
+	}
+	return styles[start : start+strings.Index(styles[start:], "</w:style>")]
+}
+
+// 文中のコードには、コードブロックと同じ色の網掛けを付ける。
+func TestDocxInlineCodeStyle(t *testing.T) {
+	got := verbatimCharStyle(t, DocxStyles(config.Default()))
+	if !strings.Contains(got, `<w:shd w:val="clear" w:color="auto" w:fill="F5F5F5"/>`) {
+		t.Errorf("文中のコードに網掛けがない:\n%s", got)
+	}
 }
 
 func TestDocxHeadingRules(t *testing.T) {

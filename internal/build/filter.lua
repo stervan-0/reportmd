@@ -15,6 +15,8 @@
 --   @名前（引用）             ->  名前を付けた図表・数式の「図1」「表2」「式(1)」
 --   コードブロック            ->  PDF は reportmdcode 環境、HTML は .reportmd-code の div で囲む。
 --                                 Word は、続けて書いたコードブロックの間に空きの段落を入れる
+--   文中のコード              ->  PDF は背景の箱（\reportmdinlinecodestart〜end）で囲む。
+--                                 HTML は背景の CSS を出す
 --   2 スペース始まりの段落   ->  字下げ 1 文字分（paragraph_indent の置き換え）
 --   見出し                    ->  #1〜#3（.reportmd-num）は番号付き、
 --                                 標準の #（クラスなし）は番号なしにする
@@ -33,7 +35,7 @@
 --   source                           警告に表示する入力ファイル名
 --   table_width / table_header_align 表の幅（auto / full）と見出し行の揃え
 --   equation_numbering / equation_label 数式の番号の有無と、参照のラベル（既定：式）
---   code_*                           HTML のコードブロックの書式
+--   code_*                           HTML のコードブロックの書式（code_background は文中のコードにも使う）
 --
 -- 表紙のレイアウト（設定の cover.layout）は、このファイルと同じ場所の cover.json で受け取る。
 -- Word の寸法（本文の高さ、表紙のあとのセクションの区切り）は、同じ場所の docx.json で受け取る。
@@ -1414,6 +1416,88 @@ local function html_code_css()
   }, '\n')
 end
 
+-- 文中のコード（`...`）。背景は code.background と同じ色（空なら付けない）。
+-- PDF は \reportmdinlinecodestart 〜 \reportmdinlinecodeend（プリアンブルで定義）で囲む。
+-- 引数を取る命令にしないのは、言語名付きのコード（Pandoc の \VERB）を中に置けるようにするため。
+-- 言語名のないコードは、空白の後ろで語に分け、間に \reportmdinlinecodebreak を置いて、
+-- そこで行を折り返せるようにする（語の後ろの空白は、前の語に含める）。
+-- 言語名付きのコードは、分けると構文の色が変わるので、分けない。
+-- HTML は header-includes の CSS で決める。Word は雛形のスタイル（Verbatim Char）で決める。
+local html_inline_code_used = false
+
+local function convert_code(code)
+  if settings.code_background == '' then
+    return nil
+  end
+  if FORMAT:match('latex') then
+    local result = { pandoc.RawInline('latex', '\\reportmdinlinecodestart{}') }
+    if #code.classes > 0 then
+      table.insert(result, code)
+    else
+      local first = true
+      for piece in code.text:gmatch('%S*%s*') do
+        if piece ~= '' then
+          if not first then
+            table.insert(result, pandoc.RawInline('latex', '\\reportmdinlinecodebreak{}'))
+          end
+          table.insert(result, pandoc.Code(piece, code.attr))
+          first = false
+        end
+      end
+    end
+    table.insert(result, pandoc.RawInline('latex', '\\reportmdinlinecodeend{}'))
+    return result
+  end
+  if FORMAT:match('^html') then
+    html_inline_code_used = true
+  end
+end
+
+-- 和文の文字（仮名・漢字。句読点・括弧は除く）か
+local function is_cjk_letter(c)
+  return (c >= 0x3041 and c <= 0x30FF and c ~= 0x30FB) -- 仮名と長音（中黒は除く）
+    or (c >= 0x3400 and c <= 0x9FFF) -- 漢字
+    or (c >= 0xF900 and c <= 0xFAFF)
+    or (c >= 0xFF10 and c <= 0xFF19) or (c >= 0xFF21 and c <= 0xFF3A) or (c >= 0xFF41 and c <= 0xFF5A) -- 全角の英数字
+    or (c >= 0xFF66 and c <= 0xFF9F) -- 半角カナ
+end
+
+local function str_edge_is_cjk(el, last)
+  if el == nil or el.t ~= 'Str' or el.text == '' then
+    return false
+  end
+  local ok, c = pcall(utf8.codepoint, el.text, last and utf8.offset(el.text, -1) or 1)
+  return ok and is_cjk_letter(c)
+end
+
+-- PDF：文中のコードの背景の箱は、xeCJK から見ると文字ではないので、和文の文字と接していても、
+-- 和文と欧文の間のアキ（\CJKecglue）が入らない。和文の文字と接する側に、自分で入れる。
+local function space_inline_code(inlines)
+  if not FORMAT:match('latex') or settings.code_background == '' then
+    return nil
+  end
+  local result = pandoc.Inlines({})
+  local changed = false
+  for i, el in ipairs(inlines) do
+    local glue_after = false
+    if el.t == 'RawInline' and el.text == '\\reportmdinlinecodestart{}' and str_edge_is_cjk(inlines[i - 1], true) then
+      -- 和文の文字の直後の \CJKecglue は、xeCJK が取り除くので、{} で区切る
+      result:insert(pandoc.RawInline('latex', '{}\\CJKecglue{}'))
+      changed = true
+    elseif el.t == 'RawInline' and el.text == '\\reportmdinlinecodeend{}' and str_edge_is_cjk(inlines[i + 1], false) then
+      glue_after = true
+    end
+    result:insert(el)
+    if glue_after then
+      result:insert(pandoc.RawInline('latex', '\\CJKecglue{}'))
+      changed = true
+    end
+  end
+  if changed then
+    return result
+  end
+end
+
 local function convert_code_block(code)
   if FORMAT:match('latex') then
     return {
@@ -1428,12 +1512,25 @@ local function convert_code_block(code)
   end
 end
 
--- HTML：コードブロックがあれば、囲みの書式（CSS）を header-includes で1回だけ出す
+-- HTML：文中のコード（pre の中でない code）の背景
+local function html_inline_code_css()
+  return ':not(pre) > code { background: #' .. settings.code_background
+    .. '; padding: 0.1em 0.25em; border-radius: 0.2em; }'
+end
+
+-- HTML：コードブロック・文中のコードがあれば、その書式（CSS）を header-includes で1回だけ出す
 local function add_code_css(doc)
-  if not html_code_used then
+  local css = {}
+  if html_code_used then
+    table.insert(css, html_code_css())
+  end
+  if html_inline_code_used then
+    table.insert(css, '<style>\n' .. html_inline_code_css() .. '\n</style>')
+  end
+  if #css == 0 then
     return nil
   end
-  doc.meta['header-includes'] = pandoc.MetaBlocks({ pandoc.RawBlock('html', html_code_css()) })
+  doc.meta['header-includes'] = pandoc.MetaBlocks({ pandoc.RawBlock('html', table.concat(css, '\n')) })
   return doc
 end
 
@@ -1485,6 +1582,8 @@ return {
     Cite = convert_cite,
     Note = convert_note,
     CodeBlock = convert_code_block,
+    Code = convert_code,
+    Inlines = space_inline_code,
     Blocks = convert_blocks,
   },
   -- 表紙は、本文の変換が終わってから先頭に置く（表紙の値は本文の変換の対象にしない）

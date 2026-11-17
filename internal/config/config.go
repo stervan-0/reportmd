@@ -156,7 +156,7 @@ func (c *Config) HeadingRule(level int) string {
 	return ""
 }
 
-// CodeBackground は、コードブロックの背景の色（16進数6桁。先頭の # は除く）を返す。背景を付けないなら空文字。
+// CodeBackground は、コードブロックと文中のコードの背景の色（16進数6桁。先頭の # は除く）を返す。背景を付けないなら空文字。
 func (c *Config) CodeBackground() string {
 	if s, ok := c.Code.Background.(string); ok {
 		return strings.ToUpper(strings.TrimPrefix(s, "#"))
