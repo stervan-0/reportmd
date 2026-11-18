@@ -350,23 +350,26 @@ function pdfPath(file) {
 
 // preview は、PDF のプレビューを横に開き、監視を始める（入力・保存のたびに生成し直して、プレビューも更新する）。
 // プレビューから始めた監視は、プレビューを閉じると止める。
-function preview(doc) {
+async function preview(doc) {
   const file = doc.uri.fsPath;
   const panel = Preview.show(pdfPath(file));
-  if (!watches.has(file)) {
-    startWatch(doc, { fromPreview: true });
-    panel.onDispose.push(() => {
-      const watch = watches.get(file);
-      if (watch && watch.fromPreview) stopWatch(file);
-    });
-  }
+  if (watches.has(file)) return;
+  let closed = false;
+  panel.onDispose.push(() => {
+    closed = true;
+    const watch = watches.get(file);
+    if (watch && watch.fromPreview) stopWatch(file);
+  });
+  // 保存を待つあいだにプレビューが閉じられたら、監視を始めない（プレビューのない監視が残らないように）
+  await startWatch(doc, { fromPreview: true, cancelled: () => closed });
 }
 
 // --- watch ----------------------------------------------------------------
 
 // startWatch は、reportmd watch を起動する。fromPreview（プレビューから始めた）なら、PDF をほかで開かない。
 // 設定 reportmd.liveUpdate が有効なら、--stdin を付けて、保存していない内容も送る（onChange）。
-async function startWatch(doc, { fromPreview = false, live = config().get('liveUpdate', true) } = {}) {
+// cancelled は、保存を待つあいだに取りやめになったか（プレビューが閉じられたなど）を返す関数。
+async function startWatch(doc, { fromPreview = false, live = config().get('liveUpdate', true), cancelled = () => false } = {}) {
   const file = doc.uri.fsPath;
   if (watches.has(file)) {
     vscode.window.showInformationMessage(`${path.basename(file)} は監視中です`);
@@ -374,8 +377,18 @@ async function startWatch(doc, { fromPreview = false, live = config().get('liveU
   }
   // 保存した内容で生成するので、保存が終わってから監視を始める
   if (doc.isDirty && !live) {
-    await doc.save();
-    if (watches.has(file)) return; // 保存を待つあいだに、ほかから監視が始まった
+    let saved = false;
+    try {
+      saved = await doc.save();
+    } catch (err) {
+      log(`${path.basename(file)} を保存できませんでした`, String(err && err.message ? err.message : err));
+    }
+    if (!saved) {
+      vscode.window.showWarningMessage(`${path.basename(file)} を保存できなかったので、監視を始めません`);
+      return;
+    }
+    // 保存を待つあいだに、取りやめになったか、ほかから監視が始まった
+    if (cancelled() || watches.has(file)) return;
   }
   const args = ['watch', path.basename(file)];
   if (!fromPreview && openMode() === 'external') args.push('--open');

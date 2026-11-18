@@ -44,7 +44,7 @@ VS Code の拡張機能ビューの「…」メニュー →「VSIX からのイ
 
 | 設定 | 説明 |
 | --- | --- |
-| `reportmd.path` | reportmd コマンドのパス。空なら `reportmd`（PATH から探し、見つからなければ `~/.local/bin/reportmd`） |
+| `reportmd.path` | reportmd コマンドのパス。空なら `reportmd`（PATH から探し、見つからなければ `~/.local/bin/reportmd`）。ユーザーの設定でだけ指定できます（ワークスペースの設定には書けません） |
 | `reportmd.checkOnSave` | 保存するたびに誤りを調べる（既定 `true`） |
 | `reportmd.openPdf` | 「PDF を生成」「監視を開始」で生成した PDF を開く場所。`preview`（VS Code の横のプレビュー。既定）・`external`（OS の PDF ビューア）・`none` |
 | `reportmd.liveUpdate` | プレビュー・監視の間は、保存しなくても入力するたびに PDF を作り直す（既定 `true`。オフにすると保存したときだけ） |
