@@ -40,12 +40,13 @@ func pandocWithConfig(t *testing.T, rmd, format string, settings map[string]any,
 	filter := filepath.Join(dir, "filter.lua")
 	os.WriteFile(filter, filterLua, 0o644)
 	given := map[string]any{}
-	for key, value := range settings {
-		given[key] = value
-	}
 	meta := map[string]any{"reportmd": given}
 	if err := FilterData(meta, cfg, Format(format)); err != nil {
 		t.Fatal(err)
+	}
+	// settings に書いた値（cover_json なども）は、FilterData の値より優先する
+	for key, value := range settings {
+		given[key] = value
 	}
 	encoded, _ := json.Marshal(meta)
 	path := filepath.Join(dir, "meta.json")
@@ -358,6 +359,31 @@ func TestFilterCoverWarnings(t *testing.T) {
 	if !strings.Contains(stderr, "a.rmd: warning: フロントマターの cover の「学生番号」は、表紙のレイアウト（設定の cover.layout）で使われていません") ||
 		strings.Contains(stderr, "科目") {
 		t.Errorf("レイアウトで使わない cover の値は警告する: %s", stderr)
+	}
+
+	// 渡した JSON を読めなければ、黙って落とさずに警告する
+	doc := "---\ntitle: 表紙の題名\ncover: {}\n---\n\n本文\n"
+	out, stderr := pandoc(t, doc, "html", map[string]any{"source": "a.rmd", "cover_json": "zz"})
+	if !strings.Contains(stderr, "a.rmd: warning: 表紙のレイアウトを読めませんでした（表紙を付けずに出力します）") || strings.Contains(out, "表紙の題名") {
+		t.Errorf("表紙のレイアウトを読めなければ、警告して表紙を付けない: %s", stderr)
+	}
+	out, stderr = pandoc(t, doc, "docx", map[string]any{"source": "a.rmd", "docx_json": "zz"})
+	if !strings.Contains(stderr, "a.rmd: warning: Word の寸法を読めませんでした（表紙は、Word の表紙の書式を使わずに付けます）") {
+		t.Errorf("Word の寸法を読めなければ、警告する: %s", stderr)
+	}
+	zipped, err := zip.NewReader(strings.NewReader(out), int64(len(out)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range zipped.File {
+		if f.Name == "word/document.xml" {
+			rc, _ := f.Open()
+			data, _ := io.ReadAll(rc)
+			rc.Close()
+			if !strings.Contains(string(data), "表紙の題名") {
+				t.Errorf("Word の寸法を読めなくても、汎用の表紙は付ける")
+			}
+		}
 	}
 }
 

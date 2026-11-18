@@ -64,9 +64,9 @@ local function warn(message, line)
   io.stderr:write(location .. ': warning: ' .. message .. '\n')
 end
 
--- internal/build がメタデータに入れた JSON（16進数の文字列。what は警告に表示する名前）を読む。
--- 空なら nil。読めなければ、警告して nil を返す（黙って表紙などを落とさない）。
-local function decode_json(hex, what)
+-- internal/build がメタデータに入れた JSON（16進数の文字列）を読む。
+-- 空なら nil。読めなければ、warning を警告して nil を返す（黙って表紙などを落とさない）。
+local function decode_json(hex, warning)
   if hex == nil or hex == '' or pandoc.json == nil then
     return nil
   end
@@ -75,7 +75,7 @@ local function decode_json(hex, what)
   end)
   local ok, value = pcall(pandoc.json.decode, text, false)
   if not ok or type(value) ~= 'table' then
-    warn(what .. 'の設定を読めませんでした（' .. what .. 'を付けずに出力します）')
+    warn(warning)
     return nil
   end
   return value
@@ -259,7 +259,7 @@ local function read_cover_layout()
     warn('表紙を作るには、Pandoc 3.1.1 以上が必要です（表紙は付けません）')
     return nil
   end
-  local cover = decode_json(settings.cover_json, '表紙')
+  local cover = decode_json(settings.cover_json, '表紙のレイアウトを読めませんでした（表紙を付けずに出力します）')
   return cover and cover.layout
 end
 
@@ -469,7 +469,10 @@ local function add_cover(doc)
   end
   local used = {}
   local blocks
-  local docx = FORMAT == 'docx' and decode_json(settings.docx_json, 'Word の表紙') or nil
+  -- 読めなければ、下の汎用の表紙（other_cover）にする
+  local docx = FORMAT == 'docx'
+    and decode_json(settings.docx_json, 'Word の寸法を読めませんでした（表紙は、Word の表紙の書式を使わずに付けます）')
+    or nil
   if FORMAT:match('latex') then
     blocks = latex_cover(layout, used)
   elseif docx ~= nil then
