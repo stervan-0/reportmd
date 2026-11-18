@@ -13,7 +13,29 @@ Go で書いた1つの実行ファイルで動きます（Ruby などの実行�
 
 揃っているかどうかは `reportmd doctor` で確認できます。
 
-## インストール
+## ダウンロード
+
+[Releases](https://github.com/stervan-0/reportmd/releases) に、ビルド済みの実行ファイルと VS Code 拡張機能を置いています。Go や Node.js を入れなくても使えます（Pandoc・XeLaTeX・フォントは、上のとおり別に必要です）。
+
+| ファイル | 対象 |
+| --- | --- |
+| `reportmd-<版>-linux-amd64` / `-linux-arm64` | Linux・WSL |
+| `reportmd-<版>-darwin-arm64` / `-darwin-amd64` | macOS（Apple シリコン / Intel） |
+| `reportmd-<版>-windows-amd64.exe` | Windows |
+| `reportmd-<版>.vsix` | VS Code 拡張機能 |
+| `SHA256SUMS` | 各ファイルのチェックサム |
+
+ダウンロードした実行ファイルは `reportmd`（Windows では `reportmd.exe`）に名前を変えて、PATH の通ったフォルダに置きます。
+
+```bash
+# Linux・macOS の例
+chmod +x reportmd-*-linux-amd64
+mv reportmd-*-linux-amd64 ~/.local/bin/reportmd
+```
+
+macOS では、ダウンロードしたファイルに付く隔離の印のため、初回は「開発元を確認できない」と止められます。`xattr -d com.apple.quarantine ~/.local/bin/reportmd` で外してください。
+
+## インストール（ソースから）
 
 ```bash
 make install            # ~/.local/bin/reportmd に入れる（PREFIX=/usr/local で変更）
@@ -331,6 +353,13 @@ cover:
 ```bash
 make build     # ./reportmd を作る
 make test      # go vet と go test
+```
+
+リリースは、Version を上げたコミットに `v` で始まるタグを付けて push すると、GitHub Actions（`.github/workflows/release.yml`）が全 OS 向けの実行ファイル・`.vsix`・`SHA256SUMS` を作って Releases に置きます。タグと `internal/cli/cli.go` の Version が違うと止まります。
+
+```bash
+git tag v0.22.6
+git push origin v0.22.6
 ```
 
 PDF の生成が必要なテストは、Pandoc・XeLaTeX・既定のフォントが揃っていない環境では飛ばされます。`internal/build/testdata` には Ruby 版が生成したプリアンブルがあり、Go 版の出力が一致することを確かめています。
