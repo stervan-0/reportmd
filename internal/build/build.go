@@ -5,6 +5,7 @@ package build
 import (
 	"bytes"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -274,13 +275,35 @@ func Metadata(cfg *config.Config, source string) map[string]any {
 	return meta
 }
 
-// WorkFiles は、Pandoc に渡す作業用ファイルを dir に書き出し、そのパスを返す。
-func WorkFiles(dir, markdown string, cfg *config.Config, source string) (map[string]string, error) {
-	meta, err := json.Marshal(Metadata(cfg, source))
+// FilterData は、filter.lua に JSON で渡すもの（表紙のレイアウトと、Word なら Word の寸法）を、
+// メタデータの reportmd に加える。JSON は16進数の文字列にして入れる。
+//   - 文字列のままメタデータに入れると、Pandoc が Markdown として読んでしまう。
+//   - 別のファイルに書いて渡すと、filter.lua（Lua の io.open）が、日本語を含むパスを開けないことがある
+//     （Windows や、UTF-8 でないロケール）。メタデータのファイルは Pandoc 本体が読むので、この問題がない。
+func FilterData(meta map[string]any, cfg *config.Config, format Format) error {
+	settings := meta["reportmd"].(map[string]any)
+	cover, err := CoverJSON(cfg)
 	if err != nil {
+		return err
+	}
+	settings["cover_json"] = hex.EncodeToString(cover)
+	if format == Docx {
+		sizes, err := DocxJSON(cfg)
+		if err != nil {
+			return err
+		}
+		settings["docx_json"] = hex.EncodeToString(sizes)
+	}
+	return nil
+}
+
+// WorkFiles は、Pandoc に渡す作業用ファイルを dir に書き出し、そのパスを返す。
+func WorkFiles(dir, markdown string, cfg *config.Config, source string, format Format) (map[string]string, error) {
+	metadata := Metadata(cfg, source)
+	if err := FilterData(metadata, cfg, format); err != nil {
 		return nil, err
 	}
-	cover, err := CoverJSON(cfg)
+	meta, err := json.Marshal(metadata)
 	if err != nil {
 		return nil, err
 	}
@@ -289,7 +312,6 @@ func WorkFiles(dir, markdown string, cfg *config.Config, source string) (map[str
 		"meta.json":    meta,
 		"preamble.tex": []byte(Preamble(cfg)),
 		"filter.lua":   filterLua,
-		coverFileName:  cover,
 	}
 	paths := map[string]string{}
 	for name, data := range files {
@@ -377,7 +399,7 @@ func noHighlightArgFor(major, minor int, known bool) string {
 
 // source は元の .rmd の内容（LaTeX のエラーの位置を推定するために使う）。
 func runPandoc(dir, markdown, output string, format Format, opts Options, source string) (string, error) {
-	paths, err := WorkFiles(dir, markdown, opts.Config, opts.Input)
+	paths, err := WorkFiles(dir, markdown, opts.Config, opts.Input, format)
 	if err != nil {
 		return "", err
 	}
