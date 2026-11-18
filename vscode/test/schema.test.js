@@ -97,7 +97,8 @@ test('表紙のレイアウトの項目を調べる', async () => {
 });
 
 test('項目と値を補完する', async () => {
-  assert.deepStrictEqual((await complete('{ }', 2)).sort(), ['caption', 'cover', 'document', 'equation', 'font', 'heading', 'page', 'table', 'text']);
+  assert.deepStrictEqual((await complete('{ }', 2)).sort(), ['caption', 'code', 'cover', 'document', 'equation', 'font', 'heading', 'page', 'table', 'text']);
+  assert.deepStrictEqual((await complete('{ "code": { } }', 12)).sort(), ['background', 'border', 'font_size', 'highlight', 'line_spacing']);
   const text = '{ "table": { "width": } }';
   const values = await complete(text, text.indexOf(':', text.indexOf('width')) + 2);
   assert.deepStrictEqual(values.sort(), ['"auto"', '"full"']);
