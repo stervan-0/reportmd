@@ -46,10 +46,11 @@ type Result struct {
 var (
 	pageBreakLine = regexp.MustCompile(`^\^[ \t]*$`)
 	fenceOpenLine = regexp.MustCompile("^[ ]*(`{3,}|~{3,})(.*)$")
-	// フェンスや $$ の前に置ける、引用の > とリスト記号の並び（`1. ```sh`、`> ```、`- $$` など）
-	containerPrefix = regexp.MustCompile(`^(?:[ ]{0,3}(?:>[ ]?|(?:[-*+]|\d{1,9}[.)])[ ]+))*`)
+	// フェンスや $$ の前に置ける、引用の > とリスト記号の並び（`1. ```sh`、`> ```、`- $$` など）。
+	// fenceOpenLine と同じく、前の字下げの深さは問わない（4スペースで字下げした入れ子のリストの中など）
+	containerPrefix = regexp.MustCompile(`^(?:[ ]*(?:>[ ]?|(?:[-*+]|\d{1,9}[.)])[ ]+))*`)
 	// 引用の > ひとつ分（閉じフェンスの前から外す）
-	quoteMarker     = regexp.MustCompile(`^[ ]{0,3}>[ ]?`)
+	quoteMarker     = regexp.MustCompile(`^[ ]*>[ ]?`)
 	frontMatterEnd  = regexp.MustCompile(`^(---|\.\.\.)[ \t]*$`)
 	frontMatterOpen = regexp.MustCompile(`^---[ \t]*$`)
 	// フロントマターの最上位のキー（字下げなし・リスト項目でない行の「キー:」）
@@ -344,12 +345,12 @@ func (p *processor) inNormal(line string, lineno int) error {
 	case p.fenceOpen(line):
 		p.state = stateFence
 		p.regionStart = lineno
-		p.inList = listItemLine.MatchString(line) // `1. ```sh` ならリストの中
+		p.trackBlockStart(line)
 		p.emit(line)
 	case mathOpen(line):
 		p.state = stateMath
 		p.regionStart = lineno
-		p.inList = listItemLine.MatchString(line)
+		p.trackBlockStart(line)
 		_, after, _ := strings.Cut(line, "$$")
 		p.mathBody = []string{after}
 		p.emit(line)
@@ -413,6 +414,17 @@ func (p *processor) trackList(line string) {
 	case startsWithSpace.MatchString(line):
 		// 字下げされた行は、リスト項目の続き（状態は変えない）
 	case p.lastLineBlank:
+		p.inList = false
+	}
+}
+
+// trackBlockStart は、コードブロック・数式ブロックの開始行で、リストの中にいるかを追う。
+// ふつうの行と同じく trackList で判定する（`1. ```sh` や、リスト項目の中で字下げしたフェンスは
+// リストの中）。ただし、字下げもリスト記号もない開始行は、段落の続きにならないので、
+// 直前が空行でなくてもリストを終える。
+func (p *processor) trackBlockStart(line string) {
+	p.trackList(line)
+	if !listItemLine.MatchString(line) && !startsWithSpace.MatchString(line) {
 		p.inList = false
 	}
 }
