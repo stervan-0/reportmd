@@ -44,11 +44,19 @@ VS Code の拡張機能ビューの「…」メニュー →「VSIX からのイ
 
 | 設定 | 説明 |
 | --- | --- |
-| `reportmd.path` | reportmd コマンドのパス。空なら `reportmd`（PATH から探し、見つからなければ `~/.local/bin/reportmd`） |
+| `reportmd.path` | reportmd コマンドのパス。空なら `reportmd` を PATH から探し、見つからなければ `~/.local/bin/reportmd`（Linux・macOS）を使う（下の「reportmd の探し方」） |
 | `reportmd.checkOnSave` | 保存するたびに誤りを調べる（既定 `true`） |
 | `reportmd.openPdf` | 「PDF を生成」「監視を開始」で生成した PDF を開く場所。`preview`（VS Code の横のプレビュー。既定）・`external`（OS の PDF ビューア）・`none` |
 | `reportmd.liveUpdate` | プレビュー・監視の間は、保存しなくても入力するたびに PDF を作り直す（既定 `true`。オフにすると保存したときだけ） |
 | `reportmd.liveUpdateDelay` | 入力が止まってから作り直すまでの時間（ミリ秒。既定 `300`） |
+
+### reportmd の探し方
+
+- `reportmd.path` が空のとき（または `reportmd2` のように名前だけのとき）は、PATH の絶対パスのフォルダだけから探し、見つかったファイルを絶対パスで実行します。Windows では `reportmd.exe`（`.com`）を探します（`.bat`・`.cmd` は使いません）。
+- 文書のフォルダ（作業フォルダ）にある `reportmd`・`reportmd.exe` は使いません。名前のまま実行すると、Windows は PATH より先に作業フォルダを探すため、リポジトリに置かれた `reportmd.exe` が、文書を開いただけで動いてしまうからです。PATH の `.` や空の項目も飛ばします。
+- どこにも見つからなければ、reportmd を実行せずに、インストールか `reportmd.path` の設定を促す通知を出します。
+- Windows で `\\wsl.localhost\...` のフォルダを開いている場合は、`reportmd.path`（空なら `reportmd`）を WSL の中のログインシェルに渡し、WSL の PATH から探します。
+- 信頼していないフォルダ（VS Code の制限モード）では、拡張機能は動きません（色分けは使えます）。フォルダを信頼すると、エラーの表示・PDF の生成が使えるようになります。
 
 ## 開発
 

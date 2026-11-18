@@ -19,6 +19,12 @@
     "onLanguage:reportmd",
     "onWebviewPanel:reportmd.preview"
   ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "文書を開くと reportmd コマンドを自動で実行するため、信頼していないフォルダ（制限モード）では動作しません。"
+    }
+  },
   "contributes": {
     "commands": [
       {

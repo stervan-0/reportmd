@@ -1089,10 +1089,16 @@ PDF生成時に一時ファイルを使用する場合は、一時ディレク�
 
 ### 13.5 reportmd の実行
 
-- 設定 `reportmd.path` があれば、それを実行する。なければ `reportmd`。Linux・macOS で PATH に見つからず、`~/.local/bin/reportmd` があれば、それを使う（VS Code がログインシェルの PATH を引き継がないことがあるため）。
-- Windows の VS Code で WSL のフォルダ（`\\wsl.localhost\<ディストリビューション>\...` または `\\wsl$\...`）を開いている場合は、`wsl.exe -d <ディストリビューション> --cd <Linux のパス> -e bash -lc 'exec "$0" "$@"' reportmd ...` で、WSL の中の reportmd を実行する（ログインシェルで `~/.profile` の PATH を読む）。
+- reportmd は、文書のフォルダを作業フォルダにして実行する。
+- 設定 `reportmd.path` がフォルダを含むパスなら、それを実行する。
+- 設定が空なら `reportmd`、名前だけ（`reportmd2` など）ならその名前を、環境変数 PATH の項目のうち絶対パスのフォルダだけから順に探し、見つかったファイルの絶対パスで実行する。
+  - Windows では、PATHEXT の順に拡張子を付けて探す。spawn が直接起動できる `.exe`・`.com` だけを使う（`.bat`・`.cmd` は使わない）。名前に `.exe`・`.com` まで書いてあれば、まずそのままの名前を探す。引用符で囲まれた PATH の項目（`"C:\Program Files\..."`）も読む。
+  - 作業フォルダ（文書のフォルダ）からは探さない。名前のまま起動すると、Windows は PATH より先に作業フォルダを探し（`NoDefaultCurrentDirectoryInExePath` を設定していない場合）、Linux・macOS も PATH の空の項目や `.` を作業フォルダとして探すので、リポジトリに置かれた `reportmd.exe` などを、文書を開いただけで（自動の check で）起動してしまうため。PATH の空の項目と相対パスの項目（`.`・`bin`・Windows の `\bin`・`C:bin`）は飛ばす。
+  - 設定が空で、Linux・macOS の PATH に見つからず、`~/.local/bin/reportmd` があれば、それを使う（VS Code がログインシェルの PATH を引き継がないことがあるため）。
+- Windows の VS Code で WSL のフォルダ（`\\wsl.localhost\<ディストリビューション>\...` または `\\wsl$\...`）を開いている場合は、`wsl.exe -d <ディストリビューション> --cd <Linux のパス> -e bash -lc 'exec "$0" "$@"' reportmd ...` で、WSL の中の reportmd を実行する（ログインシェルで `~/.profile` の PATH を読む）。`reportmd.path` は WSL の中のパスとしてそのまま渡し、Windows の PATH からは探さない。`wsl.exe` は PATH から探した絶対パス（なければ `%SystemRoot%\System32\wsl.exe`）で起動する。
 - WSL に接続した VS Code では、拡張機能は WSL の中で動く（`extensionKind` は `workspace`）。
-- reportmd が見つからない場合（起動できない、または WSL のシェルの終了コード 127）は、インストールか `reportmd.path` の設定を促す通知を、1回だけ表示する。
+- reportmd が見つからない場合（PATH などに見つからない、起動できない、または WSL のシェルの終了コード 127）は、インストールか `reportmd.path` の設定を促す通知を、1回だけ表示する。PATH などに見つからないときは、起動しない。
+- ワークスペースの信頼（Workspace Trust）には対応しない（`capabilities.untrustedWorkspaces.supported` は `false`）。信頼していないフォルダ（制限モード）では拡張機能を有効にしないので、自動の check も実行しない。色分けは、拡張機能が有効でなくても使える。
 
 ### 13.6 setting.json の補完と検査
 
