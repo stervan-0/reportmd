@@ -3,6 +3,7 @@ package build
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -114,6 +115,39 @@ func TestPandocArgsHighlight(t *testing.T) {
 		if args := strings.Join(PandocArgs(paths, "out", format, "t", "--syntax-highlighting=none"), " "); !strings.Contains(args, " --syntax-highlighting=none ") {
 			t.Errorf("%s: 色を付けない引数を渡す: %s", format, args)
 		}
+	}
+}
+
+// HTML のページの題名（<title>）は、設定の document.title、なければ入力ファイル名にする。
+// 実際の引数で Pandoc を動かし、filter.lua が pagetitle を取り除かないことも確かめる。
+func TestHTMLPageTitle(t *testing.T) {
+	if _, err := exec.LookPath("pandoc"); err != nil {
+		t.Skip("pandoc が見つかりません")
+	}
+	cases := []struct{ name, title, frontMatter, want string }{
+		{"入力ファイル名", "", "", "<title>report</title>"},
+		{"フロントマターの title があっても入力ファイル名", "", "---\ntitle: 表題\n---\n\n", "<title>report</title>"},
+		{"document.title", "設定の題名", "", "<title>設定の題名</title>"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			dir := t.TempDir()
+			cfg := config.Default()
+			cfg.Document.Title = c.title
+			opts := Options{Input: filepath.Join(dir, "report.reportmd"), Config: cfg}
+			output := filepath.Join(dir, "out.html")
+			warnings, err := runPandoc(dir, c.frontMatter+"本文\n", output, HTML, opts, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(warnings, "title") {
+				t.Errorf("題名についての Pandoc の警告を出さない: %s", warnings)
+			}
+			html, _ := os.ReadFile(output)
+			if !strings.Contains(string(html), c.want) {
+				t.Errorf("%s を含むはず:\n%s", c.want, html)
+			}
+		})
 	}
 }
 
