@@ -366,13 +366,17 @@ function preview(doc) {
 
 // startWatch は、reportmd watch を起動する。fromPreview（プレビューから始めた）なら、PDF をほかで開かない。
 // 設定 reportmd.liveUpdate が有効なら、--stdin を付けて、保存していない内容も送る（onChange）。
-function startWatch(doc, { fromPreview = false, live = config().get('liveUpdate', true) } = {}) {
+async function startWatch(doc, { fromPreview = false, live = config().get('liveUpdate', true) } = {}) {
   const file = doc.uri.fsPath;
   if (watches.has(file)) {
     vscode.window.showInformationMessage(`${path.basename(file)} は監視中です`);
     return;
   }
-  if (doc.isDirty && !live) doc.save();
+  // 保存した内容で生成するので、保存が終わってから監視を始める
+  if (doc.isDirty && !live) {
+    await doc.save();
+    if (watches.has(file)) return; // 保存を待つあいだに、ほかから監視が始まった
+  }
   const args = ['watch', path.basename(file)];
   if (!fromPreview && openMode() === 'external') args.push('--open');
   if (live) args.push('--stdin');
@@ -390,8 +394,9 @@ function startWatch(doc, { fromPreview = false, live = config().get('liveUpdate'
   if (!fromPreview && openMode() !== 'preview') output.show(true);
   Preview.setStatus(pdf, 'building', 'PDF を生成しています…');
 
-  const onData = (data) => {
-    const text = data.toString('utf8');
+  // 出力は文字列で受け取る（setEncoding）。Buffer のチャンクごとに文字列にすると、
+  // チャンクの境目で割れた日本語の文字が化け、「変更を検出しました」なども見つけられなくなる
+  const onData = (text) => {
     output.append(text);
     watch.buffer += text;
     // 「変更を検出しました」から先が、新しい生成の出力
@@ -412,6 +417,8 @@ function startWatch(doc, { fromPreview = false, live = config().get('liveUpdate'
       Preview.setStatus(pdf, 'error', `PDF を生成できませんでした（エラー ${errors} 件。「問題」パネルを確認してください）`);
     }
   };
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
   child.stdout.on('data', onData);
   child.stderr.on('data', onData);
   child.on('error', (err) => {

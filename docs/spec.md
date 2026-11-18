@@ -1089,7 +1089,7 @@ PDF生成時に一時ファイルを使用する場合は、一時ディレク�
 
 ### 13.5 reportmd の実行
 
-- 設定 `reportmd.path` があれば、それを実行する。なければ `reportmd`。Linux・macOS で PATH に見つからず、`~/.local/bin/reportmd` があれば、それを使う（VS Code がログインシェルの PATH を引き継がないことがあるため）。
+- 設定 `reportmd.path` があれば、それを実行する。なければ `reportmd`。`reportmd.path` は、ユーザーの設定（そのコンピューター）でだけ指定できる（ワークスペースの `.vscode/settings.json` には書けない）。文書を開いただけで `check` が動くので、他人のリポジトリの設定で任意の実行ファイルを起動させないため。Linux・macOS で PATH に見つからず、`~/.local/bin/reportmd` があれば、それを使う（VS Code がログインシェルの PATH を引き継がないことがあるため）。
 - Windows の VS Code で WSL のフォルダ（`\\wsl.localhost\<ディストリビューション>\...` または `\\wsl$\...`）を開いている場合は、`wsl.exe -d <ディストリビューション> --cd <Linux のパス> -e bash -lc 'exec "$0" "$@"' reportmd ...` で、WSL の中の reportmd を実行する（ログインシェルで `~/.profile` の PATH を読む）。
 - WSL に接続した VS Code では、拡張機能は WSL の中で動く（`extensionKind` は `workspace`）。
 - reportmd が見つからない場合（起動できない、または WSL のシェルの終了コード 127）は、インストールか `reportmd.path` の設定を促す通知を、1回だけ表示する。
