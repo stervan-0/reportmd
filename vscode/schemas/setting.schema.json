@@ -303,7 +303,7 @@
           "default": 1.2
         },
         "background": {
-          "description": "背景の色（16進数6桁。例：\"F5F5F5\" は薄い灰色）。false なら背景を付けない",
+          "description": "背景の色（16進数6桁。例：\"F5F5F5\" は薄い灰色）。文中のコードには、この色を少し濃くした背景を付ける。false なら背景を付けない",
           "oneOf": [
             { "const": false },
             {

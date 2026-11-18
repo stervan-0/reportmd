@@ -13,7 +13,7 @@ import (
 
 // testdata の preamble_*.tex と meta_*.json は、Ruby 版 reportmd が同じ設定から
 // 生成したもの。Go 版でも、同じプリアンブルとメタデータになることを確かめる。
-// Go 版で加えた行（コードの中の欧文と和文のアキをなくす設定、コードブロックの書式）は preamble_*.tex に、
+// Go 版で加えた行（コードの中の欧文と和文のアキをなくす設定、コードブロック・文中のコードの書式）は preamble_*.tex に、
 // Go 版で加えた項目（code_*）は meta_*.json にも足してある。
 var goldenCases = []string{"default", "grid", "custom", "misc"}
 
@@ -163,20 +163,32 @@ func TestPreambleCode(t *testing.T) {
 				`\def\FrameCommand##1{\hskip\@totalleftmargin`, `\hskip-\linewidth\hskip-\@totalleftmargin\hskip\columnwidth}`,
 				`\MakeFramed{\advance\hsize-\width\@totalleftmargin\z@\linewidth\hsize\@setminipage}`,
 				// 折り返しは、コードブロックの環境だけ（文中のコードには付けない）
-				`\RecustomVerbatimEnvironment{verbatim}{Verbatim}{breaklines,breakanywhere,`},
+				`\RecustomVerbatimEnvironment{verbatim}{Verbatim}{breaklines,breakanywhere,`,
+				// 文中のコードの背景（語ごとの箱に色の線を敷き、空白は色の線の leaders にして、そこで折り返せるようにする）
+				`\DeclareRobustCommand{\reportmdinlinecodestart}`, `\DeclareRobustCommand{\reportmdinlinecodespace}{\egroup`,
+				// 色を戻す \special が leaders と空白の間に入らないよう、色は箱の中の {} に入れる
+				`\cleaders\hbox to.4pt{{\color{reportmdinlinecodebg}\reportmdinline@rule{.4pt}}}\hskip\reportmdinline@n\reportmdinline@sp plus\reportmdinline@n\fontdimen3\font minus\reportmdinline@n\fontdimen4\font`,
+				// 続く空白は1つの leaders にまとめる
+				`\reportmdinline@put\reportmdinline@n\z@\else\unskip\fi\advance\reportmdinline@n\@ne`,
+				`\DeclareRobustCommand{\reportmdinlinecodeend}`, `{\color{reportmdinlinecodebg}\reportmdinline@rule{`,
+				`\let\reportmdinlinecodespace\space`,
+				// 文中のコードの背景は、コードブロックの背景を少し濃くした色
+				`\definecolor{reportmdinlinecodebg}{HTML}{E6E6E6}`,
+				`\pdfstringdefDisableCommands{\let\reportmdinlinecodestart\relax`},
 			[]string{`\fvset`}},
 		{"背景だけ", map[string]any{"border": false, "background": "#ffeeee"},
-			[]string{`\fboxrule=\z@`, `\colorbox{reportmdcodebg}`, `{HTML}{FFEEEE}`},
+			[]string{`\fboxrule=\z@`, `\colorbox{reportmdcodebg}`, `{HTML}{FFEEEE}`, `\definecolor{reportmdinlinecodebg}{HTML}{F0E0E0}`},
 			[]string{"reportmdcodeborder"}},
 		{"太さ 0 の枠は付けない", map[string]any{"border": "0pt"},
 			[]string{`\fboxrule=\z@`, `\colorbox{reportmdcodebg}`},
 			[]string{"reportmdcodeborder"}},
+		// 背景がなければ、filter.lua は文中のコードを囲まないので、命令も定義しない
 		{"枠だけ", map[string]any{"background": false, "border": "1pt"},
 			[]string{`\fboxrule=1pt`, `\fbox{\normalcolor #1}`},
-			[]string{"reportmdcodebg"}},
+			[]string{"reportmdcodebg", "reportmdinlinecode"}},
 		{"背景も枠もなし", map[string]any{"background": false, "border": false},
 			[]string{`\newenvironment{reportmdcode}{\par\vskip\medskipamount\reportmdcodestyle}`},
-			[]string{"MakeFramed", "reportmdcodebg", "reportmdcodeborder"}},
+			[]string{"MakeFramed", "reportmdcodebg", "reportmdcodeborder", "reportmdinlinecode"}},
 		{"文字サイズと行間", map[string]any{"font_size": "9pt", "line_spacing": 1.0},
 			[]string{`\fontsize{9pt}{10.8pt}`, `\fboxsep=4.5pt`},
 			nil},

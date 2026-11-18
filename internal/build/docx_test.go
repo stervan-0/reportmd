@@ -143,6 +143,41 @@ func TestDocxCodeStyle(t *testing.T) {
 			t.Errorf("背景も枠もなければ %s を書かない", unwanted)
 		}
 	}
+	if strings.Contains(styles, `w:styleId="reportmdInlineCode"`) {
+		t.Errorf("背景がなければ、文中のコードのスタイルを作らない")
+	}
+}
+
+// 文中のコードは、コードブロックの文字（Verbatim Char）とは別のスタイルにして、
+// コードブロックの背景を少し濃くした色の網掛けを付ける。
+func TestDocxInlineCodeStyle(t *testing.T) {
+	styles := DocxStyles(config.Default())
+	start := strings.Index(styles, `w:styleId="reportmdInlineCode"`)
+	if start < 0 {
+		t.Fatal("文中のコードのスタイルがない")
+	}
+	got := styles[start : start+strings.Index(styles[start:], "</w:style>")]
+	for _, want := range []string{`<w:basedOn w:val="VerbatimChar"/>`, `<w:shd w:val="clear" w:color="auto" w:fill="E6E6E6"/>`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("%s がない:\n%s", want, got)
+		}
+	}
+}
+
+// 文中のコード（言語名なし）は、文中のコードのスタイルの文字にする。記号は XML の書き方にする。
+// 太字・斜体・取り消し線の中のコードは、その書式も付ける。
+func TestDocxInlineCode(t *testing.T) {
+	doc := docxDocument(t, "a `x < y && z` b **`bold`** *`it`* ~~`del`~~\n", config.Default())
+	for _, want := range []string{
+		`<w:rPr><w:rStyle w:val="reportmdInlineCode" /></w:rPr><w:t xml:space="preserve">x &lt; y &amp;&amp; z</w:t>`,
+		`<w:rStyle w:val="reportmdInlineCode" /><w:bCs /><w:b /></w:rPr><w:t xml:space="preserve">bold</w:t>`,
+		`<w:rStyle w:val="reportmdInlineCode" /><w:iCs /><w:i /></w:rPr><w:t xml:space="preserve">it</w:t>`,
+		`<w:rStyle w:val="reportmdInlineCode" /><w:strike /></w:rPr><w:t xml:space="preserve">del</w:t>`,
+	} {
+		if !strings.Contains(doc, want) {
+			t.Errorf("%s がない:\n%s", want, doc)
+		}
+	}
 }
 
 func TestDocxHeadingRules(t *testing.T) {
@@ -273,9 +308,8 @@ func TestFixLineRules(t *testing.T) {
 	}
 }
 
-// docxParagraphs は、文書を Word にして、段落ごとに「スタイル|文字」を返す。
-// 表は「[表:スタイル]」、改ページは「[改ページ]」、セクションの区切りは「[区切り]」にする。
-func docxParagraphs(t *testing.T, rmd string, cfg *config.Config) []string {
+// docxDocument は、文書を Word にして、word/document.xml を返す。
+func docxDocument(t *testing.T, rmd string, cfg *config.Config) string {
 	t.Helper()
 	if _, err := exec.LookPath("pandoc"); err != nil {
 		t.Skip("pandoc が見つかりません")
@@ -304,6 +338,14 @@ func docxParagraphs(t *testing.T, rmd string, cfg *config.Config) []string {
 			doc = string(data)
 		}
 	}
+	return doc
+}
+
+// docxParagraphs は、文書を Word にして、段落ごとに「スタイル|文字」を返す。
+// 表は「[表:スタイル]」、改ページは「[改ページ]」、セクションの区切りは「[区切り]」にする。
+func docxParagraphs(t *testing.T, rmd string, cfg *config.Config) []string {
+	t.Helper()
+	doc := docxDocument(t, rmd, cfg)
 	token := regexp.MustCompile(`<w:tblStyle w:val="([^"]*)"|<w:pStyle w:val="([^"]*)"|<w:t[ >][^>]*>?([^<]*)</w:t>|<m:t>([^<]*)</m:t>|<w:br w:type="page"|<w:sectPr>|</w:p>`)
 	var paras []string
 	style, text := "", ""

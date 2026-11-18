@@ -509,14 +509,28 @@
     <w:basedOn w:val="DefaultParagraphFont"/>
     <w:link w:val="BodyText"/>
   </w:style>
+  <!-- コードの文字（コードブロックと、言語名付きの文中のコード）。背景は code.background -->
   <w:style w:type="character" w:customStyle="1" w:styleId="VerbatimChar">
     <w:name w:val="Verbatim Char"/>
     <w:basedOn w:val="DefaultParagraphFont"/>
     <w:link w:val="SourceCode"/>
     <w:rPr>
       <w:rFonts w:ascii="{{xml .FontMono}}" w:hAnsi="{{xml .FontMono}}" w:eastAsia="{{xml .FontMono}}" w:cs="{{xml .FontMono}}"/>
+      {{- if .CodeBackground}}
+      <w:shd w:val="clear" w:color="auto" w:fill="{{.CodeBackground}}"/>
+      {{- end}}
     </w:rPr>
   </w:style>
+  {{- if .CodeInlineBackground}}
+  <!-- 文中のコード（filter.lua がこのスタイルの文字にする）。背景は code.background を少し濃くした色 -->
+  <w:style w:type="character" w:customStyle="1" w:styleId="reportmdInlineCode">
+    <w:name w:val="reportmd Inline Code"/>
+    <w:basedOn w:val="VerbatimChar"/>
+    <w:rPr>
+      <w:shd w:val="clear" w:color="auto" w:fill="{{.CodeInlineBackground}}"/>
+    </w:rPr>
+  </w:style>
+  {{- end}}
   <w:style w:type="character" w:customStyle="1" w:styleId="SectionNumber">
     <w:name w:val="Section Number"/>
     <w:basedOn w:val="DefaultParagraphFont"/>

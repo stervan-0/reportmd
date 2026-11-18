@@ -157,7 +157,7 @@ reportmd build report.reportmd -o report.tex   # LaTeX のソース（.html .doc
 [vscode/](vscode/README.md) に、VS Code の拡張機能があります。独自記法の色分け、保存するたびの誤りの表示（波線）、VS Code の中での PDF のプレビュー（保存しなくても、入力するたびに更新）、ボタンからの PDF の生成・監視、`setting.json` の補完と検査ができます。
 
 ```bash
-make vscode          # vscode/reportmd-0.10.0.vsix を作る（Node.js が必要）
+make vscode          # vscode/reportmd-0.10.1.vsix を作る（Node.js が必要）
 make vscode-docker   # 同じものを Node.js のイメージの中で作る（Node.js の代わりに Docker が必要）
 ```
 
@@ -198,6 +198,8 @@ def hello(name):
 ````
 
 背景・枠・文字サイズ・行間・構文の色は、設定の `code` で変えられます（下の「コードブロックの書式」）。
+
+文中にバッククォートで書いたコード（`` `printf("%d\n", x)` ``）にも、コードブロックの背景を少し濃くした色の背景が付きます。PDF では、長いコードを空白のところで折り返します。
 
 ### 表紙
 
@@ -290,7 +292,7 @@ cover:
 | --- | --- |
 | `font_size` | コードの文字サイズ（`null` なら本文と同じ） |
 | `line_spacing` | コードの行間（倍率。本文の行間とは別） |
-| `background` | 背景の色（16進数6桁）。`false` で背景なし |
+| `background` | 背景の色（16進数6桁。文中のコードには、この色を少し濃くした背景を付ける）。`false` で背景なし |
 | `border` | 枠の線の太さ。`false` で枠なし |
 | `highlight` | 言語名を書いたコードに構文の色を付けるか |
 

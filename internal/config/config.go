@@ -164,6 +164,26 @@ func (c *Config) CodeBackground() string {
 	return ""
 }
 
+// inlineCodeShade は、文中のコードの背景を、コードブロックの背景より濃くする割合（各色の明るさに掛ける）。
+// 文中のコードには枠がないので、コードブロックと同じ色では本文と見分けにくい。
+const inlineCodeShade = 0.94
+
+// CodeInlineBackground は、文中のコードの背景の色（16進数6桁）を返す。code.background を少し濃くした色
+// （既定の F5F5F5 なら E6E6E6）。背景を付けないなら空文字。
+func (c *Config) CodeInlineBackground() string {
+	bg := c.CodeBackground()
+	if len(bg) != 6 {
+		return ""
+	}
+	var out strings.Builder
+	for i := 0; i < 6; i += 2 {
+		var v int
+		fmt.Sscanf(bg[i:i+2], "%02X", &v)
+		fmt.Fprintf(&out, "%02X", int(float64(v)*inlineCodeShade+0.5))
+	}
+	return out.String()
+}
+
 // CodeBorder は、コードブロックの枠の線の太さを返す。枠を付けないなら空文字。
 // 太さが 0（"0pt" など）なら、false と同じく枠を付けない（Word は細い線を最小の太さで引くため、
 // 0 のまま渡すと PDF と Word で違ってしまう）。
