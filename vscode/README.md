@@ -27,7 +27,7 @@ reportmd（Markdown で大学のレポートを書いて PDF にするツール�
 
 ```bash
 cd vscode
-npm run package     # reportmd-0.10.4.vsix ができる（Node.js が必要。リポジトリの最上位で make vscode でも可）
+npm run package     # reportmd-0.10.5.vsix ができる（Node.js が必要。リポジトリの最上位で make vscode でも可）
 ```
 
 Node.js がなく Docker がある場合は、リポジトリの最上位で `make vscode-docker` を実行すると、Node.js のイメージの中で同じ `.vsix` を作れます（`make` のない PowerShell での打ち方は、最上位の README を参照）。
