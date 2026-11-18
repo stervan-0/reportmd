@@ -1,7 +1,7 @@
 // Package preprocess は、.rmd のテキストを読み、独自構文を Pandoc が理解できる形式へ変換する。
 //
 // 対応している構文:
-//   - 保護領域の判定（フロントマター、コードブロック、数式ブロック）
+//   - 保護領域の判定（フロントマター、コードブロック、数式ブロック。リスト・引用の中のものも含む）
 //   - フロントマターの対応外のキー（title・author・cover 以外）の警告
 //   - 図表・数式の参照用の名前（{#名前}）の記録と、重複の警告
 //   - 数式の閉じの $$ の後ろの {#名前} / {-}（番号なし）
@@ -44,8 +44,13 @@ type Result struct {
 }
 
 var (
-	pageBreakLine   = regexp.MustCompile(`^\^[ \t]*$`)
-	fenceOpenLine   = regexp.MustCompile("^[ ]*(`{3,}|~{3,})(.*)$")
+	pageBreakLine = regexp.MustCompile(`^\^[ \t]*$`)
+	fenceOpenLine = regexp.MustCompile("^[ ]*(`{3,}|~{3,})(.*)$")
+	// フェンスや $$ の前に置ける、引用の > とリスト記号の並び（`1. ```sh`、`> ```、`- $$` など）。
+	// fenceOpenLine と同じく、前の字下げの深さは問わない（4スペースで字下げした入れ子のリストの中など）
+	containerPrefix = regexp.MustCompile(`^(?:[ ]*(?:>[ ]?|(?:[-*+]|\d{1,9}[.)])[ ]+))*`)
+	// 引用の > ひとつ分（閉じフェンスの前から外す）
+	quoteMarker     = regexp.MustCompile(`^[ ]*>[ ]?`)
 	frontMatterEnd  = regexp.MustCompile(`^(---|\.\.\.)[ \t]*$`)
 	frontMatterOpen = regexp.MustCompile(`^---[ \t]*$`)
 	// フロントマターの最上位のキー（字下げなし・リスト項目でない行の「キー:」）
@@ -146,6 +151,7 @@ type processor struct {
 	mathBody       []string // 数式ブロックの中身（括弧の対応を調べるため）
 	fenceChar      byte
 	fenceLen       int
+	fenceQuotes    int // 開きフェンスの前の、引用の > の数
 	afterGenerated bool
 	align          *alignBlock
 	lastHeading    int
@@ -339,16 +345,16 @@ func (p *processor) inNormal(line string, lineno int) error {
 	case p.fenceOpen(line):
 		p.state = stateFence
 		p.regionStart = lineno
-		p.inList = false
+		p.trackBlockStart(line)
 		p.emit(line)
 	case mathOpen(line):
 		p.state = stateMath
 		p.regionStart = lineno
-		p.inList = false
+		p.trackBlockStart(line)
 		_, after, _ := strings.Cut(line, "$$")
 		p.mathBody = []string{after}
 		p.emit(line)
-	case strings.HasPrefix(lstrip(line), "$$"):
+	case strings.HasPrefix(lstrip(afterContainer(line)), "$$"):
 		// 1行の数式（$$ 式 $$ {#名前}）
 		parts := strings.Split(line, "$$")
 		p.checkBraces(parts[1:len(parts)-1], lineno)
@@ -412,11 +418,29 @@ func (p *processor) trackList(line string) {
 	}
 }
 
+// trackBlockStart は、コードブロック・数式ブロックの開始行で、リストの中にいるかを追う。
+// ふつうの行と同じく trackList で判定する（`1. ```sh` や、リスト項目の中で字下げしたフェンスは
+// リストの中）。ただし、字下げもリスト記号もない開始行は、段落の続きにならないので、
+// 直前が空行でなくてもリストを終える。
+func (p *processor) trackBlockStart(line string) {
+	p.trackList(line)
+	if !listItemLine.MatchString(line) && !startsWithSpace.MatchString(line) {
+		p.inList = false
+	}
+}
+
 // --- 保護領域の判定 -------------------------------------------------------
 
-// fenceOpen は、開きフェンスなら、その文字と長さを記録して true を返す。
+// afterContainer は、行頭の引用の > とリスト記号を外した残りを返す。
+func afterContainer(line string) string {
+	return line[len(containerPrefix.FindString(line)):]
+}
+
+// fenceOpen は、開きフェンスなら、その文字と長さ（と前に付いた引用の > の数）を記録して true を返す。
+// リスト記号や引用の > の直後のフェンス（`1. ```sh`、`> ````）も開きフェンスとする。
 func (p *processor) fenceOpen(line string) bool {
-	m := fenceOpenLine.FindStringSubmatch(line)
+	prefix := containerPrefix.FindString(line)
+	m := fenceOpenLine.FindStringSubmatch(line[len(prefix):])
 	if m == nil {
 		return false
 	}
@@ -427,12 +451,23 @@ func (p *processor) fenceOpen(line string) bool {
 	}
 	p.fenceChar = marker[0]
 	p.fenceLen = len(marker)
+	p.fenceQuotes = strings.Count(prefix, ">")
 	return true
 }
 
 // fenceClose は、同じ文字で、開きフェンス以上の長さだけが並ぶ行か。
+// 引用の中のコードなら、開きフェンスと同じ数の > を外してから調べる
+// （> のない行は、Pandoc と同じく、そのままコードの続きとして調べる）。
 func (p *processor) fenceClose(line string) bool {
-	s := strip(line)
+	s := line
+	for i := 0; i < p.fenceQuotes; i++ {
+		loc := quoteMarker.FindStringIndex(s)
+		if loc == nil {
+			break
+		}
+		s = s[loc[1]:]
+	}
+	s = strip(s)
 	if len(s) < p.fenceLen {
 		return false
 	}
@@ -444,9 +479,9 @@ func (p *processor) fenceClose(line string) bool {
 	return true
 }
 
-// mathOpen は、行頭が $$ で、その行で閉じていなければ数式ブロックの開始。
+// mathOpen は、行頭（引用の > やリスト記号の直後を含む）が $$ で、その行で閉じていなければ数式ブロックの開始。
 func mathOpen(line string) bool {
-	if !strings.HasPrefix(lstrip(line), "$$") {
+	if !strings.HasPrefix(lstrip(afterContainer(line)), "$$") {
 		return false
 	}
 	return strings.Count(line, "$$")%2 == 1

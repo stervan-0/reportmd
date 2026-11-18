@@ -100,7 +100,23 @@ func TestProtectedCode(t *testing.T) {
 		same("開きフェンスより短いフェンスでは閉じない", "````\n^\n```\n^\n````\n"),
 		{"情報文字列に ` を含む行はフェンスではない", "``` a`b\n^\n", "``` a`b\n\n" + pagebreak + "\n"},
 		same("インデントされたフェンスも保護する", "- 項目\n\n    ```\n    ^\n    ```\n"),
+		{"番号付きリストの記号の直後のフェンス", "1. ```sh\n   ^\n   ```\n\n^\n#1 見出し\n", "1. ```sh\n   ^\n   ```\n\n" + pagebreak + "\n\n# 見出し " + num + "\n"},
+		{"リスト記号の直後のフェンス", "- ```\n  -> x\n  ```\n- -> y\n", "- ```\n  -> x\n  ```\n- " + right + "\n  y\n  :::\n"},
+		{"引用の中のフェンス", "> ```\n> -> x\n> ```\n\n^\n", "> ```\n> -> x\n> ```\n\n" + pagebreak + "\n"},
+		{"引用の中のリストのフェンス", "> 1. ```\n>    ^\n>    ```\n\n^\n", "> 1. ```\n>    ^\n>    ```\n\n" + pagebreak + "\n"},
+		same("引用の中のフェンスは、> のない行も続き", "> ```\n^\n> ```\n"),
+		same("引用の外のフェンスは、> 付きの行では閉じない", "```\n> ```\n^\n```\n"),
+		same("リストの中のフェンスのあとの字下げは、字下げの段落にしない", "1. ```\n   a\n   ```\n\n  続き\n"),
+		{"4スペースで字下げした入れ子のリストのフェンス", "- 項目\n    - ```sh\n      ^\n      ```\n\n^\n", "- 項目\n    - ```sh\n      ^\n      ```\n\n" + pagebreak + "\n"},
+		{"4スペースで字下げした引用のフェンス", "10. > ```\n    > -> x\n    > ```\n\n^\n", "10. > ```\n    > -> x\n    > ```\n\n" + pagebreak + "\n"},
+		same("リスト項目の中で字下げしたフェンスのあとも、字下げの段落にしない", "- 項目\n\n  ```\n  a\n  ```\n\n  続き\n"),
+		{"字下げのないフェンスは、リストを終える", "- 項目\n```\na\n```\n\n  続き\n", "- 項目\n```\na\n```\n\n" + indent + "続き\n"},
 	})
+	for _, source := range []string{"1. ```sh\n   $ ls\n   ```\n", "- 項目\n    - ```sh\n      $ ls\n      ```\n", "10. > ```\n    > x\n    > ```\n"} {
+		if r := run(t, source); len(r.Warnings) != 0 {
+			t.Errorf("リスト記号・引用の直後のフェンスを閉じたら、警告しない: %q %+v", source, r.Warnings)
+		}
+	}
 
 	r := run(t, "```\n^\nまだコード\n")
 	if r.Text != "```\n^\nまだコード\n" || !reflect.DeepEqual(warningLines(r), []int{1}) || !strings.Contains(r.Warnings[0].Message, "コードブロック") {
@@ -114,6 +130,9 @@ func TestProtectedMath(t *testing.T) {
 		same("開始行に式がある数式ブロック", "$$ x = 1\n^\ny = 2 $$\n"),
 		{"1行の $$ は後続に影響しない", "$$x^2$$\n\n^\n", "$$x^2$$\n\n" + pagebreak + "\n"},
 		{"閉じたあとの ^ は変換する", "$$\nx\n$$\n\n^\n", "$$\nx\n$$\n\n" + pagebreak + "\n"},
+		{"リスト記号の直後の数式ブロック", "1. $$\n   ^\n   $$\n\n^\n", "1. $$\n   ^\n   $$\n\n" + pagebreak + "\n"},
+		{"引用の中の数式ブロック", "> $$\n> -> x\n> $$\n\n^\n", "> $$\n> -> x\n> $$\n\n" + pagebreak + "\n"},
+		{"リストの中の1行の数式の属性", "- $$ x $$ {#e}\n", "- $$ x $$[]{.reportmd-equation #e line=\"1\"}\n"},
 	})
 	if e := runError(t, "本文\n\n$$\nx\n"); e.Line != 3 || !strings.Contains(e.Message, "数式ブロック") {
 		t.Errorf("閉じられていない数式ブロックは、開始行つきでエラー: %+v", e)
