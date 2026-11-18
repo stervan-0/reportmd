@@ -176,12 +176,14 @@ end
 -- フロントマターで使えるのは title・author・cover だけ。ほかのキー（geometry、
 -- header-includes など）は、Pandoc のテンプレートに反映されないように取り除く。
 -- （警告は前処理が行番号つきで出している。cover は、最初の走査で表紙の値を読んでから取り除く）
+-- HTML では、internal/build が --metadata で渡すページの題名（pagetitle）も残す
+-- （取り除くと、<title> が「body」になり、Pandoc が警告を出す）。
 local META_KEYS = { title = true, author = true }
 
 local function drop_unsupported_meta(meta)
   local keys = {}
   for key, _ in pairs(meta) do
-    if not META_KEYS[key] then
+    if not META_KEYS[key] and not (key == 'pagetitle' and FORMAT:match('^html')) then
       keys[#keys + 1] = key
     end
   end
