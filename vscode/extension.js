@@ -350,29 +350,46 @@ function pdfPath(file) {
 
 // preview は、PDF のプレビューを横に開き、監視を始める（入力・保存のたびに生成し直して、プレビューも更新する）。
 // プレビューから始めた監視は、プレビューを閉じると止める。
-function preview(doc) {
+async function preview(doc) {
   const file = doc.uri.fsPath;
   const panel = Preview.show(pdfPath(file));
-  if (!watches.has(file)) {
-    startWatch(doc, { fromPreview: true });
-    panel.onDispose.push(() => {
-      const watch = watches.get(file);
-      if (watch && watch.fromPreview) stopWatch(file);
-    });
-  }
+  if (watches.has(file)) return;
+  let closed = false;
+  panel.onDispose.push(() => {
+    closed = true;
+    const watch = watches.get(file);
+    if (watch && watch.fromPreview) stopWatch(file);
+  });
+  // 保存を待つあいだにプレビューが閉じられたら、監視を始めない（プレビューのない監視が残らないように）
+  await startWatch(doc, { fromPreview: true, cancelled: () => closed });
 }
 
 // --- watch ----------------------------------------------------------------
 
 // startWatch は、reportmd watch を起動する。fromPreview（プレビューから始めた）なら、PDF をほかで開かない。
 // 設定 reportmd.liveUpdate が有効なら、--stdin を付けて、保存していない内容も送る（onChange）。
-function startWatch(doc, { fromPreview = false, live = config().get('liveUpdate', true) } = {}) {
+// cancelled は、保存を待つあいだに取りやめになったか（プレビューが閉じられたなど）を返す関数。
+async function startWatch(doc, { fromPreview = false, live = config().get('liveUpdate', true), cancelled = () => false } = {}) {
   const file = doc.uri.fsPath;
   if (watches.has(file)) {
     vscode.window.showInformationMessage(`${path.basename(file)} は監視中です`);
     return;
   }
-  if (doc.isDirty && !live) doc.save();
+  // 保存した内容で生成するので、保存が終わってから監視を始める
+  if (doc.isDirty && !live) {
+    let saved = false;
+    try {
+      saved = await doc.save();
+    } catch (err) {
+      log(`${path.basename(file)} を保存できませんでした`, String(err && err.message ? err.message : err));
+    }
+    if (!saved) {
+      vscode.window.showWarningMessage(`${path.basename(file)} を保存できなかったので、監視を始めません`);
+      return;
+    }
+    // 保存を待つあいだに、取りやめになったか、ほかから監視が始まった
+    if (cancelled() || watches.has(file)) return;
+  }
   const args = ['watch', path.basename(file)];
   if (!fromPreview && openMode() === 'external') args.push('--open');
   if (live) args.push('--stdin');
@@ -390,8 +407,9 @@ function startWatch(doc, { fromPreview = false, live = config().get('liveUpdate'
   if (!fromPreview && openMode() !== 'preview') output.show(true);
   Preview.setStatus(pdf, 'building', 'PDF を生成しています…');
 
-  const onData = (data) => {
-    const text = data.toString('utf8');
+  // 出力は文字列で受け取る（setEncoding）。Buffer のチャンクごとに文字列にすると、
+  // チャンクの境目で割れた日本語の文字が化け、「変更を検出しました」なども見つけられなくなる
+  const onData = (text) => {
     output.append(text);
     watch.buffer += text;
     // 「変更を検出しました」から先が、新しい生成の出力
@@ -412,6 +430,8 @@ function startWatch(doc, { fromPreview = false, live = config().get('liveUpdate'
       Preview.setStatus(pdf, 'error', `PDF を生成できませんでした（エラー ${errors} 件。「問題」パネルを確認してください）`);
     }
   };
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
   child.stdout.on('data', onData);
   child.stderr.on('data', onData);
   child.on('error', (err) => {

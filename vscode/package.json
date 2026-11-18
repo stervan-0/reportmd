@@ -125,8 +125,8 @@
         "reportmd.path": {
           "type": "string",
           "default": "",
-          "markdownDescription": "reportmd コマンドのパス。空なら `reportmd`（PATH から探す。見つからなければ `~/.local/bin/reportmd`）。Windows で WSL のフォルダを開いている場合は、WSL の中のパスを書く",
-          "scope": "machine-overridable"
+          "markdownDescription": "reportmd コマンドのパス。空なら `reportmd`（PATH から探す。見つからなければ `~/.local/bin/reportmd`）。Windows で WSL のフォルダを開いている場合は、WSL の中のパスを書く。ユーザーの設定でだけ指定できる（ワークスペースの設定には書けない）",
+          "scope": "machine"
         },
         "reportmd.checkOnSave": {
           "type": "boolean",
