@@ -2,7 +2,7 @@
   "name": "reportmd",
   "displayName": "reportmd",
   "description": "reportmd（Markdown で大学のレポートを書いて PDF にするツール）の色分け・エラー表示・PDF の生成とプレビュー",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "publisher": "reportmd",
   "engines": {
     "vscode": "^1.85.0"
