@@ -11,7 +11,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { parseDiagnostics, referencesIn, findReferences, settingKeyIn, findSettingKey } = require('./lib/output');
-const { commandLine, resolveExecutable, isNotFound } = require('./lib/command');
+const { commandLine, resolveExecutable, wslExecutable, isNotFound } = require('./lib/command');
 const { Preview, VIEW_TYPE } = require('./preview');
 
 // check が使う設定ファイル（共通の設定と、PDF の設定。check は PDF の設定で調べる）
@@ -156,21 +156,45 @@ function liveDelay() {
 // --- reportmd の実行 ------------------------------------------------------
 
 // spawnReportmd は、文書のフォルダ dir で reportmd を実行する。
+// 実行できる reportmd が見つからなければ、起動せずに null を返す
+// （名前のまま起動すると、文書のフォルダにある reportmd を起動することがあるため。lib/command.js の findInPath）。
 function spawnReportmd(args, dir) {
-  const executable = resolveExecutable(config().get('path'), {
+  const env = {
     platform: process.platform,
     envPath: process.env.PATH,
+    pathExt: process.env.PATHEXT,
     home: os.homedir(),
-    exists: (file) => fs.existsSync(file),
-  });
-  const line = commandLine(executable, args, dir, process.platform);
+    systemRoot: process.env.SystemRoot,
+    isExecutable,
+  };
+  const executable = resolveExecutable(config().get('path'), dir, env);
+  if (executable === null) return null;
+  const wslCommand = process.platform === 'win32' ? wslExecutable(env) : undefined;
+  const line = commandLine(executable, args, dir, process.platform, wslCommand);
   return { child: cp.spawn(line.command, line.args, { cwd: line.cwd, windowsHide: true }), wsl: line.wsl };
+}
+
+// isExecutable は、file があって、実行できるファイルかどうか（Windows では、ファイルがあるかどうか）。
+function isExecutable(file) {
+  try {
+    if (!fs.statSync(file).isFile()) return false;
+    if (process.platform !== 'win32') fs.accessSync(file, fs.constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // run は、reportmd を実行し、終わるまでの出力（標準出力と標準エラー出力をまとめたもの）を返す。
 function run(args, dir, onStart) {
   return new Promise((resolve) => {
-    const { child, wsl } = spawnReportmd(args, dir);
+    const spawned = spawnReportmd(args, dir);
+    if (!spawned) {
+      showNotFound();
+      resolve({ text: '', exitCode: null, errorCode: 'ENOENT', wsl: false, killed: false });
+      return;
+    }
+    const { child, wsl } = spawned;
     if (onStart) onStart(child);
     const chunks = [];
     child.stdout.on('data', (d) => chunks.push(d));
@@ -395,7 +419,13 @@ async function startWatch(doc, { fromPreview = false, live = config().get('liveU
   if (live) args.push('--stdin');
   const pdf = pdfPath(file);
 
-  const { child, wsl } = spawnReportmd(args, path.dirname(file));
+  const spawned = spawnReportmd(args, path.dirname(file));
+  if (!spawned) {
+    showNotFound();
+    Preview.setStatus(pdf, 'error', 'reportmd コマンドが見つかりません');
+    return;
+  }
+  const { child, wsl } = spawned;
   const watch = { process: child, buffer: '', opened: fromPreview, wsl, live, fromPreview, timer: null };
   watches.set(file, watch);
   child.stdin.on('error', () => {}); // 終了したあとに書き込んでも、エラーにしない
