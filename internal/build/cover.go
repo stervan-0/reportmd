@@ -6,10 +6,6 @@ import (
 	"reportmd/internal/config"
 )
 
-// coverFileName は、表紙のレイアウトを filter.lua に渡すファイルの名前（filter.lua と同じ場所に置く）。
-// メタデータで渡すと、文字列が Markdown として読まれてしまうため、JSON のファイルで渡す。
-const coverFileName = "cover.json"
-
 // 表紙の太字は、疑似太字の強さを文字サイズに比例させる。XeTeX の疑似太字（FakeBold）は、
 // 線を太らせる量が文字サイズに比例しないので、本文と同じ強さ（プリアンブルの AutoFakeBold=2.5）では、
 // 大きな文字がほとんど太く見えない。本文の 10.5pt で 2.5 になるようにする。
@@ -30,7 +26,8 @@ type coverLine struct {
 	Bold    string                     `json:"bold,omitempty"`    // 太字なら疑似太字の強さ（空なら太字にしない）
 }
 
-// CoverJSON は、表紙のレイアウト（cover.layout）を filter.lua 用の JSON にする。
+// CoverJSON は、表紙のレイアウト（cover.layout）を filter.lua 用の JSON にする
+// （FilterData がメタデータに入れて渡す）。
 func CoverJSON(cfg *config.Config) ([]byte, error) {
 	lines := []coverLine{}
 	for _, item := range cfg.Cover.Layout {

@@ -124,7 +124,7 @@ reportmd/
 - `internal/config/default.json`：内蔵のデフォルト設定（設定ファイルがない場合や、項目が省略された場合に使う。バイナリに埋め込む）
 - `internal/config/format.go`・`default.pptx.json`：形式ごとの設定ファイル（7.1）の読み込みと、PowerPoint の設定（`setting.pptx.json`）の検証・内蔵の既定値（バイナリに埋め込む）
 - `internal/preprocess`：独自構文の検出と変換
-- `internal/build`：文書の生成（Pandoc・XeLaTeXの呼び出し。`cover.go` は表紙のレイアウトを `filter.lua` に渡す `cover.json` の作成）
+- `internal/build`：文書の生成（Pandoc・XeLaTeXの呼び出し。`cover.go` は表紙のレイアウトを `filter.lua` に渡す JSON の作成）
 - `filter.lua`：Pandoc解析後の文書構造に対する変換（バイナリに埋め込む）
 - `preamble.tex.tmpl`：設定ファイルの内容（用紙・余白・フォント・文字サイズ・行間・字下げ・ページ番号・見出し・表）をLaTeXのプリアンブルに変換するテンプレート（Go の `text/template`）。PandocのLaTeX標準テンプレートに、`--include-in-header` で追加する
 - `docx.go`・`docx-styles.xml.tmpl`：Word の出力用。設定ファイルの内容を、Word の雛形（`reference.docx`）のスタイルと用紙・余白・ページ番号にする（4.2）。`docx-styles.xml.tmpl` はバイナリに埋め込む
@@ -907,7 +907,7 @@ PowerPoint の出力だけで使う、スライドの題名と本文の書式（
 1. 入力ファイルをUTF-8として読み込む（5.3参照）。
 2. 設定ファイルを読み込み、検証する。
 3. 独自構文の前処理を行う（6章）。
-4. Pandocで、前処理後のMarkdownを解析する。`title` と `author` はメタデータとして、そのほかの設定は `preamble.tex.tmpl` から生成したプリアンブルとしてPandocに渡す。表紙のレイアウト（`cover.layout`）は、`{名前}` を解析したうえで、`filter.lua` と同じ作業ディレクトリの `cover.json` に書いて渡す（メタデータで渡すと、文字列がMarkdownとして読まれてしまうため）。`filter.lua` は `pandoc.json` で読むので、表紙には Pandoc 3.1.1 以上が必要（それより古ければ、警告して表紙を付けない）。
+4. Pandocで、前処理後のMarkdownを解析する。`title` と `author` はメタデータとして、そのほかの設定は `preamble.tex.tmpl` から生成したプリアンブルとしてPandocに渡す。表紙のレイアウト（`cover.layout`）は、`{名前}` を解析したうえで JSON にし、16進数の文字列にしてメタデータ（`reportmd.cover_json`）で渡す。Word では、表紙の項目の高さなどの寸法も同じように渡す（`reportmd.docx_json`）。JSON の文字列のままメタデータに入れると、文字列がMarkdownとして読まれてしまう。また、作業ディレクトリのファイルにして `filter.lua` で開くと、Lua の `io.open` が日本語を含むパスを開けないことがある（Windows や、UTF-8 でないロケール）。メタデータのファイルは Pandoc 本体が読むので、この問題が起きない。`filter.lua` は `pandoc.json` で読むので、表紙には Pandoc 3.1.1 以上が必要（それより古ければ、警告して表紙を付けない）。
 5. `filter.lua` で、図表番号・キャプションなどの書式変換を適用する。
 6. Pandocで LaTeX のソース（`report.tex`）を作業ディレクトリに出力し、XeLaTeXでPDFを生成する（reportmd が呼び出す）。
    - XeLaTeX は、入力ファイルのあるディレクトリで実行する（画像などの相対パスの基準）。補助ファイルは作業ディレクトリに置く（`-output-directory`）。

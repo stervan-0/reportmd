@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -25,7 +26,7 @@ func pandoc(t *testing.T, rmd, format string, settings map[string]any, extra ...
 	return pandocWithConfig(t, rmd, format, settings, config.Default(), extra...)
 }
 
-// pandocWithConfig は、表紙のレイアウト（cover.json）を cfg から作る。
+// pandocWithConfig は、表紙のレイアウト（設定の cover_json）を cfg から作る。
 func pandocWithConfig(t *testing.T, rmd, format string, settings map[string]any, cfg *config.Config, extra ...string) (string, string) {
 	t.Helper()
 	if _, err := exec.LookPath("pandoc"); err != nil {
@@ -38,18 +39,18 @@ func pandocWithConfig(t *testing.T, rmd, format string, settings map[string]any,
 	dir := t.TempDir()
 	filter := filepath.Join(dir, "filter.lua")
 	os.WriteFile(filter, filterLua, 0o644)
-	cover, err := CoverJSON(cfg)
-	if err != nil {
+	given := map[string]any{}
+	for key, value := range settings {
+		given[key] = value
+	}
+	meta := map[string]any{"reportmd": given}
+	if err := FilterData(meta, cfg, Format(format)); err != nil {
 		t.Fatal(err)
 	}
-	os.WriteFile(filepath.Join(dir, coverFileName), cover, 0o644)
-	args := []string{"-f", pandocReader, "--lua-filter=" + filter, "-t", format, "--wrap=none"}
-	if settings != nil {
-		meta, _ := json.Marshal(map[string]any{"reportmd": settings})
-		path := filepath.Join(dir, "meta.json")
-		os.WriteFile(path, meta, 0o644)
-		args = append(args, "--metadata-file="+path)
-	}
+	encoded, _ := json.Marshal(meta)
+	path := filepath.Join(dir, "meta.json")
+	os.WriteFile(path, encoded, 0o644)
+	args := []string{"-f", pandocReader, "--lua-filter=" + filter, "-t", format, "--wrap=none", "--metadata-file=" + path}
 	cmd := exec.Command("pandoc", append(args, extra...)...)
 	cmd.Stdin = strings.NewReader(pre.Text)
 	var out, stderr bytes.Buffer
@@ -313,6 +314,42 @@ func TestFilterCoverLayout(t *testing.T) {
 	}
 	if strings.Contains(out, `\vspace*{40mm}`) {
 		t.Errorf("既定のレイアウトは使わない")
+	}
+}
+
+// 一時ディレクトリのパスに日本語があり、ロケールが UTF-8 でなくても、表紙を付ける。
+// （以前は filter.lua が、一時ディレクトリの cover.json・docx.json を Lua の io.open で読んでいて、
+// 開けないと黙って表紙を落としていた。いまはメタデータで渡すので、ファイルを開かない）
+func TestCoverWithNonASCIITempDir(t *testing.T) {
+	if _, err := exec.LookPath("pandoc"); err != nil {
+		t.Skip("pandoc が見つかりません")
+	}
+	tmp := filepath.Join(t.TempDir(), "一時")
+	if err := os.Mkdir(tmp, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(name, tmp)
+	}
+	rmd := "---\ntitle: 表紙の題名\ncover: {}\n---\n\n本文\n"
+
+	// Word は、ロケールが UTF-8 でないと、Pandoc 自身が雛形（reference.docx）を開けずにエラーになる
+	// （黙って表紙を落とすのではないので、ここでは UTF-8 のロケールで確かめる。Windows では io.open が開けなかった）
+	if runtime.GOOS == "linux" {
+		t.Setenv("LC_ALL", "C.UTF-8")
+	}
+	if doc := docxDocument(t, rmd, config.Default()); !strings.Contains(doc, "表紙の題名") {
+		t.Errorf("Word に表紙を付ける:\n%s", doc)
+	}
+
+	t.Setenv("LC_ALL", "C")
+	t.Setenv("LANG", "C")
+	output := filepath.Join(t.TempDir(), "out.html")
+	if _, err := Run(Options{Input: "a.reportmd", Output: output, Format: HTML, Config: config.Default(), Source: []byte(rmd)}); err != nil {
+		t.Fatal(err)
+	}
+	if html, _ := os.ReadFile(output); !strings.Contains(string(html), "表紙の題名") {
+		t.Errorf("HTML に表紙を付ける:\n%s", html)
 	}
 }
 

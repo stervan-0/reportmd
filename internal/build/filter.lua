@@ -21,7 +21,7 @@
 --   見出し                    ->  #1〜#3（.reportmd-num）は番号付き、
 --                                 標準の #（クラスなし）は番号なしにする
 --   title / author            ->  PDF のメタデータに使う。本文には、表紙（cover）でだけ出す
---   cover                     ->  文書の先頭に表紙を置く（レイアウトは cover.json）
+--   cover                     ->  文書の先頭に表紙を置く（レイアウトは設定の cover_json）
 --   PowerPoint（pptx）        ->  見出しごとに1枚のスライド（見出しの番号は文字で付ける）。
 --                                 改ページは新しいスライド、脚注は最後の「注」のスライド
 --   Word（docx）              ->  右揃え・字下げ・キャプションなどに、雛形（internal/build/docx.go）の
@@ -37,8 +37,10 @@
 --   equation_numbering / equation_label 数式の番号の有無と、参照のラベル（既定：式）
 --   code_*                           HTML のコードブロックの書式と、文中のコードの背景（code_inline_background）
 --
--- 表紙のレイアウト（設定の cover.layout）は、このファイルと同じ場所の cover.json で受け取る。
--- Word の寸法（本文の高さ、表紙のあとのセクションの区切り）は、同じ場所の docx.json で受け取る。
+--   cover_json                       表紙のレイアウト（設定の cover.layout）
+--   docx_json                        Word の寸法（本文の高さ、表紙のあとのセクションの区切り）
+-- cover_json と docx_json は、JSON を16進数の文字列にしたもの（文字列のままだと Markdown として
+-- 読まれ、別のファイルにすると、io.open が日本語を含むパスを開けないことがあるため）。
 
 local function has_class(el, name)
   for _, class in ipairs(el.classes) do
@@ -62,19 +64,21 @@ local function warn(message, line)
   io.stderr:write(location .. ': warning: ' .. message .. '\n')
 end
 
--- このファイルと同じ場所の JSON ファイルを読む（なければ nil）
-local function read_json(name)
-  local path = pandoc.path.join({ pandoc.path.directory(PANDOC_SCRIPT_FILE), name })
-  local file = io.open(path, 'r')
-  if file == nil then
+-- internal/build がメタデータに入れた JSON（16進数の文字列。what は警告に表示する名前）を読む。
+-- 空なら nil。読めなければ、警告して nil を返す（黙って表紙などを落とさない）。
+local function decode_json(hex, what)
+  if hex == nil or hex == '' or pandoc.json == nil then
     return nil
   end
-  local text = file:read('a')
-  file:close()
-  if pandoc.json == nil then
+  local text = hex:gsub('%x%x', function(byte)
+    return string.char(tonumber(byte, 16))
+  end)
+  local ok, value = pcall(pandoc.json.decode, text, false)
+  if not ok or type(value) ~= 'table' then
+    warn(what .. 'の設定を読めませんでした（' .. what .. 'を付けずに出力します）')
     return nil
   end
-  return pandoc.json.decode(text, false)
+  return value
 end
 
 -- ---------------------------------------------------------------------
@@ -128,6 +132,8 @@ local settings = {
   code_border_color = 'BFBFBF',
   code_padding = '5.25',
   code_inline_background = 'E6E6E6', -- 文中のコードの背景の色（code_background を少し濃くした色。空なら付けない）
+  cover_json = '',               -- 表紙のレイアウト（JSON を16進数にしたもの。decode_json で読む）
+  docx_json = '',                -- Word の寸法（同上。Word のときだけ）
 }
 
 local function read_settings(meta)
@@ -205,7 +211,7 @@ end
 --   cover:
 --     科目: 情報工学実験 II
 --     学籍番号: 1234567
--- レイアウト（cover.json）の文字列の {名前} に、cover の値（title と author は
+-- レイアウト（設定の cover_json）の文字列の {名前} に、cover の値（title と author は
 -- フロントマターの値）を差し込む。差し込む値がどれも空の行は、表紙に出さない。
 
 local cover_values = nil -- 名前 -> Inlines。cover がなければ nil
@@ -253,7 +259,7 @@ local function read_cover_layout()
     warn('表紙を作るには、Pandoc 3.1.1 以上が必要です（表紙は付けません）')
     return nil
   end
-  local cover = read_json('cover.json')
+  local cover = decode_json(settings.cover_json, '表紙')
   return cover and cover.layout
 end
 
@@ -402,7 +408,7 @@ end
 -- Word：各項目に、雛形の表紙のスタイル（項目ごとの揃え・文字サイズ・太字・行送り）をあてる。
 -- fields は罫線のない表にする。fill の空きは、本文の高さから、ほかの項目の高さを引いて等分する
 -- （1行に収まる前提。少し余らせて、表紙が2ページにならないようにする）。
--- 項目の高さ（空きは長さ、文字と fields は1行の行送り）は、internal/build が docx.json で渡す。
+-- 項目の高さ（空きは長さ、文字と fields は1行の行送り）は、internal/build が設定の docx_json で渡す。
 -- 表紙のあとはセクションを区切る（表紙にはページ番号を付けず、本文を1ページ目にする）。
 local DOCX_COVER_MARGIN = 2
 
@@ -463,7 +469,7 @@ local function add_cover(doc)
   end
   local used = {}
   local blocks
-  local docx = FORMAT == 'docx' and read_json('docx.json') or nil
+  local docx = FORMAT == 'docx' and decode_json(settings.docx_json, 'Word の表紙') or nil
   if FORMAT:match('latex') then
     blocks = latex_cover(layout, used)
   elseif docx ~= nil then

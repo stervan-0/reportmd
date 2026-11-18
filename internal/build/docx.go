@@ -31,12 +31,8 @@ var docxStylesSource string
 var docxStylesTemplate = template.Must(template.New("styles").
 	Funcs(template.FuncMap{"xml": template.HTMLEscapeString}).Parse(docxStylesSource))
 
-const (
-	// referenceDocxName は、作業ディレクトリに書く雛形の名前。
-	referenceDocxName = "reference.docx"
-	// docxFileName は、filter.lua に Word の寸法を渡すファイルの名前（cover.json と同じ場所に置く）。
-	docxFileName = "docx.json"
-)
+// referenceDocxName は、作業ディレクトリに書く雛形の名前。
+const referenceDocxName = "reference.docx"
 
 // 用紙の大きさ（mm）。b5 は LaTeX の b5paper と同じ ISO の B5。
 var paperSizes = map[string][2]float64{"a4": {210, 297}, "a5": {148, 210}, "b5": {176, 250}, "letter": {215.9, 279.4}}
@@ -283,6 +279,7 @@ func docxSection(page docxPage) string {
 }
 
 // DocxJSON は、filter.lua に渡す Word の寸法（表紙の空きの計算と、表紙のあとの区切りに使う）。
+// FilterData がメタデータに入れて渡す。
 func DocxJSON(cfg *config.Config) ([]byte, error) {
 	v := docxLayout(cfg)
 	textHeight := float64(v.Page.Height-v.Page.Top-v.Page.Bottom) / 20
@@ -309,24 +306,17 @@ func DocxJSON(cfg *config.Config) ([]byte, error) {
 	})
 }
 
-// writeDocxFiles は、Word の出力に使う雛形（reference.docx）と、filter.lua に渡す寸法（docx.json）を
-// dir に書き出し、そのパスを paths に加える。
+// writeDocxFiles は、Word の出力に使う雛形（reference.docx）を dir に書き出し、そのパスを paths に加える。
 func writeDocxFiles(dir string, cfg *config.Config, paths map[string]string) error {
 	reference, err := ReferenceDocx(cfg)
 	if err != nil {
 		return err
 	}
-	sizes, err := DocxJSON(cfg)
-	if err != nil {
-		return err
+	path := filepath.Join(dir, referenceDocxName)
+	if err := os.WriteFile(path, reference, 0o644); err != nil {
+		return &Error{Message: fmt.Sprintf("一時ファイルを書き込めません（%v）", err)}
 	}
-	for name, data := range map[string][]byte{referenceDocxName: reference, docxFileName: sizes} {
-		path := filepath.Join(dir, name)
-		if err := os.WriteFile(path, data, 0o644); err != nil {
-			return &Error{Message: fmt.Sprintf("一時ファイルを書き込めません（%v）", err)}
-		}
-		paths[name] = path
-	}
+	paths[referenceDocxName] = path
 	return nil
 }
 
