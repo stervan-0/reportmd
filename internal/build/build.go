@@ -268,6 +268,8 @@ func Metadata(cfg *config.Config, source string) map[string]any {
 		"code_border":       cfg.CodeBorder(),
 		"code_border_color": codeBorderColor,
 		"code_padding":      number(size * codePadding),
+		// 文中のコードの背景（code.background を少し濃くした色。空なら付けない）
+		"code_inline_background": cfg.CodeInlineBackground(),
 	}
 	return meta
 }

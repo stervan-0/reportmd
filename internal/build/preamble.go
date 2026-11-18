@@ -54,6 +54,7 @@ type preambleVars struct {
 	CodeFontSize, CodeBaseline, CodePadding string
 	CodeBackground                          string // 背景の色（なければ空）
 	CodeBorder, CodeBorderColor             string // 枠の線の太さ（なければ空）と色
+	CodeInlineBackground                    string // 文中のコードの背景の色（なければ空）
 }
 
 // codeBorderColor は、コードブロックの枠の線の色（薄い灰色）。
@@ -138,6 +139,7 @@ func Preamble(cfg *config.Config) string {
 	vars.CodeBackground = cfg.CodeBackground()
 	vars.CodeBorder = cfg.CodeBorder()
 	vars.CodeBorderColor = codeBorderColor
+	vars.CodeInlineBackground = cfg.CodeInlineBackground()
 
 	var out strings.Builder
 	if err := preambleTemplate.Execute(&out, vars); err != nil {

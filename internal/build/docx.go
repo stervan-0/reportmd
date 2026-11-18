@@ -126,6 +126,7 @@ type docxVars struct {
 	CodeBorder                  int    // 枠の線の太さ（1/8 pt。なければ 0）
 	CodeBorderColor             string // 枠の線の色
 	CodeBackground              string // 背景の色（なければ空）
+	CodeInlineBackground        string // 文中のコードの背景の色（なければ空）
 	Covers                      []docxCover
 }
 
@@ -214,6 +215,7 @@ func docxLayout(cfg *config.Config) docxVars {
 	v.CodeBorder = ruleSize(cfg.CodeBorder())
 	v.CodeBorderColor = codeBorderColor
 	v.CodeBackground = cfg.CodeBackground()
+	v.CodeInlineBackground = cfg.CodeInlineBackground()
 	if v.CodeBorder > 0 || v.CodeBackground != "" {
 		// Word の罫線と文字の間は pt の整数（0〜31）
 		v.CodePadding = int(math.Min(math.Round(size*codePadding), 31))

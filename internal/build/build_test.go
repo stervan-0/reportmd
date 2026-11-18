@@ -166,11 +166,13 @@ func TestPreambleCode(t *testing.T) {
 				`\RecustomVerbatimEnvironment{verbatim}{Verbatim}{breaklines,breakanywhere,`,
 				// 文中のコードの背景（語ごとの箱に色の線を敷き、箱の間で折り返せるようにする）
 				`\DeclareRobustCommand{\reportmdinlinecodestart}`, `\DeclareRobustCommand{\reportmdinlinecodebreak}{\egroup\reportmdinline@put\allowbreak`,
-				`\DeclareRobustCommand{\reportmdinlinecodeend}`, `{\color{reportmdcodebg}\rule[`,
+				`\DeclareRobustCommand{\reportmdinlinecodeend}`, `{\color{reportmdinlinecodebg}\rule[`,
+				// 文中のコードの背景は、コードブロックの背景を少し濃くした色
+				`\definecolor{reportmdinlinecodebg}{HTML}{E6E6E6}`,
 				`\pdfstringdefDisableCommands{\let\reportmdinlinecodestart\relax`},
 			[]string{`\fvset`}},
 		{"背景だけ", map[string]any{"border": false, "background": "#ffeeee"},
-			[]string{`\fboxrule=\z@`, `\colorbox{reportmdcodebg}`, `{HTML}{FFEEEE}`, `\reportmdinlinecodestart`},
+			[]string{`\fboxrule=\z@`, `\colorbox{reportmdcodebg}`, `{HTML}{FFEEEE}`, `\definecolor{reportmdinlinecodebg}{HTML}{F0E0E0}`},
 			[]string{"reportmdcodeborder"}},
 		{"太さ 0 の枠は付けない", map[string]any{"border": "0pt"},
 			[]string{`\fboxrule=\z@`, `\colorbox{reportmdcodebg}`},

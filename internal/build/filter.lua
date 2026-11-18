@@ -16,7 +16,7 @@
 --   コードブロック            ->  PDF は reportmdcode 環境、HTML は .reportmd-code の div で囲む。
 --                                 Word は、続けて書いたコードブロックの間に空きの段落を入れる
 --   文中のコード              ->  PDF は背景の箱（\reportmdinlinecodestart〜end）で囲む。
---                                 HTML は背景の CSS を出す
+--                                 HTML は背景の CSS を出す。Word は文中のコード用のスタイルの文字にする
 --   2 スペース始まりの段落   ->  字下げ 1 文字分（paragraph_indent の置き換え）
 --   見出し                    ->  #1〜#3（.reportmd-num）は番号付き、
 --                                 標準の #（クラスなし）は番号なしにする
@@ -35,7 +35,7 @@
 --   source                           警告に表示する入力ファイル名
 --   table_width / table_header_align 表の幅（auto / full）と見出し行の揃え
 --   equation_numbering / equation_label 数式の番号の有無と、参照のラベル（既定：式）
---   code_*                           HTML のコードブロックの書式（code_background は文中のコードにも使う）
+--   code_*                           HTML のコードブロックの書式と、文中のコードの背景（code_inline_background）
 --
 -- 表紙のレイアウト（設定の cover.layout）は、このファイルと同じ場所の cover.json で受け取る。
 -- Word の寸法（本文の高さ、表紙のあとのセクションの区切り）は、同じ場所の docx.json で受け取る。
@@ -127,6 +127,7 @@ local settings = {
   code_border = '0.4pt',         -- 枠の線の太さ（空なら付けない）
   code_border_color = 'BFBFBF',
   code_padding = '5.25',
+  code_inline_background = 'E6E6E6', -- 文中のコードの背景の色（code_background を少し濃くした色。空なら付けない）
 }
 
 local function read_settings(meta)
@@ -1416,18 +1417,31 @@ local function html_code_css()
   }, '\n')
 end
 
--- 文中のコード（`...`）。背景は code.background と同じ色（空なら付けない）。
+-- 文中のコード（`...`）。背景は code_inline_background（code.background を少し濃くした色。空なら付けない）。
 -- PDF は \reportmdinlinecodestart 〜 \reportmdinlinecodeend（プリアンブルで定義）で囲む。
 -- 引数を取る命令にしないのは、言語名付きのコード（Pandoc の \VERB）を中に置けるようにするため。
 -- 言語名のないコードは、空白の後ろで語に分け、間に \reportmdinlinecodebreak を置いて、
 -- そこで行を折り返せるようにする（語の後ろの空白は、前の語に含める）。
 -- 言語名付きのコードは、分けると構文の色が変わるので、分けない。
--- HTML は header-includes の CSS で決める。Word は雛形のスタイル（Verbatim Char）で決める。
+-- HTML は header-includes の CSS で決める。
+-- Word は、Pandoc が文中のコードにもコードブロックの文字にも同じスタイル（Verbatim Char）を使うので、
+-- 言語名のないコードを、文中のコード用のスタイル（reportmdInlineCode。雛形で背景を付ける）の文字にする。
 local html_inline_code_used = false
 
+local function xml_escape(s)
+  return (s:gsub('&', '&amp;'):gsub('<', '&lt;'):gsub('>', '&gt;'))
+end
+
 local function convert_code(code)
-  if settings.code_background == '' then
+  if settings.code_inline_background == '' then
     return nil
+  end
+  if FORMAT == 'docx' then
+    if #code.classes > 0 then
+      return nil
+    end
+    return pandoc.RawInline('openxml', '<w:r><w:rPr><w:rStyle w:val="reportmdInlineCode"/></w:rPr>'
+      .. '<w:t xml:space="preserve">' .. xml_escape(code.text) .. '</w:t></w:r>')
   end
   if FORMAT:match('latex') then
     local result = { pandoc.RawInline('latex', '\\reportmdinlinecodestart{}') }
@@ -1473,7 +1487,7 @@ end
 -- PDF：文中のコードの背景の箱は、xeCJK から見ると文字ではないので、和文の文字と接していても、
 -- 和文と欧文の間のアキ（\CJKecglue）が入らない。和文の文字と接する側に、自分で入れる。
 local function space_inline_code(inlines)
-  if not FORMAT:match('latex') or settings.code_background == '' then
+  if not FORMAT:match('latex') or settings.code_inline_background == '' then
     return nil
   end
   local result = pandoc.Inlines({})
@@ -1514,7 +1528,7 @@ end
 
 -- HTML：文中のコード（pre の中でない code）の背景
 local function html_inline_code_css()
-  return ':not(pre) > code { background: #' .. settings.code_background
+  return ':not(pre) > code { background: #' .. settings.code_inline_background
     .. '; padding: 0.1em 0.25em; border-radius: 0.2em; }'
 end
 

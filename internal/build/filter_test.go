@@ -203,15 +203,15 @@ var filterCases = []filterCase{
 		count: map[string]int{`\CJKecglue`: 2}},
 	{name: "見出し・表・脚注の文中のコード", rmd: "#1 見出しの `a`\n\n" + "| `b` | c |\n|---|---|\n| `d` | e |\n\n本文[^1]\n\n[^1]: 脚注の `f`\n", format: "latex",
 		count: map[string]int{`\reportmdinlinecodestart{}`: 4, `\reportmdinlinecodeend{}`: 4}},
-	{name: "背景がなければ文中のコードを囲まない", rmd: "本文の`x`と\n", format: "latex", settings: map[string]any{"code_background": ""},
+	{name: "背景がなければ文中のコードを囲まない", rmd: "本文の`x`と\n", format: "latex", settings: map[string]any{"code_inline_background": ""},
 		has: []string{`本文の\texttt{x}と`}, hasNot: []string{"reportmdinlinecode", "CJKecglue"}},
 	{name: "HTML の文中のコードの背景", rmd: "a `x` b\n", format: "html", extra: []string{"-s", "--metadata=pagetitle:t"},
-		has: []string{`:not(pre) > code { background: #F5F5F5; padding: 0.1em 0.25em; border-radius: 0.2em; }`, "<code>x</code>"}, hasNot: []string{".reportmd-code {"}},
+		has: []string{`:not(pre) > code { background: #E6E6E6; padding: 0.1em 0.25em; border-radius: 0.2em; }`, "<code>x</code>"}, hasNot: []string{".reportmd-code {"}},
 	{name: "HTML はコードブロックと文中のコードの CSS を1回ずつ", rmd: codeDoc + "\na `x` b `y`\n", format: "html", extra: []string{"-s", "--metadata=pagetitle:t"},
 		count: map[string]int{".reportmd-code {": 1, ":not(pre) > code {": 1}},
-	{name: "HTML で背景がなければ文中のコードの CSS を出さない", rmd: "a `x` b\n", format: "html", extra: []string{"-s", "--metadata=pagetitle:t"}, settings: map[string]any{"code_background": ""},
+	{name: "HTML で背景がなければ文中のコードの CSS を出さない", rmd: "a `x` b\n", format: "html", extra: []string{"-s", "--metadata=pagetitle:t"}, settings: map[string]any{"code_inline_background": ""},
 		hasNot: []string{":not(pre) > code"}},
-	{name: "PDF・HTML 以外では文中のコードを変えない", rmd: "a `x` b\n", format: "native", has: []string{`Code ( "" , [] , [] ) "x"`}, hasNot: []string{"RawInline"}},
+	{name: "PDF・HTML・Word 以外では文中のコードを変えない", rmd: "a `x` b\n", format: "native", has: []string{`Code ( "" , [] , [] ) "x"`}, hasNot: []string{"RawInline"}},
 }
 
 const codeDoc = "```python\ndef hello():\n    print(\"こんにちは\")\n```\n\n~~~\nplain block\n~~~\n"

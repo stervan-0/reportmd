@@ -100,8 +100,18 @@ func TestCodeBackgroundAndBorder(t *testing.T) {
 		t.Errorf("太さ 0 の枠は付けない: %q", cfg.CodeBorder())
 	}
 	cfg = mustLoad(t, `{"code": {"background": false, "border": false}}`)
-	if cfg.CodeBackground() != "" || cfg.CodeBorder() != "" {
+	if cfg.CodeBackground() != "" || cfg.CodeBorder() != "" || cfg.CodeInlineBackground() != "" {
 		t.Errorf("false なら付けない")
+	}
+}
+
+// 文中のコードの背景は、コードブロックの背景を少し濃くした色。
+func TestCodeInlineBackground(t *testing.T) {
+	for bg, want := range map[string]string{`"F5F5F5"`: "E6E6E6", `"#e8f0fe"`: "DAE2EF", `"FFFFFF"`: "F0F0F0", `"000000"`: "000000"} {
+		cfg := mustLoad(t, `{"code": {"background": `+bg+`}}`)
+		if got := cfg.CodeInlineBackground(); got != want {
+			t.Errorf("%s から %s になるはず: %s", bg, want, got)
+		}
 	}
 }
 
