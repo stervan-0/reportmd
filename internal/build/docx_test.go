@@ -165,11 +165,18 @@ func TestDocxInlineCodeStyle(t *testing.T) {
 }
 
 // 文中のコード（言語名なし）は、文中のコードのスタイルの文字にする。記号は XML の書き方にする。
+// 太字・斜体・取り消し線の中のコードは、その書式も付ける。
 func TestDocxInlineCode(t *testing.T) {
-	doc := docxDocument(t, "a `x < y && z` b\n", config.Default())
-	want := `<w:r><w:rPr><w:rStyle w:val="reportmdInlineCode"/></w:rPr><w:t xml:space="preserve">x &lt; y &amp;&amp; z</w:t></w:r>`
-	if !strings.Contains(doc, want) {
-		t.Errorf("%s がない:\n%s", want, doc)
+	doc := docxDocument(t, "a `x < y && z` b **`bold`** *`it`* ~~`del`~~\n", config.Default())
+	for _, want := range []string{
+		`<w:rPr><w:rStyle w:val="reportmdInlineCode" /></w:rPr><w:t xml:space="preserve">x &lt; y &amp;&amp; z</w:t>`,
+		`<w:rStyle w:val="reportmdInlineCode" /><w:bCs /><w:b /></w:rPr><w:t xml:space="preserve">bold</w:t>`,
+		`<w:rStyle w:val="reportmdInlineCode" /><w:iCs /><w:i /></w:rPr><w:t xml:space="preserve">it</w:t>`,
+		`<w:rStyle w:val="reportmdInlineCode" /><w:strike /></w:rPr><w:t xml:space="preserve">del</w:t>`,
+	} {
+		if !strings.Contains(doc, want) {
+			t.Errorf("%s がない:\n%s", want, doc)
+		}
 	}
 }
 

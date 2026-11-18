@@ -237,6 +237,7 @@ func TestBuildConfigProblems(t *testing.T) {
 
 // コードブロック：構文の色を付けたもの・言語名のないもの・知らない言語名・リストと引用の中・長い行・
 // ページをまたぐもの（リストの中も）が、背景と枠の有無のどの設定でも PDF になる。
+// 文中のコード（空白を含むもの・折り返す長いもの・見出し・太字・表・脚注の中・言語名付き）も入れる。
 func TestBuildPDFCodeBlocks(t *testing.T) {
 	pdfReady(t)
 	var long, longInList strings.Builder
@@ -247,7 +248,9 @@ func TestBuildPDFCodeBlocks(t *testing.T) {
 	doc := "#1 コード\n\n```python\ndef hello(name):\n    print(f\"こんにちは、{name}さん。\" + \"" + strings.Repeat("とても長い行", 20) + "\")\n```\n\n" +
 		"```\nplain block\n```\n\n~~~ unknownlang\nunknown language\n~~~\n\n- 項目\n\n  ```sh\n  echo 'in list'\n  ```\n\n" +
 		"> 引用\n>\n> ```\n> in quote " + strings.Repeat("とても長い行", 20) + "\n> ```\n\n" +
-		"```\n" + long.String() + "```\n\n- 長いコード\n\n  ```c\n" + longInList.String() + "  ```\n"
+		"```\n" + long.String() + "```\n\n- 長いコード\n\n  ```c\n" + longInList.String() + "  ```\n\n" +
+		"#2 人々`inline  head` の見出し\n\n長い文中のコード：`" + strings.Repeat("word ", 40) + "end` と **`bold code`** と `def f(x)`{.python}。脚注[^1]。\n\n" +
+		"| `cell code` | b |\n|---|---|\n| c | d |\n\n[^1]: 脚注の `foot note`。\n"
 	settings := map[string]string{
 		"既定":      `{}`,
 		"背景だけ":    `{"code": {"border": false}}`,
@@ -264,7 +267,8 @@ func TestBuildPDFCodeBlocks(t *testing.T) {
 				t.Fatalf("PDF を生成できるはず: %d %s", code, errOut)
 			}
 			text := pdfText(t, filepath.Join(dir, "report.pdf"))
-			for _, want := range []string{"def hello(name):", "plain block", "unknown language", "echo 'in list'", "in quote", "line 1", "line 70", "item line 1", "item line 70"} {
+			for _, want := range []string{"def hello(name):", "plain block", "unknown language", "echo 'in list'", "in quote", "line 1", "line 70", "item line 1", "item line 70",
+				"inline head", "word word", "end", "bold code", "def f(x)", "cell code", "foot note"} {
 				contains(t, "PDF の文字", text, want)
 			}
 		})

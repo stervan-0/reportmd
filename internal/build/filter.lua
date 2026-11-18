@@ -1420,17 +1420,15 @@ end
 -- 文中のコード（`...`）。背景は code_inline_background（code.background を少し濃くした色。空なら付けない）。
 -- PDF は \reportmdinlinecodestart 〜 \reportmdinlinecodeend（プリアンブルで定義）で囲む。
 -- 引数を取る命令にしないのは、言語名付きのコード（Pandoc の \VERB）を中に置けるようにするため。
--- 言語名のないコードは、空白の後ろで語に分け、間に \reportmdinlinecodebreak を置いて、
--- そこで行を折り返せるようにする（語の後ろの空白は、前の語に含める）。
+-- 言語名のないコードは、空白で語に分け、空白の1文字ごとに \reportmdinlinecodespace を置く。
+-- 空白は箱に入れず、背景の色を敷いた伸び縮みするアキにするので、そこで行を折り返せ、
+-- 行をそろえるときには本文の空白と同じように伸び縮みし、行末では消える。
 -- 言語名付きのコードは、分けると構文の色が変わるので、分けない。
 -- HTML は header-includes の CSS で決める。
 -- Word は、Pandoc が文中のコードにもコードブロックの文字にも同じスタイル（Verbatim Char）を使うので、
--- 言語名のないコードを、文中のコード用のスタイル（reportmdInlineCode。雛形で背景を付ける）の文字にする。
+-- 言語名のないコードを、文中のコード用の文字スタイル（reportmd Inline Code。雛形で背景を付ける）の
+-- Span（custom-style）にする。Pandoc が run を書くので、外側の太字・斜体なども付く。
 local html_inline_code_used = false
-
-local function xml_escape(s)
-  return (s:gsub('&', '&amp;'):gsub('<', '&lt;'):gsub('>', '&gt;'))
-end
 
 local function convert_code(code)
   if settings.code_inline_background == '' then
@@ -1440,22 +1438,19 @@ local function convert_code(code)
     if #code.classes > 0 then
       return nil
     end
-    return pandoc.RawInline('openxml', '<w:r><w:rPr><w:rStyle w:val="reportmdInlineCode"/></w:rPr>'
-      .. '<w:t xml:space="preserve">' .. xml_escape(code.text) .. '</w:t></w:r>')
+    return pandoc.Span({ pandoc.Str(code.text) }, { ['custom-style'] = 'reportmd Inline Code' })
   end
   if FORMAT:match('latex') then
     local result = { pandoc.RawInline('latex', '\\reportmdinlinecodestart{}') }
     if #code.classes > 0 then
       table.insert(result, code)
     else
-      local first = true
-      for piece in code.text:gmatch('%S*%s*') do
-        if piece ~= '' then
-          if not first then
-            table.insert(result, pandoc.RawInline('latex', '\\reportmdinlinecodebreak{}'))
-          end
-          table.insert(result, pandoc.Code(piece, code.attr))
-          first = false
+      for word, spaces in code.text:gmatch('(%S*)(%s*)') do
+        if word ~= '' then
+          table.insert(result, pandoc.Code(word, code.attr))
+        end
+        for _ = 1, #spaces do -- %s は ASCII の空白だけなので、バイト数が文字数
+          table.insert(result, pandoc.RawInline('latex', '\\reportmdinlinecodespace{}'))
         end
       end
     end
@@ -1470,8 +1465,10 @@ end
 -- 和文の文字（仮名・漢字。句読点・括弧は除く）か
 local function is_cjk_letter(c)
   return (c >= 0x3041 and c <= 0x30FF and c ~= 0x30FB) -- 仮名と長音（中黒は除く）
+    or (c >= 0x3005 and c <= 0x3007) or c == 0x303B -- 々 〆 〇 〻
     or (c >= 0x3400 and c <= 0x9FFF) -- 漢字
     or (c >= 0xF900 and c <= 0xFAFF)
+    or (c >= 0x20000 and c <= 0x3FFFF) -- 拡張漢字（第2面・第3面）
     or (c >= 0xFF10 and c <= 0xFF19) or (c >= 0xFF21 and c <= 0xFF3A) or (c >= 0xFF41 and c <= 0xFF5A) -- 全角の英数字
     or (c >= 0xFF66 and c <= 0xFF9F) -- 半角カナ
 end

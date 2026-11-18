@@ -102,16 +102,27 @@
 \makeatother
 {{- if .CodeInlineBackground}}
 % --- 文中のコード（filter.lua が \reportmdinlinecodestart{}〜\reportmdinlinecodeend{} で囲む） ---
-% 中身を箱に入れて、背景（コードブロックの背景を少し濃くした色）を敷く。空白で区切った語ごとに箱を分け
-% （\reportmdinlinecodebreak{}）、箱の間で行を折り返せるようにする（1語の中では折り返さない）。
-% 背景の高さは、中身によらず本文の文字の高さ＋上下 1pt にそろえる。しおり（PDF の目次）では、何もしない
+% 空白で区切った語ごとに箱に入れ、背景（コードブロックの背景を少し濃くした色）を敷く（1語の中では折り返さない）。
+% 空白（filter.lua が1文字ごとに \reportmdinlinecodespace{} を置く）は箱に入れず、背景と同じ色の線の leaders にする。
+% 幅は等幅の書体の空白で、本文の空白と同じだけ伸び縮みし、そこで行を折り返せ、行末では消える。
+% leaders の端にできる 0.2pt 未満のすき間は、語の背景を左右に 0.2pt 広げて埋める。leaders の箱の中の色は {} に入れる
+% （入れないと、色を戻す \special が箱の直後、leaders と空白の間に入って、エラーになる）。
+% 続く空白は、継ぎ目にすき間ができないよう、前の leaders を取り除いて（\unskip）、空白 n 個分の1つの leaders にする。
+% 背景の高さは、中身によらず、等幅の書体の「Ag」の高さと深さ＋上下 1pt にそろえる（それより高い文字ははみ出す）。
+% しおり（PDF の目次）では、空白は空白にし、ほかは何もしない
 \definecolor{reportmdinlinecodebg}{HTML}{ {{- .CodeInlineBackground -}} }
-\newsavebox{\reportmdinlinebox}
 \makeatletter
-\newcommand{\reportmdinline@put}{{"{{"}}\color{reportmdinlinecodebg}\rule[-\dimexpr\dp\reportmdinlinebox+1pt\relax]{\wd\reportmdinlinebox}{\dimexpr\ht\reportmdinlinebox+\dp\reportmdinlinebox+2pt\relax}}\kern-\wd\reportmdinlinebox\usebox{\reportmdinlinebox}}
-\DeclareRobustCommand{\reportmdinlinecodestart}{\leavevmode\begingroup\setbox\reportmdinlinebox\hbox\bgroup\hspace{1pt}\vphantom{Ag}}
-\DeclareRobustCommand{\reportmdinlinecodebreak}{\egroup\reportmdinline@put\allowbreak\setbox\reportmdinlinebox\hbox\bgroup\vphantom{Ag}}
+\newsavebox{\reportmdinlinebox}
+\newdimen\reportmdinline@ht
+\newdimen\reportmdinline@dp
+\newdimen\reportmdinline@sp
+\newcount\reportmdinline@n
+\newcommand{\reportmdinline@rule}[1]{\vrule width#1 height\dimexpr\reportmdinline@ht+1pt\relax depth\dimexpr\reportmdinline@dp+1pt\relax}
+\newcommand{\reportmdinline@open}{\setbox\reportmdinlinebox\hbox\bgroup}
+\newcommand{\reportmdinline@put}{\ht\reportmdinlinebox\reportmdinline@ht\dp\reportmdinlinebox\reportmdinline@dp\hbox{\kern-.2pt{\color{reportmdinlinecodebg}\reportmdinline@rule{\dimexpr\wd\reportmdinlinebox+.4pt\relax}}\kern-\dimexpr\wd\reportmdinlinebox+.2pt\relax\box\reportmdinlinebox}}
+\DeclareRobustCommand{\reportmdinlinecodestart}{\leavevmode\begingroup\setbox\z@\hbox{\ttfamily Ag}\reportmdinline@ht\ht\z@\reportmdinline@dp\dp\z@\reportmdinline@n\z@\reportmdinline@open\hspace{1pt}}
+\DeclareRobustCommand{\reportmdinlinecodespace}{\egroup\ifdim\wd\reportmdinlinebox>\z@\reportmdinline@put\reportmdinline@n\z@\else\unskip\fi\advance\reportmdinline@n\@ne\settowidth\reportmdinline@sp{\ttfamily\ }\cleaders\hbox to.4pt{{"{{"}}\color{reportmdinlinecodebg}\reportmdinline@rule{.4pt}}}\hskip\reportmdinline@n\reportmdinline@sp plus\reportmdinline@n\fontdimen3\font minus\reportmdinline@n\fontdimen4\font\relax\reportmdinline@open}
 \DeclareRobustCommand{\reportmdinlinecodeend}{\hspace{1pt}\egroup\reportmdinline@put\endgroup}
 \makeatother
-\AtBeginDocument{\ifdefined\pdfstringdefDisableCommands\pdfstringdefDisableCommands{\let\reportmdinlinecodestart\relax\let\reportmdinlinecodebreak\relax\let\reportmdinlinecodeend\relax}\fi}
+\AtBeginDocument{\ifdefined\pdfstringdefDisableCommands\pdfstringdefDisableCommands{\let\reportmdinlinecodestart\relax\let\reportmdinlinecodespace\space\let\reportmdinlinecodeend\relax}\fi}
 {{- end}}

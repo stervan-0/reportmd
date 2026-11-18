@@ -191,16 +191,22 @@ var filterCases = []filterCase{
 	// 文中のコード
 	{name: "文中のコードは背景の箱で囲む", rmd: "a `x` b\n", format: "latex",
 		has: []string{`a \reportmdinlinecodestart{}\texttt{x}\reportmdinlinecodeend{} b`}},
-	{name: "文中のコードは空白の後ろで分ける", rmd: "`paste  -l 10` と\n", format: "latex",
-		has: []string{`\reportmdinlinecodestart{}\texttt{paste\ \ }\reportmdinlinecodebreak{}\texttt{-l\ }\reportmdinlinecodebreak{}\texttt{10}\reportmdinlinecodeend{}`}},
+	// 空白は箱に入れず、1文字ごとに \reportmdinlinecodespace{} にする
+	{name: "文中のコードは空白で分ける", rmd: "`paste  -l 10` と\n", format: "latex",
+		has: []string{`\reportmdinlinecodestart{}\texttt{paste}\reportmdinlinecodespace{}\reportmdinlinecodespace{}\texttt{-l}\reportmdinlinecodespace{}\texttt{10}\reportmdinlinecodeend{}`}},
 	{name: "言語名付きの文中のコードは分けない", rmd: "`def f(x)`{.python}\n", format: "latex",
-		has: []string{`\reportmdinlinecodestart{}\VERB|\KeywordTok{def}\NormalTok{ f(x)}|\reportmdinlinecodeend{}`}, hasNot: []string{"reportmdinlinecodebreak"}},
+		has: []string{`\reportmdinlinecodestart{}\VERB|\KeywordTok{def}\NormalTok{ f(x)}|\reportmdinlinecodeend{}`}, hasNot: []string{"reportmdinlinecodespace"}},
 	// 和文の文字（句読点・括弧は除く）と接する側にだけ、和文と欧文の間のアキを入れる
 	{name: "和文と接する文中のコードにはアキを入れる", rmd: "本文の`x`と、`y`。「`z`」 `w` 英\n", format: "latex",
 		has: []string{`本文の{}\CJKecglue{}\reportmdinlinecodestart{}\texttt{x}\reportmdinlinecodeend{}\CJKecglue{}と、`,
 			`と、\reportmdinlinecodestart{}\texttt{y}\reportmdinlinecodeend{}。`, `「\reportmdinlinecodestart{}\texttt{z}\reportmdinlinecodeend{}」`,
 			`」 \reportmdinlinecodestart{}\texttt{w}\reportmdinlinecodeend{} 英`},
 		count: map[string]int{`\CJKecglue`: 2}},
+	// 々・〆・〇・〻と拡張漢字（𠮷）も和文の文字
+	{name: "々や拡張漢字と接する文中のコードにもアキを入れる", rmd: "人々`a`〆 〇`b`〻 𠮷`c`\n", format: "latex",
+		has: []string{`人々{}\CJKecglue{}\reportmdinlinecodestart{}\texttt{a}\reportmdinlinecodeend{}\CJKecglue{}〆`,
+			`〇{}\CJKecglue{}\reportmdinlinecodestart{}\texttt{b}\reportmdinlinecodeend{}\CJKecglue{}〻`, `𠮷{}\CJKecglue{}\reportmdinlinecodestart{}`},
+		count: map[string]int{`\CJKecglue`: 5}},
 	{name: "見出し・表・脚注の文中のコード", rmd: "#1 見出しの `a`\n\n" + "| `b` | c |\n|---|---|\n| `d` | e |\n\n本文[^1]\n\n[^1]: 脚注の `f`\n", format: "latex",
 		count: map[string]int{`\reportmdinlinecodestart{}`: 4, `\reportmdinlinecodeend{}`: 4}},
 	{name: "背景がなければ文中のコードを囲まない", rmd: "本文の`x`と\n", format: "latex", settings: map[string]any{"code_inline_background": ""},
