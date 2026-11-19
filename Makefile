@@ -2,7 +2,7 @@ VERSION := $(shell sed -n 's/^const Version = "\(.*\)"/\1/p' internal/cli/cli.go
 PREFIX ?= $(HOME)/.local
 TARGETS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
 
-.PHONY: build test install uninstall dist example vscode vscode-docker vscode-test clean
+.PHONY: build test install uninstall dist version example vscode vscode-docker vscode-test clean
 
 # 実行ファイル reportmd を作る
 build:
@@ -43,6 +43,10 @@ dist:
 		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -trimpath -ldflags "-s -w" \
 			-o dist/reportmd-$(VERSION)-$$os-$$arch$$ext . || exit 1; \
 	done
+
+# Version を表示する（リリースのワークフローが、タグと一致するか確かめるのに使う）
+version:
+	@echo $(VERSION)
 
 # サンプルの PDF を作る
 example: build

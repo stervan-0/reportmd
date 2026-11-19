@@ -4,6 +4,11 @@
 #   git tag v0.22.6 && git push origin v0.22.6
 #
 # タグは internal/cli/cli.go の Version と同じでなければならない（違えば止まる）。
+# Actions のタブから、既にあるタグを指定して動かし直すこともできる。
+#
+# 依存パッケージを取り込んでテストする build ジョブには、読み取りの権限だけを渡す。
+# リポジトリに書き込める権限は、できたファイルを Releases に置く release ジョブだけが持つ。
+# 外部のアクションは、タグが付け替えられても中身が変わらないよう、コミットで固定する。
 name: release
 
 on:
@@ -16,30 +21,39 @@ on:
         required: true
 
 permissions:
-  contents: write
+  contents: read
+
+# 同じタグのリリースを、タグの push と手動の実行とで同時に作らない
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+
+env:
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
     env:
-      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+      # 日本語を含むテストのため（POSIX ロケールでは Pandoc に渡す題名が化ける）
       LANG: C.UTF-8
     steps:
-      - uses: actions/checkout@v4
+      # refs/tags/ を付けて、タグでないもの（ブランチ名など）を指定したら止める
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
-          ref: ${{ env.TAG }}
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
 
       - name: タグと Version が一致するか確かめる
         run: |
-          version=$(sed -n 's/^const Version = "\(.*\)"/\1/p' internal/cli/cli.go)
+          version=$(make -s version)
           if [ "v$version" != "$TAG" ]; then
             echo "::error::タグ $TAG と internal/cli/cli.go の Version ($version) が一致しません"
             exit 1
@@ -61,12 +75,34 @@ jobs:
       - name: チェックサムを作る
         run: cd dist && sha256sum * > SHA256SUMS
 
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          name: dist
+          path: dist
+
       - name: リリースを作る
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
+            # 作り直すときは、今回作らなかった古いファイル（前の版の .vsix など）を消してから置き直す
+            gh release view "$TAG" --json assets --jq '.assets[].name' | while read -r name; do
+              [ -e "dist/$name" ] || gh release delete-asset "$TAG" "$name" --yes
+            done
             gh release upload "$TAG" dist/* --clobber
           else
-            gh release create "$TAG" dist/* --title "reportmd ${TAG#v}" --generate-notes
+            gh release create "$TAG" dist/* --verify-tag --title "reportmd ${TAG#v}" --generate-notes
           fi

@@ -22,7 +22,7 @@ Go で書いた1つの実行ファイルで動きます（Ruby などの実行�
 | `reportmd-<版>-linux-amd64` / `-linux-arm64` | Linux・WSL |
 | `reportmd-<版>-darwin-arm64` / `-darwin-amd64` | macOS（Apple シリコン / Intel） |
 | `reportmd-<版>-windows-amd64.exe` | Windows |
-| `reportmd-<版>.vsix` | VS Code 拡張機能 |
+| `reportmd-<拡張機能の版>.vsix` | VS Code 拡張機能（版は reportmd とは別に付けています。例：`reportmd-0.10.5.vsix`） |
 | `SHA256SUMS` | 各ファイルのチェックサム |
 
 ダウンロードした実行ファイルは `reportmd`（Windows では `reportmd.exe`）に名前を変えて、PATH の通ったフォルダに置きます。
@@ -35,6 +35,18 @@ mv reportmd-*-linux-amd64 ~/.local/bin/reportmd
 
 macOS では、ダウンロードしたファイルに付く隔離の印のため、初回は「開発元を確認できない」と止められます。`xattr -d com.apple.quarantine ~/.local/bin/reportmd` で外してください。
 
+Windows では、PowerShell で次を実行します。`%LOCALAPPDATA%\Programs\reportmd\reportmd.exe` に置いて、そのフォルダを自分の PATH に加えます。PATH の変更は、開き直した PowerShell や VS Code から有効になります。
+
+```powershell
+$dir = "$env:LOCALAPPDATA\Programs\reportmd"
+New-Item -ItemType Directory -Force $dir | Out-Null
+Move-Item -Force .\reportmd-*-windows-amd64.exe "$dir\reportmd.exe"
+$path = [Environment]::GetEnvironmentVariable('Path', 'User')
+if (";$path;" -notlike "*;$dir;*") {
+  [Environment]::SetEnvironmentVariable('Path', (@($path, $dir) | Where-Object { $_ }) -join ';', 'User')
+}
+```
+
 ## インストール（ソースから）
 
 ```bash
@@ -43,7 +55,7 @@ make uninstall          # 取り除く（監視で使うキャッシュ ~/.cache
 make dist               # Linux・macOS・Windows 向けの実行ファイルを dist/ に作る
 ```
 
-`make install` は Linux・macOS（WSL を含む）向けです。Windows の PowerShell では動きません。Windows では WSL の中で `make install` するか、次の Docker を使ってください。
+`make install` は Linux・macOS（WSL を含む）向けです。Windows の PowerShell では動きません。Windows では、上の「ダウンロード」の実行ファイルを使うか、WSL の中で `make install` するか、次の Docker を使ってください。
 
 ## Docker で使う
 
@@ -124,7 +136,7 @@ Docker で使うときの注意：
   ```
 
 - `--keep-temp` で残した一時ファイルは、そのままではコンテナと一緒に消えます。`-e TMPDIR=/work` を `docker run` に足すと、レポートのフォルダの中に残ります。このとき「一時ファイルを残しました: /work/reportmd-…」と表示されますが、`/work` はコンテナから見たレポートのフォルダのことなので、レポートのフォルダの中の `reportmd-…` を見てください。
-- VS Code 拡張機能は `reportmd` を直接起動するので、Docker 版では使えません（上の関数も見えません）。VS Code で使うときは、WSL の中で `make install` してください。
+- VS Code 拡張機能は `reportmd` を直接起動するので、Docker 版では使えません（上の関数も見えません）。VS Code で使うときは、「ダウンロード」の実行ファイルを PATH に置くか、`make install` で入れてください（Windows で WSL のフォルダを開くときは、WSL の中に入れます）。
 - 時刻（監視中の「[15:04:05] 変更を検出しました」など）は日本時間です。変えるときは `-e TZ=UTC` のように指定します。
 - reportmd を新しくしたら、`git pull` のあとに `docker build -t reportmd .` をもう一度実行します。古いイメージのままかどうかは `reportmd --version` で確かめられます。
 
@@ -189,7 +201,7 @@ Node.js を入れていない場合は `make vscode-docker` を使います。`n
 docker run --rm -v "$($PWD.ProviderPath)\vscode:/out" node:22 sh /out/scripts/package-in-docker.sh
 ```
 
-VS Code の拡張機能ビューの「…」→「VSIX からのインストール...」で入れます。拡張機能が呼び出す reportmd は、ローカルに入れたもの（`make install`）です。Docker のイメージの reportmd は使えません。
+[Releases](https://github.com/stervan-0/reportmd/releases) の `.vsix` を使えば、自分で作る必要はありません。VS Code の拡張機能ビューの「…」→「VSIX からのインストール...」で入れます。拡張機能が呼び出す reportmd は、ローカルに入れたもの（「ダウンロード」の実行ファイルを PATH に置いたもの、または `make install` で入れたもの）です。PATH 以外に置いた場合は、設定の `reportmd.path` にそのパスを書きます。Docker のイメージの reportmd は使えません。
 
 ## 記法
 
