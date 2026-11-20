@@ -2,7 +2,7 @@ VERSION := $(shell sed -n 's/^const Version = "\(.*\)"/\1/p' internal/cli/cli.go
 PREFIX ?= $(HOME)/.local
 TARGETS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
 
-.PHONY: build test install uninstall dist example vscode vscode-docker vscode-test clean
+.PHONY: build test install uninstall dist version example vscode vscode-docker vscode-test clean
 
 # 実行ファイル reportmd を作る
 build:
@@ -44,13 +44,19 @@ dist:
 			-o dist/reportmd-$(VERSION)-$$os-$$arch$$ext . || exit 1; \
 	done
 
+# Version を表示する（リリースのワークフローが、タグと一致するか確かめるのに使う）
+version:
+	@echo $(VERSION)
+
 # サンプルの PDF を作る
 example: build
 	./reportmd build examples/report.reportmd
 
-# VS Code 拡張機能（vscode/）を .vsix にまとめる（Node.js が必要）
+# VS Code 拡張機能（vscode/）を .vsix にまとめる（Node.js が必要）。
+# 依存パッケージのインストールスクリプトは動かさず、自分の postinstall（pdf.js のコピー）だけを実行する
+# （リリースのワークフローと同じ手順）
 vscode:
-	cd vscode && npm run package
+	cd vscode && npm ci --ignore-scripts --no-audit --no-fund && node scripts/copy-pdfjs.js && npm run package
 
 # VS Code 拡張機能を、Node.js のイメージの中で .vsix にまとめる（Node.js の代わりに Docker が必要）
 vscode-docker:
@@ -58,7 +64,7 @@ vscode-docker:
 
 # VS Code 拡張機能のテスト（Node.js が必要）
 vscode-test:
-	cd vscode && npm install && npm test
+	cd vscode && npm ci --ignore-scripts --no-audit --no-fund && node scripts/copy-pdfjs.js && npm test
 
 clean:
 	rm -rf reportmd dist examples/*.pdf vscode/*.vsix

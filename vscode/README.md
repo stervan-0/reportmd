@@ -26,9 +26,10 @@ reportmd（Markdown で大学のレポートを書いて PDF にするツール�
 ## インストール
 
 ```bash
-cd vscode
-npm run package     # reportmd-0.10.5.vsix ができる（Node.js が必要。リポジトリの最上位で make vscode でも可）
+make vscode         # リポジトリの最上位で実行する。vscode/reportmd-0.10.5.vsix ができる（Node.js が必要）
 ```
+
+`make vscode` は、`.vsix` を作る vsce を含む依存パッケージをロックファイルのとおりに取り込み（依存パッケージのインストールスクリプトは動かしません）、pdf.js をコピーしてから `npm run package` を実行します。GitHub の [Releases](https://github.com/stervan-0/reportmd/releases) に、できあがった `.vsix` も置いています。
 
 Node.js がなく Docker がある場合は、リポジトリの最上位で `make vscode-docker` を実行すると、Node.js のイメージの中で同じ `.vsix` を作れます（`make` のない PowerShell での打ち方は、最上位の README を参照）。
 
@@ -61,11 +62,13 @@ VS Code の拡張機能ビューの「…」メニュー →「VSIX からのイ
 ## 開発
 
 ```bash
-npm install    # テストに使うライブラリと、プレビューに使う pdf.js（media/pdfjs にコピーされる）
+npm ci --ignore-scripts && node scripts/copy-pdfjs.js   # テストに使うライブラリと vsce を取り込み、プレビューに使う pdf.js を media/pdfjs にコピーする
 npm test       # 色分け・出力の読み取り・スキーマ・拡張機能の動作・プレビューの画面のテスト
 ```
+
+リポジトリの最上位で `make vscode-test` とすると、取り込みからテストまでを同じ手順で行います。
 
 - 色分けのテストは、VS Code 本体に入っている Markdown などの文法を使います（VS Code が見つからなければ飛ばします）。
 - 拡張機能の動作のテストは、VS Code の API の代わり（`test/vscode-mock.js`）の上で `extension.js` を動かし、実際に reportmd を実行します（reportmd を実行できなければ飛ばします。`REPORTMD_PATH` で指定できます）。
 - プレビューの画面のテストは、ヘッドレスの Chrome（または Edge）で実際に PDF を描かせます（見つからなければ飛ばします。`CHROME_PATH` で指定できます）。
-- ビルドの手順はありません（JavaScript をそのまま使います）。pdf.js（`media/pdfjs`）はコミットせず、`npm install` と `.vsix` を作るときにコピーします。
+- ビルドの手順はありません（JavaScript をそのまま使います）。pdf.js（`media/pdfjs`）はコミットせず、依存パッケージを取り込むとき（`node scripts/copy-pdfjs.js`、`npm install` の postinstall）と `.vsix` を作るときにコピーします。

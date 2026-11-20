@@ -13,7 +13,56 @@ Go で書いた1つの実行ファイルで動きます（Ruby などの実行�
 
 揃っているかどうかは `reportmd doctor` で確認できます。
 
-## インストール
+## ダウンロード
+
+[Releases](https://github.com/stervan-0/reportmd/releases) に、ビルド済みの実行ファイルと VS Code 拡張機能を置いています。Go や Node.js を入れなくても使えます（Pandoc・XeLaTeX・フォントは、上のとおり別に必要です）。
+
+| ファイル | 対象 |
+| --- | --- |
+| `reportmd-<版>-linux-amd64` / `-linux-arm64` | Linux・WSL |
+| `reportmd-<版>-darwin-arm64` / `-darwin-amd64` | macOS（Apple シリコン / Intel） |
+| `reportmd-<版>-windows-amd64.exe` | Windows |
+| `reportmd-<拡張機能の版>.vsix` | VS Code 拡張機能（版は reportmd とは別に付けています。例：`reportmd-0.10.5.vsix`） |
+| `SHA256SUMS` | 各ファイルのチェックサム |
+
+ダウンロードした実行ファイルは、チェックサムを確かめてから、`reportmd`（Windows では `reportmd.exe`）に名前を変えて、PATH の通ったフォルダに置きます。次の例では、ダウンロードした版（`v=` の値）と、自分の OS・CPU に合うファイル名（`f=` の値）を書き換えてください。版の入ったファイル名をそのまま書くので、ダウンロードのフォルダに前の版が残っていても、取り違えません。
+
+Linux・macOS（WSL を含む）では、端末で次を実行します。`SHA256SUMS` も同じフォルダにダウンロードしておきます。
+
+```bash
+v=0.22.6
+f=reportmd-$v-linux-amd64          # macOS（Apple シリコン）は reportmd-$v-darwin-arm64
+grep " $f\$" SHA256SUMS | shasum -a 256 -c \
+  && mkdir -p ~/.local/bin \
+  && chmod +x "$f" \
+  && mv "$f" ~/.local/bin/reportmd
+```
+
+チェックサムが一致したとき（「OK」と出たとき）だけ、`~/.local/bin/reportmd` に置きます。一致しないときや、ファイルが見つからないときは、そこで止まります。`shasum` がない Linux では、`shasum -a 256 -c` を `sha256sum -c` に替えてください。
+
+`SHA256SUMS` には全部のファイルが載っているので、`grep` で自分がダウンロードしたものの行だけを渡します（そのまま `sha256sum -c SHA256SUMS` とすると、ダウンロードしていないファイルが見つからないと言われて失敗します。`--ignore-missing` を付けても同じことができます）。
+
+`~/.local/bin` が PATH に入っていなければ、加えます（Ubuntu は、ログインし直すと自動で入ります。macOS の既定のシェル zsh では `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zprofile` を実行して、端末を開き直します）。
+
+macOS では、ダウンロードしたファイルに付く隔離の印のため、初回は「開発元を確認できない」と止められます。`xattr -d com.apple.quarantine ~/.local/bin/reportmd` で外してください。
+
+Windows では、PowerShell で次を実行します。チェックサムを確かめて、`%LOCALAPPDATA%\Programs\reportmd\reportmd.exe` に置き、そのフォルダを自分の PATH に加えます。PATH の変更は、開き直した PowerShell や VS Code から有効になります。
+
+```powershell
+$v = '0.22.6'
+$f = "reportmd-$v-windows-amd64.exe"
+$want = ((Select-String -Path SHA256SUMS -SimpleMatch " $f").Line -split ' ')[0]
+if ((Get-FileHash $f).Hash -ne $want) { throw "チェックサムが一致しません: $f" }
+$dir = "$env:LOCALAPPDATA\Programs\reportmd"
+New-Item -ItemType Directory -Force $dir | Out-Null
+Move-Item -Force $f "$dir\reportmd.exe"
+$path = [Environment]::GetEnvironmentVariable('Path', 'User')
+if (";$path;" -notlike "*;$dir;*") {
+  [Environment]::SetEnvironmentVariable('Path', (@($path, $dir) | Where-Object { $_ }) -join ';', 'User')
+}
+```
+
+## インストール（ソースから）
 
 ```bash
 make install            # ~/.local/bin/reportmd に入れる（PREFIX=/usr/local で変更）
@@ -21,7 +70,7 @@ make uninstall          # 取り除く（監視で使うキャッシュ ~/.cache
 make dist               # Linux・macOS・Windows 向けの実行ファイルを dist/ に作る
 ```
 
-`make install` は Linux・macOS（WSL を含む）向けです。Windows の PowerShell では動きません。Windows では WSL の中で `make install` するか、次の Docker を使ってください。
+`make install` は Linux・macOS（WSL を含む）向けです。Windows の PowerShell では動きません。Windows では、上の「ダウンロード」の実行ファイルを使うか、WSL の中で `make install` するか、次の Docker を使ってください。
 
 ## Docker で使う
 
@@ -102,7 +151,7 @@ Docker で使うときの注意：
   ```
 
 - `--keep-temp` で残した一時ファイルは、そのままではコンテナと一緒に消えます。`-e TMPDIR=/work` を `docker run` に足すと、レポートのフォルダの中に残ります。このとき「一時ファイルを残しました: /work/reportmd-…」と表示されますが、`/work` はコンテナから見たレポートのフォルダのことなので、レポートのフォルダの中の `reportmd-…` を見てください。
-- VS Code 拡張機能は `reportmd` を直接起動するので、Docker 版では使えません（上の関数も見えません）。VS Code で使うときは、WSL の中で `make install` してください。
+- VS Code 拡張機能は `reportmd` を直接起動するので、Docker 版では使えません（上の関数も見えません）。VS Code で使うときは、「ダウンロード」の実行ファイルを PATH に置くか、`make install` で入れてください（Windows で WSL のフォルダを開くときは、WSL の中に入れます）。
 - 時刻（監視中の「[15:04:05] 変更を検出しました」など）は日本時間です。変えるときは `-e TZ=UTC` のように指定します。
 - reportmd を新しくしたら、`git pull` のあとに `docker build -t reportmd .` をもう一度実行します。古いイメージのままかどうかは `reportmd --version` で確かめられます。
 
@@ -167,7 +216,7 @@ Node.js を入れていない場合は `make vscode-docker` を使います。`n
 docker run --rm -v "$($PWD.ProviderPath)\vscode:/out" node:22 sh /out/scripts/package-in-docker.sh
 ```
 
-VS Code の拡張機能ビューの「…」→「VSIX からのインストール...」で入れます。拡張機能が呼び出す reportmd は、ローカルに入れたもの（`make install`）です。Docker のイメージの reportmd は使えません。
+[Releases](https://github.com/stervan-0/reportmd/releases) の `.vsix` を使えば、自分で作る必要はありません。VS Code の拡張機能ビューの「…」→「VSIX からのインストール...」で入れます。拡張機能が呼び出す reportmd は、ローカルに入れたもの（「ダウンロード」の実行ファイルを PATH に置いたもの、または `make install` で入れたもの）です。PATH 以外に置いた場合は、設定の `reportmd.path` にそのパスを書きます。Docker のイメージの reportmd は使えません。
 
 ## 記法
 
@@ -331,6 +380,13 @@ cover:
 ```bash
 make build     # ./reportmd を作る
 make test      # go vet と go test
+```
+
+リリースは、Version を上げたコミットに `v` で始まるタグを付けて push すると、GitHub Actions（`.github/workflows/release.yml`）が全 OS 向けの実行ファイル・`.vsix`・`SHA256SUMS` を作って Releases に置きます。タグと `internal/cli/cli.go` の Version が違うと止まります。版に `-` が入るタグ（`v0.23.0-rc.1` など）は、試験版（pre-release）として置かれ、Latest にはなりません。
+
+```bash
+git tag v0.22.6
+git push origin v0.22.6
 ```
 
 PDF の生成が必要なテストは、Pandoc・XeLaTeX・既定のフォントが揃っていない環境では飛ばされます。`internal/build/testdata` には Ruby 版が生成したプリアンブルがあり、Go 版の出力が一致することを確かめています。
