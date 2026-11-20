@@ -52,9 +52,11 @@ version:
 example: build
 	./reportmd build examples/report.reportmd
 
-# VS Code 拡張機能（vscode/）を .vsix にまとめる（Node.js が必要）
+# VS Code 拡張機能（vscode/）を .vsix にまとめる（Node.js が必要）。
+# 依存パッケージのインストールスクリプトは動かさず、自分の postinstall（pdf.js のコピー）だけを実行する
+# （リリースのワークフローと同じ手順）
 vscode:
-	cd vscode && npm ci --no-audit --no-fund && npm run package
+	cd vscode && npm ci --ignore-scripts --no-audit --no-fund && node scripts/copy-pdfjs.js && npm run package
 
 # VS Code 拡張機能を、Node.js のイメージの中で .vsix にまとめる（Node.js の代わりに Docker が必要）
 vscode-docker:
@@ -62,7 +64,7 @@ vscode-docker:
 
 # VS Code 拡張機能のテスト（Node.js が必要）
 vscode-test:
-	cd vscode && npm install && npm test
+	cd vscode && npm ci --ignore-scripts --no-audit --no-fund && node scripts/copy-pdfjs.js && npm test
 
 clean:
 	rm -rf reportmd dist examples/*.pdf vscode/*.vsix

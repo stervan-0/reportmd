@@ -12,7 +12,9 @@
 # - リポジトリに書き込める権限は、できたファイルを Releases に置く release ジョブだけが持つ。
 # - Go の実行ファイルは、npm の依存パッケージを取り込まない binaries ジョブで作る。
 #   npm の依存は vscode ジョブだけで、インストールスクリプトを動かさずに取り込む。
-# - 外部のアクションはコミットで、npm の依存（.vsix を作る vsce を含む）はロックファイルで固定する。
+# - 外部のアクションはコミットで、npm の依存（.vsix を作る vsce を含む）はロックファイルで、
+#   配る実行ファイルを作る Go は版（RELEASE_GO_VERSION）で固定する。
+#   同じタグを作り直しても、同じ実行ファイル（同じチェックサム）になる。
 name: release
 
 on:
@@ -33,8 +35,29 @@ concurrency:
 
 env:
   TAG: ${{ github.event.inputs.tag || github.ref_name }}
+  # 配る実行ファイルを作る Go の版。標準ライブラリの修正を取り込むため、新しい版が出たら上げる
+  RELEASE_GO_VERSION: "1.27.4"
 
 jobs:
+  # README が書く「Go 1.22 以上」でビルドできることを、go.mod の版の Go で確かめる
+  # （go.mod の go 行は、標準ライブラリの新しい API を使うことを止めないため）
+  test-min-go:
+    runs-on: ubuntu-latest
+    env:
+      LANG: C.UTF-8
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+
+      - name: テスト
+        run: make test
+
   binaries:
     runs-on: ubuntu-latest
     env:
@@ -48,17 +71,18 @@ jobs:
           persist-credentials: false
 
       # go.mod の go 行は「使える最も古い版」なので、配る実行ファイルは
-      # 標準ライブラリの修正が入った、サポート中の最新の Go で作る
+      # 標準ライブラリの修正が入った、サポート中の Go で作る
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
-          go-version: stable
+          go-version: ${{ env.RELEASE_GO_VERSION }}
 
       - name: タグと Version が一致するか確かめる
         run: |
-          if ! version=$(make -s version); then
+          if ! grep -q '^version:' Makefile; then
             echo "::error::このタグの Makefile には version ターゲットがありません（このワークフローより前のタグは、ここでは作れません）"
             exit 1
           fi
+          version=$(make -s version)
           if [ "v$version" != "$TAG" ]; then
             echo "::error::タグ $TAG と internal/cli/cli.go の Version ($version) が一致しません"
             exit 1
@@ -91,7 +115,7 @@ jobs:
         with:
           node-version: 22
 
-      # 依存パッケージのインストールスクリプトは動かさない。
+      # 依存パッケージのインストールスクリプトは動かさない（Makefile の make vscode と同じ）。
       # 自分の postinstall（pdf.js のコピー）だけを、明示的に実行する
       - name: 依存パッケージを取り込む
         run: |
@@ -111,7 +135,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    needs: [binaries, vscode]
+    needs: [test-min-go, binaries, vscode]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -131,6 +155,19 @@ jobs:
         # bash -eo pipefail で動かし、途中の gh の失敗も見逃さない
         shell: bash
         run: |
+          # 版に - が入るもの（v0.23.0-rc.1 など）は試験版にして、Latest にしない
+          prerelease=false
+          case "$TAG" in *-*) prerelease=true ;; esac
+
+          # Latest にするのは、試験版でなく、置いてある正式版の中でいちばん新しい版のときだけ
+          # （古い系統の修正版のタグを後から出しても、Latest が古い版に移らないように）
+          latest=false
+          if [ "$prerelease" = false ]; then
+            newest=$({ gh release list --exclude-drafts --exclude-pre-releases --limit 1000 \
+                         --json tagName --jq '.[].tagName'; echo "$TAG"; } | sort -V | tail -n 1)
+            [ "$newest" = "$TAG" ] && latest=true
+          fi
+
           if gh release view "$TAG" >/dev/null 2>&1; then
             # 作り直すときは、今回作らなかった古いファイル（前の版の .vsix など）を消してから置き直す
             names=$(gh release view "$TAG" --json assets --jq '.assets[].name')
@@ -140,10 +177,9 @@ jobs:
               fi
             done <<< "$names"
             gh release upload "$TAG" dist/* --clobber
+            # 前のワークフローで作ったリリースでも、試験版・Latest の扱いを揃える
+            gh release edit "$TAG" --prerelease="$prerelease" --latest="$latest"
           else
-            prerelease=()
-            # 版に - が入るもの（v0.23.0-rc.1 など）は試験版にして、Latest にしない
-            case "$TAG" in *-*) prerelease=(--prerelease) ;; esac
-            gh release create "$TAG" dist/* --verify-tag "${prerelease[@]}" \
+            gh release create "$TAG" dist/* --verify-tag --prerelease="$prerelease" --latest="$latest" \
               --title "reportmd ${TAG#v}" --generate-notes
           fi

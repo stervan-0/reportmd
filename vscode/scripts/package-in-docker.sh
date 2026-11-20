@@ -11,7 +11,9 @@ mkdir /tmp/build
 # ホストの node_modules・media/pdfjs・作った .vsix は持ち込まない（中身が別の OS 向けのことがある）
 tar -C /out --exclude=./node_modules --exclude=./media/pdfjs --exclude='./*.vsix' -cf - . | tar -C /tmp/build -xf -
 cd /tmp/build
-npm ci --no-audit --no-fund
+# 依存パッケージのインストールスクリプトは動かさず、自分の postinstall（pdf.js のコピー）だけを実行する
+npm ci --ignore-scripts --no-audit --no-fund
+node scripts/copy-pdfjs.js
 npm run package
 cp ./*.vsix /out/
 # --user を付けずに動かしたとき（Linux）でも、ホストの利用者が消せるように、vscode/ と同じ持ち主にする

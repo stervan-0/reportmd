@@ -32,11 +32,13 @@ Linux・macOS（WSL を含む）では、端末で次を実行します。`SHA25
 ```bash
 v=0.22.6
 f=reportmd-$v-linux-amd64          # macOS（Apple シリコン）は reportmd-$v-darwin-arm64
-grep " $f\$" SHA256SUMS | shasum -a 256 -c    # 「OK」と出れば一致（Linux では sha256sum -c でもよい）
-mkdir -p ~/.local/bin
-chmod +x "$f"
-mv "$f" ~/.local/bin/reportmd
+grep " $f\$" SHA256SUMS | shasum -a 256 -c \
+  && mkdir -p ~/.local/bin \
+  && chmod +x "$f" \
+  && mv "$f" ~/.local/bin/reportmd
 ```
+
+チェックサムが一致したとき（「OK」と出たとき）だけ、`~/.local/bin/reportmd` に置きます。一致しないときや、ファイルが見つからないときは、そこで止まります。`shasum` がない Linux では、`shasum -a 256 -c` を `sha256sum -c` に替えてください。
 
 `SHA256SUMS` には全部のファイルが載っているので、`grep` で自分がダウンロードしたものの行だけを渡します（そのまま `sha256sum -c SHA256SUMS` とすると、ダウンロードしていないファイルが見つからないと言われて失敗します。`--ignore-missing` を付けても同じことができます）。
 
