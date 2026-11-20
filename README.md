@@ -25,22 +25,35 @@ Go で書いた1つの実行ファイルで動きます（Ruby などの実行�
 | `reportmd-<拡張機能の版>.vsix` | VS Code 拡張機能（版は reportmd とは別に付けています。例：`reportmd-0.10.5.vsix`） |
 | `SHA256SUMS` | 各ファイルのチェックサム |
 
-ダウンロードした実行ファイルは `reportmd`（Windows では `reportmd.exe`）に名前を変えて、PATH の通ったフォルダに置きます。
+ダウンロードした実行ファイルは、チェックサムを確かめてから、`reportmd`（Windows では `reportmd.exe`）に名前を変えて、PATH の通ったフォルダに置きます。次の例では、ダウンロードした版（`v=` の値）と、自分の OS・CPU に合うファイル名（`f=` の値）を書き換えてください。版の入ったファイル名をそのまま書くので、ダウンロードのフォルダに前の版が残っていても、取り違えません。
+
+Linux・macOS（WSL を含む）では、端末で次を実行します。`SHA256SUMS` も同じフォルダにダウンロードしておきます。
 
 ```bash
-# Linux・macOS の例
-chmod +x reportmd-*-linux-amd64
-mv reportmd-*-linux-amd64 ~/.local/bin/reportmd
+v=0.22.6
+f=reportmd-$v-linux-amd64          # macOS（Apple シリコン）は reportmd-$v-darwin-arm64
+grep " $f\$" SHA256SUMS | shasum -a 256 -c    # 「OK」と出れば一致（Linux では sha256sum -c でもよい）
+mkdir -p ~/.local/bin
+chmod +x "$f"
+mv "$f" ~/.local/bin/reportmd
 ```
+
+`SHA256SUMS` には全部のファイルが載っているので、`grep` で自分がダウンロードしたものの行だけを渡します（そのまま `sha256sum -c SHA256SUMS` とすると、ダウンロードしていないファイルが見つからないと言われて失敗します。`--ignore-missing` を付けても同じことができます）。
+
+`~/.local/bin` が PATH に入っていなければ、加えます（Ubuntu は、ログインし直すと自動で入ります。macOS の既定のシェル zsh では `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zprofile` を実行して、端末を開き直します）。
 
 macOS では、ダウンロードしたファイルに付く隔離の印のため、初回は「開発元を確認できない」と止められます。`xattr -d com.apple.quarantine ~/.local/bin/reportmd` で外してください。
 
-Windows では、PowerShell で次を実行します。`%LOCALAPPDATA%\Programs\reportmd\reportmd.exe` に置いて、そのフォルダを自分の PATH に加えます。PATH の変更は、開き直した PowerShell や VS Code から有効になります。
+Windows では、PowerShell で次を実行します。チェックサムを確かめて、`%LOCALAPPDATA%\Programs\reportmd\reportmd.exe` に置き、そのフォルダを自分の PATH に加えます。PATH の変更は、開き直した PowerShell や VS Code から有効になります。
 
 ```powershell
+$v = '0.22.6'
+$f = "reportmd-$v-windows-amd64.exe"
+$want = ((Select-String -Path SHA256SUMS -SimpleMatch " $f").Line -split ' ')[0]
+if ((Get-FileHash $f).Hash -ne $want) { throw "チェックサムが一致しません: $f" }
 $dir = "$env:LOCALAPPDATA\Programs\reportmd"
 New-Item -ItemType Directory -Force $dir | Out-Null
-Move-Item -Force .\reportmd-*-windows-amd64.exe "$dir\reportmd.exe"
+Move-Item -Force $f "$dir\reportmd.exe"
 $path = [Environment]::GetEnvironmentVariable('Path', 'User')
 if (";$path;" -notlike "*;$dir;*") {
   [Environment]::SetEnvironmentVariable('Path', (@($path, $dir) | Where-Object { $_ }) -join ';', 'User')
@@ -367,7 +380,7 @@ make build     # ./reportmd を作る
 make test      # go vet と go test
 ```
 
-リリースは、Version を上げたコミットに `v` で始まるタグを付けて push すると、GitHub Actions（`.github/workflows/release.yml`）が全 OS 向けの実行ファイル・`.vsix`・`SHA256SUMS` を作って Releases に置きます。タグと `internal/cli/cli.go` の Version が違うと止まります。
+リリースは、Version を上げたコミットに `v` で始まるタグを付けて push すると、GitHub Actions（`.github/workflows/release.yml`）が全 OS 向けの実行ファイル・`.vsix`・`SHA256SUMS` を作って Releases に置きます。タグと `internal/cli/cli.go` の Version が違うと止まります。版に `-` が入るタグ（`v0.23.0-rc.1` など）は、試験版（pre-release）として置かれ、Latest にはなりません。
 
 ```bash
 git tag v0.22.6

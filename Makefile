@@ -54,7 +54,7 @@ example: build
 
 # VS Code 拡張機能（vscode/）を .vsix にまとめる（Node.js が必要）
 vscode:
-	cd vscode && npm run package
+	cd vscode && npm ci --no-audit --no-fund && npm run package
 
 # VS Code 拡張機能を、Node.js のイメージの中で .vsix にまとめる（Node.js の代わりに Docker が必要）
 vscode-docker:
