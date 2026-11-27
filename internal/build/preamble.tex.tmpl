@@ -126,3 +126,11 @@
 \makeatother
 \AtBeginDocument{\ifdefined\pdfstringdefDisableCommands\pdfstringdefDisableCommands{\let\reportmdinlinecodestart\relax\let\reportmdinlinecodespace\space\let\reportmdinlinecodeend\relax}\fi}
 {{- end}}
+% --- 参考文献の一覧（Pandoc の citeproc が CSLReferences の中に、文献ごとに \CSLLeftMargin{[1]}\CSLRightInline{…} と書く） ---
+% Pandoc の定義は、番号と本文を別々の \parbox に入れるので、1行の文献の後ろに空行ができ、
+% 1つの文献の途中では改ページできない。番号の幅（3字）だけ2行目から下げた、ふつうの段落にする。
+% 文献を引用していない文書では、Pandoc が定義しないので、先に空の定義を作る
+\providecommand{\CSLLeftMargin}[1]{}
+\providecommand{\CSLRightInline}[1]{}
+\renewcommand{\CSLLeftMargin}[1]{\hangindent=3\reportmdchar\hangafter=1\makebox[3\reportmdchar][l]{#1}}
+\renewcommand{\CSLRightInline}[1]{#1\par}

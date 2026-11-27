@@ -226,3 +226,44 @@ func TestUnknownKeys(t *testing.T) {
 		t.Errorf("未知のキーは警告する: %v", cfg.Warnings)
 	}
 }
+
+// bibliography.style の相対パスは、その値を書いた設定ファイルのある場所を基準にする。
+func TestBibliographyStyle(t *testing.T) {
+	if path := Default().StylePath(); path != "" {
+		t.Errorf("既定は内蔵のスタイル: %q", path)
+	}
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	input := filepath.Join(dir, "sub", "report.reportmd")
+	writeFile(t, filepath.Join(dir, "sub"), "setting.json", `{"bibliography": {"style": "styles/a.csl"}}`)
+	cfg, err := Load("", input, "pdf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(dir, "sub", "styles", "a.csl"); cfg.StylePath() != want {
+		t.Errorf("設定ファイルの場所が基準: %q（期待 %q）", cfg.StylePath(), want)
+	}
+	// 形式ごとの設定ファイルで書いた値も、そのファイルの場所が基準（同じ場所）
+	writeFile(t, filepath.Join(dir, "sub"), "setting.pdf.json", `{"bibliography": {"style": "b.csl"}}`)
+	if cfg, err = Load("", input, "pdf"); err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(dir, "sub", "b.csl"); cfg.StylePath() != want {
+		t.Errorf("形式ごとの設定ファイルの値: %q（期待 %q）", cfg.StylePath(), want)
+	}
+
+	for _, bad := range []string{`""`, `"  "`, `1`, `false`} {
+		_, err := load(t, `{"bibliography": {"style": `+bad+`}}`)
+		if e := configError(t, err); !strings.Contains(e.Message, "bibliography.style") {
+			t.Errorf("%s は不正: %v", bad, e)
+		}
+	}
+	if _, err := load(t, `{"bibliography": {"title": 1}}`); !strings.Contains(configError(t, err).Message, "bibliography.title") {
+		t.Errorf("title は文字列")
+	}
+	if cfg := mustLoad(t, `{"bibliography": {"title": ""}}`); cfg.Bibliography.Title != "" {
+		t.Errorf("空の見出しを許す")
+	}
+}

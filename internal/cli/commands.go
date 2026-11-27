@@ -113,6 +113,7 @@ cover:
   担当教員: 担当教員名
   提出日: 2026年10月15日
   学籍番号: 0000000
+bibliography: references.bib
 ---
 
 #1 目的
@@ -149,11 +150,24 @@ $$ {#newton}
 
 #1 考察
 
+文献は、references.bib に書いたキーで [@sample] のように引用します。
+引用した文献は、最後の「参考文献」に番号順に並びます。
+
 #1 結論
 
 # 参考文献
+`
 
-1. 著者名, 書名, 出版社, 発行年.
+const initReferences = `% 参考文献のデータ（BibTeX の形式）。
+% 本文で [@キー] と書くと [1] になり、引用した文献だけが、文書の最後の「参考文献」に並びます。
+% Google Scholar や CiNii Research の「BibTeX」で表示した文献を、そのまま貼り付けられます。
+
+@book{sample,
+  author    = {姓, 名},
+  title     = {書名},
+  publisher = {出版社},
+  year      = {2026}
+}
 `
 
 // init は、新しいレポートの雛形を作る。既にあるファイルは、--force がなければ上書きしない。
@@ -184,7 +198,7 @@ func (c *CLI) init(args []string) int {
 	return 0
 }
 
-// writeTemplate は、雛形（report.reportmd・setting.json・images/）を dir に書き出す。
+// writeTemplate は、雛形（report.reportmd・setting.json・references.bib・images/）を dir に書き出す。
 // 既にあるファイルは、force なら上書きし、keepExisting ならそのまま残す。
 // どちらでもなければエラーにする（何も書かない）。
 func (c *CLI) writeTemplate(dir string, force, keepExisting bool) int {
@@ -198,6 +212,7 @@ func (c *CLI) writeTemplate(dir string, force, keepExisting bool) int {
 	}{
 		{"report.reportmd", []byte(initReport)},
 		{config.SettingFileName, config.DefaultJSON()},
+		{"references.bib", []byte(initReferences)},
 	}
 	var writes []string
 	for _, f := range files {

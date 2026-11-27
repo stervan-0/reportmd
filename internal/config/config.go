@@ -110,6 +110,11 @@ type Config struct {
 		Border     any  `json:"border"`
 		Highlight  bool `json:"highlight"`
 	} `json:"code"`
+	Bibliography struct {
+		Title string `json:"title"`
+		// 文献のスタイル（CSL ファイルのパス）。nil なら内蔵のスタイル。StylePath で読む
+		Style *string `json:"style"`
+	} `json:"bibliography"`
 	Cover struct {
 		Layout []CoverItem `json:"layout"`
 	} `json:"cover"`
@@ -196,6 +201,23 @@ func (c *Config) CodeBorder() string {
 		return ""
 	}
 	return s
+}
+
+// StylePath は、文献のスタイル（bibliography.style）の CSL ファイルのパスを返す。
+// 相対パスは、その値を書いた設定ファイルのある場所を基準にする。内蔵のスタイルなら空文字。
+func (c *Config) StylePath() string {
+	if c.Bibliography.Style == nil {
+		return ""
+	}
+	path := *c.Bibliography.Style
+	if filepath.IsAbs(path) {
+		return path
+	}
+	source := c.SourceOf("bibliography.style")
+	if source == DefaultSource {
+		return path
+	}
+	return filepath.Join(filepath.Dir(source), path)
 }
 
 // SourceName は、エラー表示に使う設定ファイルの名前。
@@ -531,6 +553,8 @@ func isString(v any) bool { _, ok := v.(string); return ok }
 
 func isBool(v any) bool { _, ok := v.(bool); return ok }
 
+func isNonEmptyString(v any) bool { s, ok := v.(string); return ok && strings.TrimSpace(s) != "" }
+
 func isColor(v any) bool { s, ok := v.(string); return ok && colorPattern.MatchString(s) }
 
 func isLength(v any) bool { s, ok := v.(string); return ok && lengthPattern.MatchString(s) }
@@ -643,6 +667,8 @@ var rules = []rule{
 	{"code.background", `false（背景を付けない）または16進数6桁の色（例："F5F5F5"）`, orFalse(isColor)},
 	{"code.border", ruleExpect, orFalse(isLength)},
 	{"code.highlight", "true または false", isBool},
+	{"bibliography.title", "文字列（空なら見出しを付けない）", isString},
+	{"bibliography.style", `null（内蔵のスタイル）または CSL ファイルのパス（例："ieee.csl"）`, orNull(isNonEmptyString)},
 	// 各項目の中身は validateCoverLayout で調べる
 	{"cover.layout", "表紙の項目（{ ... }）の配列", isArray},
 }

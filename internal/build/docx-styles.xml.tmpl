@@ -190,11 +190,16 @@
     <w:next w:val="BodyText"/>
     <w:qFormat/>
   </w:style>
+  <!-- 文献の一覧（[1] のあとのタブで本文をそろえ、2行目からも同じ位置に下げる） -->
   <w:style w:type="paragraph" w:styleId="Bibliography">
     <w:name w:val="Bibliography"/>
     <w:basedOn w:val="Normal"/>
     <w:next w:val="Bibliography"/>
     <w:qFormat/>
+    <w:pPr>
+      <w:tabs><w:tab w:val="left" w:pos="{{.BibIndent}}"/></w:tabs>
+      <w:ind w:left="{{.BibIndent}}" w:hanging="{{.BibIndent}}"/>
+    </w:pPr>
   </w:style>
   <!-- 引用 -->
   <w:style w:type="paragraph" w:styleId="BlockText">

@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  reportmd の既定の参考文献のスタイル（番号順。本文は [1]、文献の一覧は引用した順）。
+  文献の書き方は、科学技術情報流通技術基準 SIST 02 を簡単にしたもの。
+    著者1, 著者2. 題名. 誌名. 年, vol. 巻, no. 号, p. 開始-終了.
+    著者. 書名. 版, 出版者, 年.
+    著者. 題名. サイト名. URL, (参照 年-月-日).
+  別のスタイルにするには、設定の bibliography.style に CSL ファイルのパスを書く。
+-->
+<style xmlns="http://purl.org/net/xbiblio/csl" class="in-text" version="1.0" default-locale="ja-JP">
+  <info>
+    <title>reportmd（番号順・SIST 02 風）</title>
+    <id>reportmd-numeric</id>
+    <updated>2026-11-27T00:00:00+00:00</updated>
+  </info>
+  <locale xml:lang="ja-JP">
+    <terms>
+      <term name="page" form="short">
+        <single>p.</single>
+        <multiple>p.</multiple>
+      </term>
+    </terms>
+  </locale>
+  <macro name="author">
+    <names variable="author">
+      <name delimiter=", " delimiter-precedes-last="always"/>
+      <substitute>
+        <names variable="editor"/>
+        <text variable="publisher"/>
+      </substitute>
+    </names>
+  </macro>
+  <macro name="year">
+    <choose>
+      <if variable="issued">
+        <date variable="issued">
+          <date-part name="year"/>
+        </date>
+      </if>
+    </choose>
+  </macro>
+  <macro name="pages">
+    <group delimiter=" ">
+      <text value="p."/>
+      <text variable="page"/>
+    </group>
+  </macro>
+  <macro name="access">
+    <choose>
+      <if variable="DOI">
+        <text variable="DOI" prefix="https://doi.org/"/>
+      </if>
+      <else-if variable="URL">
+        <group delimiter=", ">
+          <text variable="URL"/>
+          <choose>
+            <if variable="accessed">
+              <group prefix="(" suffix=")" delimiter=" ">
+                <text value="参照"/>
+                <date variable="accessed">
+                  <date-part name="year"/>
+                  <date-part name="month" form="numeric-leading-zeros" prefix="-"/>
+                  <date-part name="day" form="numeric-leading-zeros" prefix="-"/>
+                </date>
+              </group>
+            </if>
+          </choose>
+        </group>
+      </else-if>
+    </choose>
+  </macro>
+  <macro name="publication">
+    <choose>
+      <if type="article-journal article-magazine article-newspaper" match="any">
+        <group delimiter=", ">
+          <text macro="year"/>
+          <text variable="volume" prefix="vol. "/>
+          <text variable="issue" prefix="no. "/>
+          <text macro="pages"/>
+        </group>
+      </if>
+      <else-if type="chapter paper-conference entry-encyclopedia entry-dictionary" match="any">
+        <group delimiter=", ">
+          <text variable="publisher"/>
+          <text macro="year"/>
+          <text macro="pages"/>
+        </group>
+      </else-if>
+      <else-if type="thesis">
+        <group delimiter=", ">
+          <text variable="publisher"/>
+          <text macro="year"/>
+          <text variable="genre"/>
+        </group>
+      </else-if>
+      <else-if type="report">
+        <group delimiter=", ">
+          <text variable="publisher"/>
+          <text macro="year"/>
+          <text variable="number"/>
+        </group>
+      </else-if>
+      <else>
+        <group delimiter=", ">
+          <text variable="edition"/>
+          <text variable="publisher"/>
+          <text macro="year"/>
+        </group>
+      </else>
+    </choose>
+  </macro>
+  <citation collapse="citation-number">
+    <sort>
+      <key variable="citation-number"/>
+    </sort>
+    <layout prefix="[" suffix="]" delimiter=", ">
+      <group delimiter=", ">
+        <text variable="citation-number"/>
+        <group delimiter=" ">
+          <label variable="locator" form="short"/>
+          <text variable="locator"/>
+        </group>
+      </group>
+    </layout>
+  </citation>
+  <bibliography second-field-align="flush" entry-spacing="0">
+    <layout suffix=".">
+      <text variable="citation-number" prefix="[" suffix="]"/>
+      <group delimiter=". ">
+        <text macro="author"/>
+        <text variable="title"/>
+        <text variable="container-title"/>
+        <text macro="publication"/>
+        <text macro="access"/>
+      </group>
+    </layout>
+  </bibliography>
+</style>

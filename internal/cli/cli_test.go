@@ -531,7 +531,7 @@ func TestInit(t *testing.T) {
 		t.Fatal(errOut)
 	}
 	contains(t, "標準出力", out, "report.reportmd")
-	for _, name := range []string{"report.reportmd", "setting.json", "images"} {
+	for _, name := range []string{"report.reportmd", "setting.json", "references.bib", "images"} {
 		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
 			t.Errorf("%s を作る", name)
 		}

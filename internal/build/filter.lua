@@ -12,7 +12,10 @@
 --   表（LaTeX）               ->  tabular に組む（書式はプリアンブルの命令で決める）
 --   独立した数式（$$）        ->  右端に通し番号 (1) を付ける（.reportmd-equation の目印で
 --                                 参照用の名前・番号なしを指定）
---   @名前（引用）             ->  名前を付けた図表・数式の「図1」「表2」「式(1)」
+--   @名前（引用）             ->  名前を付けた図表・数式の「図1」「表2」「式(1)」。
+--                                 図表・数式の名前でなく、文献のファイル（フロントマターの
+--                                 bibliography）のキーなら、文献の引用として残す（このフィルタの
+--                                 あとで、Pandoc の citeproc が [1] と文献の一覧にする）
 --   コードブロック            ->  PDF は reportmdcode 環境、HTML は .reportmd-code の div で囲む。
 --                                 Word は、続けて書いたコードブロックの間に空きの段落を入れる
 --   文中のコード              ->  PDF は背景の箱（\reportmdinlinecodestart〜end）で囲む。
@@ -36,6 +39,7 @@
 --   table_width / table_header_align 表の幅（auto / full）と見出し行の揃え
 --   equation_numbering / equation_label 数式の番号の有無と、参照のラベル（既定：式）
 --   code_*                           HTML のコードブロックの書式と、文中のコードの背景（code_inline_background）
+--   bibliography_title               文献の一覧の見出し（空なら見出しを付けない）
 --
 --   cover_json                       表紙のレイアウト（設定の cover.layout）
 --   docx_json                        Word の寸法（本文の高さ、表紙のあとのセクションの区切り）
@@ -132,6 +136,7 @@ local settings = {
   code_border_color = 'BFBFBF',
   code_padding = '5.25',
   code_inline_background = 'E6E6E6', -- 文中のコードの背景の色（code_background を少し濃くした色。空なら付けない）
+  bibliography_title = '参考文献', -- 文献の一覧の見出し（空なら見出しを付けない）
   cover_json = '',               -- 表紙のレイアウト（JSON を16進数にしたもの。decode_json で読む）
   docx_json = '',                -- Word の寸法（同上。Word のときだけ）
 }
@@ -179,12 +184,14 @@ local function move_to_pdf_metadata(meta, key)
   end
 end
 
--- フロントマターで使えるのは title・author・cover だけ。ほかのキー（geometry、
+-- フロントマターで使えるのは title・author・cover・bibliography だけ。ほかのキー（geometry、
 -- header-includes など）は、Pandoc のテンプレートに反映されないように取り除く。
 -- （警告は前処理が行番号つきで出している。cover は、最初の走査で表紙の値を読んでから取り除く）
 -- HTML では、internal/build が --metadata で渡すページの題名（pagetitle）も残す
 -- （取り除くと、<title> が「body」になり、Pandoc が警告を出す）。
-local META_KEYS = { title = true, author = true }
+-- bibliography（文献のファイル）は、このフィルタのあとの citeproc が読む。
+-- csl と link-citations は internal/build がコマンドラインで渡す（フロントマターより優先される）。
+local META_KEYS = { title = true, author = true, bibliography = true, csl = true, ['link-citations'] = true }
 
 local function drop_unsupported_meta(meta)
   local keys = {}
@@ -1153,41 +1160,90 @@ local function collect_labels(doc)
   end
 end
 
--- 名前に対応するラベルと、名前のあとに続いていた文字、使った名前を返す。
+-- 文献のファイル（フロントマターの bibliography）にあるキーの集合。
+-- bibliography がない、または読めなければ空。
+local citation_keys = {}
+local has_bibliography = false
+
+-- 名前 name の直後に、id の残りの文字（日本語）が続いているか
+local function is_prefix_name(name, id)
+  return #name < #id and id:sub(1, #name) == name and id:sub(#name + 1):match('^[\194-\244]') ~= nil
+end
+
+-- @名前 の名前を解決する。種類（'label'：図表・数式、'citation'：文献）、使った名前、
+-- 名前のあとに続いていた文字を返す。見つからなければ nil。
 -- 「@sysに示す」のように、名前の直後に日本語が続くと、Pandoc は「sysに示す」までを
 -- 名前として読む。そこで、名前が見つからなければ、先頭が一致する一番長い名前を使い、
--- 残り（「に示す」）はそのまま本文に戻す。
-local function resolve_label(id)
+-- 残り（「に示す」）はそのまま本文に戻す。図表・数式の名前を、文献のキーより優先する。
+local function resolve_name(id)
   if labels[id] ~= nil then
-    return labels[id], '', id
+    return 'label', id, ''
   end
-  local best = nil
-  for name, _ in pairs(labels) do
-    if #name < #id and id:sub(1, #name) == name and id:sub(#name + 1):match('^[\194-\244]')
-        and (best == nil or #name > #best) then
-      best = name
+  if citation_keys[id] then
+    return 'citation', id, ''
+  end
+  local best, kind = nil, nil
+  for _, set in ipairs({ { labels, 'label' }, { citation_keys, 'citation' } }) do
+    for name, _ in pairs(set[1]) do
+      if is_prefix_name(name, id) and (best == nil or #name > #best) then
+        best, kind = name, set[2]
+      end
     end
   end
   if best ~= nil then
-    return labels[best], id:sub(#best + 1), best
+    return kind, best, id:sub(#best + 1)
   end
   return nil
+end
+
+local function not_found_message(id)
+  if has_bibliography then
+    return '参照先の図表・数式・文献が見つかりません: @' .. id .. '（図表・数式なら {#' .. id
+      .. '} で名前を付け、文献なら文献のファイルにキー ' .. id .. ' があるか確認してください）'
+  end
+  return '参照先の図表・数式が見つかりません: @' .. id .. '（{#' .. id .. '} で名前を付けてください）'
 end
 
 -- @名前（[@名前]、[@a; @b] も）を、「図1」などに置き換える。
 -- 見つからない名前は、警告して @名前 のまま残す。
 -- 置き換えた「図1」は、参照先へのリンク（PDF 内で、クリックするとその図表・数式へ移動する）にする。
+-- 文献のキーは、引用（Cite）のまま残し、citeproc に [1] にさせる。続けて書いた文献は
+-- 1つの引用にまとめる（[1, 2] や [1–3] になる）。本文に @キー とだけ書いた場合も、
+-- 著者名ではなく [1] にする。
 local function convert_cite(cite)
   local result = pandoc.List({})
-  for i, citation in ipairs(cite.citations) do
-    if i > 1 then
-      result:insert(pandoc.Str('、'))
+  local pending = pandoc.List({}) -- まとめて1つの引用にする文献
+  local function flush()
+    if #pending > 0 then
+      result:insert(pandoc.Cite({ pandoc.Str('[@' .. pending[1].id .. ']') }, pending))
+      pending = pandoc.List({})
     end
-    local label, rest, name = resolve_label(citation.id)
-    if label == nil then
-      warn('参照先の図表・数式が見つかりません: @' .. citation.id .. '（{#' .. citation.id .. '} で名前を付けてください）')
+  end
+  local previous = nil -- 直前の項目の種類（'label' / 'citation' / 'missing'）
+  for _, citation in ipairs(cite.citations) do
+    local kind, name, rest = resolve_name(citation.id)
+    if kind ~= 'citation' or previous ~= 'citation' then
+      flush()
+      if previous ~= nil then
+        result:insert(pandoc.Str('、'))
+      end
+    end
+    if kind == nil then
+      warn(not_found_message(citation.id))
       result:insert(pandoc.Str('@' .. citation.id))
+      previous = 'missing'
+    elseif kind == 'citation' then
+      citation.id = name
+      citation.mode = 'NormalCitation'
+      pending:insert(citation)
+      previous = 'citation'
+      if rest ~= '' then
+        flush()
+        result:insert(pandoc.Str(rest))
+        previous = 'missing' -- 残りの文字のあとの文献は、別の引用にする
+      end
     else
+      local label = labels[name]
       if FORMAT == 'pptx' then
         result:insert(pandoc.Str(label)) -- PowerPoint では、図表・数式の位置へのリンクにできない
       else
@@ -1196,9 +1252,97 @@ local function convert_cite(cite)
       if rest ~= '' then
         result:insert(pandoc.Str(rest))
       end
+      previous = 'label'
     end
   end
+  flush()
   return result
+end
+
+-- ---------------------------------------------------------------------
+-- 参考文献（文献の一覧）
+-- ---------------------------------------------------------------------
+--
+-- フロントマターの bibliography に書いた文献のファイル（BibTeX の .bib など）のキーを読み、
+-- 本文で引用していれば、文書の最後に見出し（bibliography_title）と、citeproc が文献の一覧を
+-- 入れる場所（id が refs の Div）を置く。最後の見出しが、すでに同じ文字（「# 参考文献」）なら、
+-- 見出しは足さない。
+
+-- Pandoc のエラーの文章を、利用者向けの文章にする
+local function bibliography_error(message)
+  local file = message:match('^File (.-) not found in resource path')
+  if file ~= nil then
+    return '文献のファイルが見つかりません: ' .. file .. '（パスは文書のある場所からの相対パスです。文献は引用しません）'
+  end
+  local text = message:gsub('\n%s*', ' '):gsub('%s+$', '')
+  return '文献のファイルを読み込めません（文献は引用しません）: ' .. text
+end
+
+local function read_citation_keys(doc)
+  if doc.meta.bibliography == nil then
+    return true
+  end
+  has_bibliography = true
+  -- pandoc.utils.references は、文書で引用したキーの文献だけを返す。「@sysに示す」のように
+  -- 日本語が続いたキーは、そのままでは引用したことにならないので、nocite: @* で、すべての文献を読む
+  local meta = {}
+  for key, value in pairs(doc.meta) do
+    meta[key] = value
+  end
+  meta.nocite = pandoc.MetaInlines({ pandoc.Cite({ pandoc.Str('@*') }, { pandoc.Citation('*', 'NormalCitation') }) })
+  local ok, references = pcall(pandoc.utils.references, pandoc.Pandoc({}, meta))
+  if not ok then
+    warn(bibliography_error(tostring(references)))
+    return false
+  end
+  for _, reference in ipairs(references) do
+    local id = reference.id
+    if labels[id] ~= nil then
+      warn('文献のキー ' .. id .. ' は、図表・数式の名前と同じです（@' .. id .. ' は図表・数式を指します）')
+    else
+      citation_keys[id] = true
+    end
+  end
+  return true
+end
+
+-- 本文が文献を引用しているか
+local function cites_reference(doc)
+  local found = false
+  doc:walk({
+    Cite = function(cite)
+      for _, citation in ipairs(cite.citations) do
+        if resolve_name(citation.id) == 'citation' then
+          found = true
+        end
+      end
+    end,
+  })
+  return found
+end
+
+local function prepare_bibliography(doc)
+  if not read_citation_keys(doc) then
+    -- 読めない文献のファイルは、citeproc にも渡さない（Pandoc がエラーで止まるため）
+    doc.meta.bibliography = nil
+    return doc
+  end
+  if next(citation_keys) == nil or not cites_reference(doc) then
+    return doc
+  end
+  local title = settings.bibliography_title
+  local last = nil
+  for _, block in ipairs(doc.blocks) do
+    if block.t == 'Header' then
+      last = block
+    end
+  end
+  if title ~= '' and (last == nil or pandoc.utils.stringify(last.content) ~= title
+      or has_class(last, 'reportmd-num')) then
+    doc.blocks:insert(pandoc.Header(1, { pandoc.Str(title) }))
+  end
+  doc.blocks:insert(pandoc.Div({}, { id = 'refs' }))
+  return doc
 end
 
 -- ---------------------------------------------------------------------
@@ -1591,7 +1735,8 @@ return {
     end,
     Pandoc = function(doc)
       collect_labels(doc)
-      return number_equations(doc)
+      doc = number_equations(doc)
+      return prepare_bibliography(doc)
     end,
   },
   {
