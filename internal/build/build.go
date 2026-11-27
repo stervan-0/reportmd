@@ -24,6 +24,20 @@ import (
 //go:embed filter.lua
 var filterLua []byte
 
+// cslName は、文献のスタイル（内蔵の reportmd.csl、または設定の bibliography.style）を書き出す
+// 作業用ファイルの名前。作業ディレクトリを Pandoc のデータディレクトリ（--data-dir）にして、
+// その csl/ に置き、--csl には名前だけを渡す。--csl の値は、Pandoc がファイル名ではなく文字列
+// として扱うので、UTF-8 でないロケールでは、日本語を含むパス（Windows のユーザー名の一時
+// フォルダなど）を開けないため。Pandoc は、文書のある場所に同じ名前のファイルがあると、
+// そちらを先に使うので、ありそうにない名前にする。
+const cslName = "reportmd-internal-style.csl"
+
+// dataDirKey は、WorkFiles が返すパスのうち、作業ディレクトリ（Pandoc のデータディレクトリ）。
+const dataDirKey = "data-dir"
+
+//go:embed reportmd.csl
+var defaultCSL []byte
+
 // Error は PDF 生成の途中で起きたエラー（外部ツールがない、PDF 生成に失敗した、など）。
 // File にはエラーの原因のファイル（フォントなら設定ファイル）が入る。
 // 空なら、入力ファイルの問題として表示する。
@@ -271,6 +285,7 @@ func Metadata(cfg *config.Config, source string) map[string]any {
 		"code_padding":      number(size * codePadding),
 		// 文中のコードの背景（code.background を少し濃くした色。空なら付けない）
 		"code_inline_background": cfg.CodeInlineBackground(),
+		"bibliography_title":     cfg.Bibliography.Title,
 	}
 	return meta
 }
@@ -321,6 +336,21 @@ func WorkFiles(dir, markdown string, cfg *config.Config, source string, format F
 		}
 		paths[name] = path
 	}
+	csl := defaultCSL
+	if style := cfg.StylePath(); style != "" {
+		if csl, err = os.ReadFile(style); err != nil {
+			return nil, &Error{File: cfg.SourceOf("bibliography.style"),
+				Message: "文献のスタイルのファイルが見つかりません（設定: bibliography.style）: " + style}
+		}
+	}
+	cslDir := filepath.Join(dir, "csl")
+	if err := os.MkdirAll(cslDir, 0o755); err != nil {
+		return nil, &Error{Message: fmt.Sprintf("一時ファイルを書き込めません（%v）", err)}
+	}
+	if err := os.WriteFile(filepath.Join(cslDir, cslName), csl, 0o644); err != nil {
+		return nil, &Error{Message: fmt.Sprintf("一時ファイルを書き込めません（%v）", err)}
+	}
+	paths[dataDirKey] = dir
 	return paths, nil
 }
 
@@ -335,6 +365,15 @@ func PandocArgs(paths map[string]string, output string, format Format, title str
 		"--lua-filter=" + paths["filter.lua"],
 		"--metadata-file=" + paths["meta.json"],
 		"--number-sections", // 見出しの番号（標準の見出しは filter.lua で番号なしにする）
+		// 文献の引用（filter.lua が残した、文献のキーの @キー）を [1] にし、文献の一覧を作る。
+		// filter.lua のあとに実行する（引数の順に実行される）
+		"--citeproc",
+		"--data-dir=" + paths[dataDirKey],
+		"--csl=" + cslName,
+	}
+	if format != Pptx {
+		// 本文の [1] から、文献の一覧のその文献へ移動できるようにする（PowerPoint はリンクにできない）
+		args = append(args, "--metadata=link-citations:true")
 	}
 	if noHighlight != "" {
 		// 言語名（クラス）は残したまま、色だけを付けない（numberLines などのクラスも残る）

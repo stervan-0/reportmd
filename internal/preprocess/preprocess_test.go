@@ -182,6 +182,9 @@ func TestFrontMatter(t *testing.T) {
 	if r := run(t, "---\ntitle: a\ncover:\n  学籍番号: 1234567\n  科目: 実験\n---\n"); len(r.Warnings) != 0 {
 		t.Errorf("cover と、その中の項目は警告しない: %+v", r.Warnings)
 	}
+	if r := run(t, "---\nbibliography: references.bib\n---\n"); len(r.Warnings) != 0 {
+		t.Errorf("bibliography は警告しない: %+v", r.Warnings)
+	}
 	if r := run(t, "本文\n\nlang: en\n"); len(r.Warnings) != 0 {
 		t.Errorf("フロントマターの外は警告しない")
 	}

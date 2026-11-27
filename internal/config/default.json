@@ -65,6 +65,10 @@
     "border": "0.4pt",
     "highlight": true
   },
+  "bibliography": {
+    "title": "参考文献",
+    "style": null
+  },
   "cover": {
     "layout": [
       { "space": "40mm" },

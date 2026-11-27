@@ -39,14 +39,15 @@ var paperSizes = map[string][2]float64{"a4": {210, 297}, "a5": {148, 210}, "b5":
 
 // LaTeX の寸法で、設定にないもの（pt）。
 const (
-	listSkip     = 8    // 中央揃え・右揃え・図表・引用・コードの前後の空き（trivlist の \topsep）
-	displaySkip  = 10   // 独立した数式の前後の空き（\abovedisplayskip）
-	footSkip     = 30   // 本文の下端から、ページ番号のベースラインまで（\footskip）
-	footnoteSize = 8    // 脚注の文字サイズ（\footnotesize）
-	footnoteLine = 9.5  // 脚注の行送り
-	quoteIndent  = 2.5  // 引用の左右の字下げ（字数。\leftmargini）
-	ruleMin      = 0.25 // Word の罫線の太さの範囲（pt）
-	ruleMax      = 12
+	listSkip      = 8    // 中央揃え・右揃え・図表・引用・コードの前後の空き（trivlist の \topsep）
+	displaySkip   = 10   // 独立した数式の前後の空き（\abovedisplayskip）
+	footSkip      = 30   // 本文の下端から、ページ番号のベースラインまで（\footskip）
+	footnoteSize  = 8    // 脚注の文字サイズ（\footnotesize）
+	footnoteLine  = 9.5  // 脚注の行送り
+	quoteIndent   = 2.5  // 引用の左右の字下げ（字数。\leftmargini）
+	bibLabelChars = 3    // 文献の一覧の番号（[1]）の幅（字数。Pandoc の LaTeX の \csllabelwidth と同じ 3em）
+	ruleMin       = 0.25 // Word の罫線の太さの範囲（pt）
+	ruleMax       = 12
 )
 
 // twips は pt を Word の単位（1/20 pt）にする。
@@ -101,6 +102,7 @@ type docxVars struct {
 	HeadingFont                 string
 	HeadingBold                 bool
 	Size, Line, ParIndent, Char int
+	BibIndent                   int // 文献の一覧の番号（[1]）の幅。2行目からをここまで下げる
 	HeadingBefore, HeadingAfter int
 	Headings                    []docxHeading
 	ListSkip, DisplaySkip       int
@@ -155,6 +157,7 @@ func docxLayout(cfg *config.Config) docxVars {
 		Line:          twips(leading),
 		ParIndent:     twips(cfg.Text.ParagraphIndent * fontSize),
 		Char:          twips(fontSize),
+		BibIndent:     twips(fontSize * bibLabelChars),
 		HeadingBefore: twips(leading),
 		HeadingAfter:  twips(leading * 0.5),
 		ListSkip:      twips(listSkip),

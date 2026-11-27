@@ -322,6 +322,26 @@
         }
       }
     },
+    "bibliography": {
+      "description": "参考文献（文書のフロントマターの bibliography に書いた文献のファイルから、引用した文献の一覧を作る）",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "description": "文献の一覧の見出し（空なら見出しを付けない。文書の最後の見出しが同じ文字なら、見出しを足さない）",
+          "type": "string",
+          "default": "参考文献"
+        },
+        "style": {
+          "description": "文献のスタイル。null なら内蔵のスタイル（番号順。本文は [1]）。CSL ファイルのパス（この設定ファイルのある場所からの相対パス）を書くと、そのスタイルにする",
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "minLength": 1, "pattern": "\\S" }
+          ],
+          "default": null
+        }
+      }
+    },
     "cover": {
       "description": "表紙（文書のフロントマターに cover を書くと付く）",
       "type": "object",

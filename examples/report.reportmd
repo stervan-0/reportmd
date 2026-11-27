@@ -6,6 +6,7 @@ cover:
   科目: 情報工学実験 II
   提出日: 2026年10月12日
   学籍番号: 1234567
+bibliography: references.bib
 ---
 
 #1 目的
@@ -17,7 +18,7 @@ cover:
 
 #2 Markdown
 
-Markdownは、見出しや段落などを簡潔に記述できる
+Markdown [@gruber2004] は、見出しや段落などを簡潔に記述できる
 軽量マークアップ言語である[^1]。
 
   この段落は、行頭の2スペースによって1字下げされる。
@@ -47,8 +48,9 @@ $$ {-}
 
 #1 方法
 
-reportmd の処理の流れを @pipeline に示す。独自構文は前処理で Pandoc の
-形式に変換し、図表番号などの組版は filter.lua が行う。
+reportmd の処理の流れを @pipeline に示す。独自構文は前処理で Pandoc [@pandoc] の
+形式に変換し、図表番号などの組版は filter.lua が行う。PDF は XeLaTeX で組む
+[@knuth1984; @okumura2023]。
 
 ![f:reportmd の処理の流れ](images/pipeline.png){#pipeline width=90%}
 
@@ -85,5 +87,3 @@ reportmd の処理の流れを @pipeline に示す。独自構文は前処理で
 Go で書いた1つの実行ファイルから Pandoc を呼び出す構成を採用する。
 
 # 参考文献
-
-- Pandoc User's Guide

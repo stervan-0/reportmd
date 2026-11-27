@@ -115,7 +115,7 @@ mkdir myreport && cd myreport
 reportmd
 ```
 
-- フォルダに `.reportmd` がなければ、雛形（`report.reportmd`・`setting.json`・`images/`）を作るか尋ねます。
+- フォルダに `.reportmd` がなければ、雛形（`report.reportmd`・`setting.json`・`references.bib`・`images/`）を作るか尋ねます。
 - `.reportmd` を PDF にしてビューアで開き、あとは `.reportmd`・画像・設定を保存するたびに PDF を作り直します（Ctrl+C で終了）。
 
 文書の拡張子は `.reportmd` です。0.1.0 の `.rmd` もそのまま使えます（`.rmd` は R Markdown と同じ拡張子なので、0.11.0 で変えました）。
@@ -183,8 +183,9 @@ VS Code の拡張機能ビューの「…」→「VSIX からのインストー�
 | `![t:タイトル]` + 直後の表 | 番号付きの表（表1 タイトル） |
 | `{#名前}` と `@名前` | 図表・数式の参照。`![f:…](a.png){#sys}`・`![t:…]{#result}` で名前を付け、本文の `@sys` が「図1」になる（PDF 内でクリックすると図へ移動する） |
 | `$$ … $$` | 独立した数式。右端に通し番号 (1) が自動で付く。閉じの `$$` の後ろに `{#名前}` で参照用の名前（`@名前` が「式(1)」）、`{-}` で番号なし |
+| `[@キー]` | 文献の引用。フロントマターの `bibliography` に書いた文献のファイル（`.bib`）のキーで、本文が [1] になり、最後に文献の一覧が付く（下の「参考文献」） |
 
-コードブロック・数式ブロック（`$$`）・YAML フロントマターの中は変換されません。フロントマターで使えるキーは `title`・`author`（PDF のメタデータになります）と `cover`（表紙）だけで、ほかのキーは警告を出して無視します。
+コードブロック・数式ブロック（`$$`）・YAML フロントマターの中は変換されません。フロントマターで使えるキーは `title`・`author`（PDF のメタデータになります）と `cover`（表紙）、`bibliography`（文献のファイル）だけで、ほかのキーは警告を出して無視します。
 
 ### コードブロック
 
@@ -223,11 +224,73 @@ cover:
 
 レイアウトは設定の `cover.layout` で自由に変えられます（下の「表紙のレイアウト」）。
 
+### 参考文献
+
+文献を BibTeX の形式でファイル（`references.bib` など）に書き、フロントマターの `bibliography` にそのファイルを書きます。Google Scholar や CiNii Research の「BibTeX」で表示した文献を、そのまま貼り付けられます。
+
+```bibtex
+@book{knuth1984,
+  author    = {Knuth, Donald E.},
+  title     = {The TeXbook},
+  publisher = {Addison-Wesley},
+  year      = {1984}
+}
+@article{tanaka2020,
+  author  = {田中, 一郎 and 佐藤, 花子},
+  title   = {文書作成の効率化},
+  journal = {情報処理学会論文誌},
+  year    = {2020},
+  volume  = {61},
+  number  = {3},
+  pages   = {123--130}
+}
+```
+
+```markdown
+---
+title: 実験レポート
+bibliography: references.bib
+---
+
+TeX の組版については [@knuth1984] に詳しい。@tanaka2020によれば、……。
+ページは [@knuth1984, p. 12]、複数の文献は [@knuth1984; @tanaka2020] と書く。
+```
+
+本文の `[@キー]`（`@キー` だけでも同じ）が、引用した順の番号 [1] になり、文書の最後に「参考文献」の見出しと、引用した文献の一覧が付きます。PDF・HTML・Word では、本文の [1] をクリックすると一覧のその文献に移動します。
+
+```text
+TeX の組版については [1] に詳しい。[2]によれば、……。
+ページは [1, p. 12]、複数の文献は [1, 2] と書く。
+
+参考文献
+[1] Donald E. Knuth. The TeXbook. Addison-Wesley, 1984.
+[2] 田中一郎, 佐藤花子. 文書作成の効率化. 情報処理学会論文誌. 2020, vol. 61, no. 3, p. 123–130.
+```
+
+- 一覧に載るのは、本文で引用した文献だけです。`.bib` に文献をためておき、使うものだけ引用できます。
+- 文書の最後に自分で `# 参考文献` と書いてあれば、見出しを足さずに、その下に一覧を置きます。見出しの文字は設定の `bibliography.title` で変えられます。
+- `@名前` は図表・数式の参照と同じ書き方です。同じ名前の図表と文献があれば、図表を指します（警告が出ます）。どちらにもない名前は警告します（`reportmd check` でも調べられます）。
+- 文献の書き方は、内蔵のスタイル（番号順。SIST 02 を簡単にしたもの）です。IEEE・APA などにしたいときは、そのスタイルの CSL ファイル（[Zotero Style Repository](https://www.zotero.org/styles) などで配布されています）を置き、設定に書きます。
+
+```json
+{
+  "bibliography": {
+    "title": "参考文献",
+    "style": "ieee.csl"
+  }
+}
+```
+
+| 項目 | 意味 |
+| --- | --- |
+| `title` | 文献の一覧の見出し（`""` なら見出しを付けない） |
+| `style` | `null`（内蔵のスタイル）または CSL ファイルのパス（設定ファイルのある場所からの相対パス） |
+
 サンプルは [examples/report.reportmd](examples/report.reportmd) にあります（`make example` で PDF を作れます）。
 
 ## 設定
 
-用紙・余白・フォント・文字サイズ・行間・見出し・キャプション・表の書式・数式の番号・コードブロックの書式・表紙のレイアウトを JSON で指定します。書かなかった項目は [internal/config/default.json](internal/config/default.json) の値になります。項目の一覧は仕様書の7章を参照してください。`reportmd init` で作られる `setting.json` には、すべての項目が既定値で書かれています。
+用紙・余白・フォント・文字サイズ・行間・見出し・キャプション・表の書式・数式の番号・コードブロックの書式・参考文献・表紙のレイアウトを JSON で指定します。書かなかった項目は [internal/config/default.json](internal/config/default.json) の値になります。項目の一覧は仕様書の7章を参照してください。`reportmd init` で作られる `setting.json` には、すべての項目が既定値で書かれています。
 
 ```json
 {
